@@ -24,7 +24,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       { role: 'user', content: user_input }
     ];
 
-    // ステップ1: 分析官AI (Route: dynamic/llm5-analyst または Workers AI Qwen)
+    // ステップ1: 分析官AI (Route: dynamic/llm5-analyst)
     // 対話履歴から不足因子を特定し、次の質問戦略を高速策定
     const strategy = await runAnalyst(env, updatedMessages);
 

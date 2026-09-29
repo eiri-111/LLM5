@@ -3,8 +3,6 @@ export interface Env {
   CF_AI_GATEWAY_ANALYST_URL?: string;
   CF_AI_GATEWAY_CHAT_URL?: string;
   CF_AIG_TOKEN?: string;
-  // Workers AI Direct Binding (オプション)
-  AI?: any;
 }
 
 export interface ChatMessage {
@@ -72,8 +70,27 @@ export function getGatewayHeaders(env: Env): Record<string, string> {
 }
 
 /**
- * ステップ1: 分析官AI (Route: dynamic/llm5-analyst または Workers AI)
- * これまでの会話を分析し、どのビッグファイブ因子を深掘りすべきかの戦略JSONを高速生成
+ * レスポンスからテキストを安全に抽出（OpenAI互換, Gemini互換, Workers AI互換すべてに対応）
+ */
+function extractResponseText(data: any): string {
+  if (data?.choices?.[0]?.message?.content) {
+    return data.choices[0].message.content;
+  }
+  if (data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+    return data.candidates[0].content.parts[0].text;
+  }
+  if (typeof data?.response === 'string') {
+    return data.response;
+  }
+  if (typeof data?.result?.response === 'string') {
+    return data.result.response;
+  }
+  return JSON.stringify(data);
+}
+
+/**
+ * ステップ1: 分析官AI (Route: dynamic/llm5-analyst)
+ * AI GatewayのRoute設定に委ね、未測定因子と次の質問戦略を策定
  */
 export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<AnalystStrategy> {
   const dialogueHistory = messages
@@ -82,12 +99,12 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
 
   const analystSystemPrompt = `
 あなたはビッグファイブ理論（主要5因子: 開放性, 誠実性, 外向性, 協調性, 情緒安定性）に基づく心理分析ストラテジストです。
-あなたの役割は、ユーザーと質問係の対話履歴を分析し、
+対話履歴を分析し、
 1. まだ判定情報が不足している因子を特定する
 2. 質問係が次に投げかけるべき具体的な「質問の狙い・シチュエーション」を指示する
 3. 5因子すべてを分析するのに十分な情報が集まったか判定する（目安: 3〜4往復以上の具体的対話）
 
-必ず以下のJSON形式のみを出力してください（Markdownコードブロックは不要）:
+必ず以下のJSON形式のみを出力してください（Markdownコードブロックは含めず純粋なJSONのみ）:
 {
   "focus_dimension": "狙う因子名 (例: 誠実性)",
   "target_question_strategy": "質問係への指示 (例: 予期せぬ予定変更があったときの対応や、仕事・勉強の進め方について尋ねさせる)",
@@ -95,33 +112,10 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
 }
 `;
 
-  // Workers AI Direct Binding が存在する場合は最速で実行
-  if (env.AI && typeof env.AI.run === 'function') {
-    try {
-      const aiResponse = await env.AI.run('@cf/qwen/qwen2.5-7b-instruct', {
-        messages: [
-          { role: 'system', content: analystSystemPrompt },
-          { role: 'user', content: `【対話履歴】\n${dialogueHistory}\n\n分析と次の質問戦略をJSONで出力してください。` }
-        ],
-        temperature: 0.2,
-        max_tokens: 250
-      });
-      const responseText = aiResponse.response || JSON.stringify(aiResponse);
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
-      }
-    } catch (e) {
-      console.warn('Direct Workers AI run failed, falling back to AI Gateway route:', e);
-    }
-  }
-
-  // AI Gateway Route (dynamic/llm5-analyst) へリクエスト
   const analystUrl = env.CF_AI_GATEWAY_ANALYST_URL || getGatewayRouteUrl(env, 'dynamic/llm5-analyst');
   const headers = getGatewayHeaders(env);
 
   try {
-    // OpenAI互換または汎用チャット形式で送信
     const res = await fetch(analystUrl, {
       method: 'POST',
       headers,
@@ -135,18 +129,20 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
     });
 
     if (res.ok) {
-      const data: any = await res.json();
-      const rawText = data.choices?.[0]?.message?.content || data.response || JSON.stringify(data);
+      const data = await res.json();
+      const rawText = extractResponseText(data);
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         return JSON.parse(jsonMatch[0]);
       }
+    } else {
+      console.warn('Analyst route returned status:', res.status, await res.text());
     }
   } catch (err) {
     console.error('Analyst Route fetch error:', err);
   }
 
-  // フォールバック（対話ターン数によるデフォルト戦略）
+  // フォールバック
   const userCount = messages.filter(m => m.role === 'user').length;
   const isReady = userCount >= 4;
   return {
@@ -160,7 +156,7 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
 
 /**
  * ステップ2: 質問係AI (Route: dynamic/llm5)
- * 分析官の指示を受け取り、ユーザーに親しみやすく自然な日本語で次の問いを生成
+ * AI GatewayのRoute設定に委ね、自然で共感的な問いを生成
  */
 export async function runInterviewer(
   env: Env, 
@@ -186,14 +182,12 @@ export async function runInterviewer(
 - もし分析官が「分析完了」と判断している場合は、共感した上で「ここまでのお話であなたのパーソナリティを深く分析する準備が整いました！画面の『性格分析レポートを生成する』ボタンを押してください」と案内してください。
 `;
 
-  // 対話履歴を形式変換
   const formattedMessages = messages.map(m => ({
     role: m.role === 'assistant' ? 'assistant' : 'user',
     content: m.content
   }));
 
   try {
-    // AI Gateway Route (dynamic/llm5) に送信
     const res = await fetch(chatUrl, {
       method: 'POST',
       headers,
@@ -207,11 +201,8 @@ export async function runInterviewer(
     });
 
     if (res.ok) {
-      const data: any = await res.json();
-      const reply = data.choices?.[0]?.message?.content || 
-                    data.candidates?.[0]?.content?.parts?.[0]?.text || 
-                    data.response || 
-                    'お答えいただきありがとうございます！';
+      const data = await res.json();
+      const reply = extractResponseText(data) || 'お答えいただきありがとうございます！';
       return { reply, isReady };
     } else {
       const errText = await res.text();
@@ -226,7 +217,7 @@ export async function runInterviewer(
 
 /**
  * ステップ3: 最終性格分析 (Route: dynamic/llm5)
- * 対話履歴全体から、ビッグファイブ各因子のスコア(0-100)と詳細プロファイルを構造化生成
+ * AI GatewayのRoute設定に委ね、詳細なプロファイルJSONを生成
  */
 export async function runFinalAnalysis(env: Env, messages: ChatMessage[]): Promise<AnalysisResult> {
   const chatUrl = env.CF_AI_GATEWAY_CHAT_URL || getGatewayRouteUrl(env, 'dynamic/llm5');
@@ -280,10 +271,7 @@ export async function runFinalAnalysis(env: Env, messages: ChatMessage[]): Promi
   }
 
   const data: any = await res.json();
-  const rawText = data.choices?.[0]?.message?.content || 
-                  data.candidates?.[0]?.content?.parts?.[0]?.text || 
-                  data.response || 
-                  JSON.stringify(data);
+  const rawText = extractResponseText(data);
 
   const jsonMatch = rawText.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {

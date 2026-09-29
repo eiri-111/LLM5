@@ -3,8 +3,6 @@ compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "./dist"
 
-[ai]
-binding = "AI"
 
 [vars]
 CF_ACCOUNT_ID = "e809b1129ec4b6f69520858ac79b2095"
