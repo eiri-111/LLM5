@@ -3,7 +3,12 @@ compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "./dist"
 
+[ai]
+binding = "AI"
+
 [vars]
-# Cloudflare Pagesダッシュボードの環境変数で設定:
-# CF_AI_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_name}"
-# CF_AIG_TOKEN = "your-ai-gateway-token (任意)"
+CF_ACCOUNT_ID = "e809b1129ec4b6f69520858ac79b2095"
+# 必要に応じてカスタムURLやTokenを設定
+# CF_AI_GATEWAY_ANALYST_URL = "https://gateway.ai.cloudflare.com/v1/e809b1129ec4b6f69520858ac79b2095/dynamic/llm5-analyst"
+# CF_AI_GATEWAY_CHAT_URL = "https://gateway.ai.cloudflare.com/v1/e809b1129ec4b6f69520858ac79b2095/dynamic/llm5"
+# CF_AIG_TOKEN = "your-api-gateway-token"

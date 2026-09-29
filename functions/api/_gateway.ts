@@ -1,0 +1,294 @@
+export interface Env {
+  CF_ACCOUNT_ID?: string;
+  CF_AI_GATEWAY_ANALYST_URL?: string;
+  CF_AI_GATEWAY_CHAT_URL?: string;
+  CF_AIG_TOKEN?: string;
+  // Workers AI Direct Binding (オプション)
+  AI?: any;
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant' | 'model';
+  content: string;
+}
+
+export interface AnalystStrategy {
+  focus_dimension: string;
+  target_question_strategy: string;
+  is_ready_for_final_analysis: boolean;
+  notes?: string;
+}
+
+export interface BigFiveDimension {
+  score: number;
+  level: string;
+  title: string;
+  description: string;
+  traits: string[];
+}
+
+export interface AnalysisResult {
+  personality_title: string;
+  personality_type: string;
+  summary: string;
+  scores: {
+    openness: BigFiveDimension;
+    conscientiousness: BigFiveDimension;
+    extraversion: BigFiveDimension;
+    agreeableness: BigFiveDimension;
+    neuroticism: BigFiveDimension;
+  };
+  strengths: string[];
+  growth_areas: string[];
+  career_recommendations: string[];
+  relationship_style: string;
+  stress_management: string;
+}
+
+const DEFAULT_ACCOUNT_ID = 'e809b1129ec4b6f69520858ac79b2095';
+
+/**
+ * AI Gateway Route URLを取得
+ */
+export function getGatewayRouteUrl(env: Env, routePath: string): string {
+  const accountId = env.CF_ACCOUNT_ID || DEFAULT_ACCOUNT_ID;
+  const cleanRoute = routePath.replace(/^\/+|\/+$/g, '');
+  return `https://gateway.ai.cloudflare.com/v1/${accountId}/${cleanRoute}`;
+}
+
+/**
+ * リクエストヘッダーを生成
+ */
+export function getGatewayHeaders(env: Env): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  };
+  if (env.CF_AIG_TOKEN && env.CF_AIG_TOKEN.trim() !== '') {
+    const token = env.CF_AIG_TOKEN.trim();
+    headers['cf-aig-authorization'] = `Bearer ${token}`;
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+/**
+ * ステップ1: 分析官AI (Route: dynamic/llm5-analyst または Workers AI)
+ * これまでの会話を分析し、どのビッグファイブ因子を深掘りすべきかの戦略JSONを高速生成
+ */
+export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<AnalystStrategy> {
+  const dialogueHistory = messages
+    .map(m => `${m.role === 'user' ? 'ユーザー' : '質問係'}: ${m.content}`)
+    .join('\n');
+
+  const analystSystemPrompt = `
+あなたはビッグファイブ理論（主要5因子: 開放性, 誠実性, 外向性, 協調性, 情緒安定性）に基づく心理分析ストラテジストです。
+あなたの役割は、ユーザーと質問係の対話履歴を分析し、
+1. まだ判定情報が不足している因子を特定する
+2. 質問係が次に投げかけるべき具体的な「質問の狙い・シチュエーション」を指示する
+3. 5因子すべてを分析するのに十分な情報が集まったか判定する（目安: 3〜4往復以上の具体的対話）
+
+必ず以下のJSON形式のみを出力してください（Markdownコードブロックは不要）:
+{
+  "focus_dimension": "狙う因子名 (例: 誠実性)",
+  "target_question_strategy": "質問係への指示 (例: 予期せぬ予定変更があったときの対応や、仕事・勉強の進め方について尋ねさせる)",
+  "is_ready_for_final_analysis": false
+}
+`;
+
+  // Workers AI Direct Binding が存在する場合は最速で実行
+  if (env.AI && typeof env.AI.run === 'function') {
+    try {
+      const aiResponse = await env.AI.run('@cf/qwen/qwen2.5-7b-instruct', {
+        messages: [
+          { role: 'system', content: analystSystemPrompt },
+          { role: 'user', content: `【対話履歴】\n${dialogueHistory}\n\n分析と次の質問戦略をJSONで出力してください。` }
+        ],
+        temperature: 0.2,
+        max_tokens: 250
+      });
+      const responseText = aiResponse.response || JSON.stringify(aiResponse);
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch (e) {
+      console.warn('Direct Workers AI run failed, falling back to AI Gateway route:', e);
+    }
+  }
+
+  // AI Gateway Route (dynamic/llm5-analyst) へリクエスト
+  const analystUrl = env.CF_AI_GATEWAY_ANALYST_URL || getGatewayRouteUrl(env, 'dynamic/llm5-analyst');
+  const headers = getGatewayHeaders(env);
+
+  try {
+    // OpenAI互換または汎用チャット形式で送信
+    const res = await fetch(analystUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        messages: [
+          { role: 'system', content: analystSystemPrompt },
+          { role: 'user', content: `【対話履歴】\n${dialogueHistory}\n\n分析と次の質問戦略をJSONで出力してください。` }
+        ],
+        temperature: 0.2
+      })
+    });
+
+    if (res.ok) {
+      const data: any = await res.json();
+      const rawText = data.choices?.[0]?.message?.content || data.response || JSON.stringify(data);
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    }
+  } catch (err) {
+    console.error('Analyst Route fetch error:', err);
+  }
+
+  // フォールバック（対話ターン数によるデフォルト戦略）
+  const userCount = messages.filter(m => m.role === 'user').length;
+  const isReady = userCount >= 4;
+  return {
+    focus_dimension: isReady ? '全体' : '行動特性',
+    target_question_strategy: isReady
+      ? '十分な情報が集まったので分析完了を案内'
+      : '休日の過ごし方や、プレッシャーを感じたときの対処について尋ねる',
+    is_ready_for_final_analysis: isReady
+  };
+}
+
+/**
+ * ステップ2: 質問係AI (Route: dynamic/llm5)
+ * 分析官の指示を受け取り、ユーザーに親しみやすく自然な日本語で次の問いを生成
+ */
+export async function runInterviewer(
+  env: Env, 
+  messages: ChatMessage[], 
+  strategy: AnalystStrategy
+): Promise<{ reply: string; isReady: boolean }> {
+  const chatUrl = env.CF_AI_GATEWAY_CHAT_URL || getGatewayRouteUrl(env, 'dynamic/llm5');
+  const headers = getGatewayHeaders(env);
+
+  const isReady = strategy.is_ready_for_final_analysis;
+
+  const interviewerInstruction = `
+あなたはプロフェッショナルな性格分析インタビュアーです。
+裏方の分析官から以下の指示（戦略）が届いています:
+【分析官の指示】:
+- 狙う因子: ${strategy.focus_dimension}
+- 質問の方向性: ${strategy.target_question_strategy}
+
+【対話のルール】
+- ユーザーの直前の発言に対して温かく共感・受容してください。
+- 分析官の指示に沿って、スマホで答えやすい日常の自然な質問を1つだけ投げかけてください。
+- 1回の返答は2〜3文（150文字程度）で簡潔に。
+- もし分析官が「分析完了」と判断している場合は、共感した上で「ここまでのお話であなたのパーソナリティを深く分析する準備が整いました！画面の『性格分析レポートを生成する』ボタンを押してください」と案内してください。
+`;
+
+  // 対話履歴を形式変換
+  const formattedMessages = messages.map(m => ({
+    role: m.role === 'assistant' ? 'assistant' : 'user',
+    content: m.content
+  }));
+
+  try {
+    // AI Gateway Route (dynamic/llm5) に送信
+    const res = await fetch(chatUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        messages: [
+          { role: 'system', content: interviewerInstruction },
+          ...formattedMessages
+        ],
+        temperature: 0.7
+      })
+    });
+
+    if (res.ok) {
+      const data: any = await res.json();
+      const reply = data.choices?.[0]?.message?.content || 
+                    data.candidates?.[0]?.content?.parts?.[0]?.text || 
+                    data.response || 
+                    'お答えいただきありがとうございます！';
+      return { reply, isReady };
+    } else {
+      const errText = await res.text();
+      console.error('Interviewer Route error:', errText);
+      throw new Error(`AI Gateway (dynamic/llm5) エラー: ${res.status}`);
+    }
+  } catch (err: any) {
+    console.error('runInterviewer error:', err);
+    throw err;
+  }
+}
+
+/**
+ * ステップ3: 最終性格分析 (Route: dynamic/llm5)
+ * 対話履歴全体から、ビッグファイブ各因子のスコア(0-100)と詳細プロファイルを構造化生成
+ */
+export async function runFinalAnalysis(env: Env, messages: ChatMessage[]): Promise<AnalysisResult> {
+  const chatUrl = env.CF_AI_GATEWAY_CHAT_URL || getGatewayRouteUrl(env, 'dynamic/llm5');
+  const headers = getGatewayHeaders(env);
+
+  const dialogueHistory = messages
+    .map(m => `${m.role === 'user' ? 'ユーザー' : 'インタビュアー'}: ${m.content}`)
+    .join('\n');
+
+  const systemPrompt = `
+あなたは世界最高峰のパーソナリティ心理学者です。
+提供された対話履歴から、心理学のビッグファイブ理論（主要5因子: 開放性, 誠実性, 外向性, 協調性, 情緒安定性）に基づいて精密な性格プロファイリングを行ってください。
+各因子のスコア(score)は0〜100の範囲で客観的に推定し、自己理解を深める洞察に富んだ分析を提供してください。
+
+必ず以下のJSON形式に厳密に従って出力してください（Markdown記法は含めず純粋なJSONのみ）:
+{
+  "personality_title": "性格を象徴するキャッチコピー (例: '知的好奇心あふれる先駆的イノベーター')",
+  "personality_type": "タイプ名 (例: '創造的探究型')",
+  "summary": "全体的な人物像と個性の統合的解説（250〜400文字程度）",
+  "scores": {
+    "openness": { "score": 85, "level": "非常に高い", "title": "旺盛な知的好奇心と発想力", "description": "新しい経験や創造的なアイデアに...", "traits": ["独創的", "探究心", "柔軟"] },
+    "conscientiousness": { "score": 70, "level": "高い", "title": "高い責任感と計画性", "description": "...", "traits": ["計画的", "着実", "自律"] },
+    "extraversion": { "score": 55, "level": "平均的", "title": "状況に応じた柔軟な社交性", "description": "...", "traits": ["バランス型", "聞き上手"] },
+    "agreeableness": { "score": 80, "level": "高い", "title": "深い共感と思いやり", "description": "...", "traits": ["協調性", "親身", "信頼"] },
+    "neuroticism": { "score": 40, "level": "控えめ", "title": "落ち着いた情緒安定性", "description": "...", "traits": ["冷静", "切り替えが早い"] }
+  },
+  "strengths": ["強み1", "強み2", "強み3"],
+  "growth_areas": ["成長のヒント1", "成長のヒント2"],
+  "career_recommendations": ["適した環境1", "適した環境2", "適した環境3"],
+  "relationship_style": "対人関係やコミュニケーションの特徴とアドバイス",
+  "stress_management": "ストレスを感じやすい要因と効果的なリフレッシュ法"
+}
+`;
+
+  const res = await fetch(chatUrl, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `【対話履歴】\n${dialogueHistory}\n\n上記対話からビッグファイブ性格プロファイルをJSONで生成してください。` }
+      ],
+      temperature: 0.3
+    })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error('Final analysis fetch error:', errText);
+    throw new Error(`AI Gateway (dynamic/llm5) 分析エラー: ${res.status}`);
+  }
+
+  const data: any = await res.json();
+  const rawText = data.choices?.[0]?.message?.content || 
+                  data.candidates?.[0]?.content?.parts?.[0]?.text || 
+                  data.response || 
+                  JSON.stringify(data);
+
+  const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error('AI Gatewayから有効なJSON応答が得られませんでした');
+  }
+
+  return JSON.parse(jsonMatch[0]);
+}
