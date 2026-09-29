@@ -1,0 +1,9 @@
+name = "ocean-ai-llm5"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "./dist"
+
+[vars]
+# Cloudflare Pagesダッシュボードまたは以下で設定
+# GEMINI_API_KEY = "your-gemini-api-key"
+# CF_AI_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_name}/google-ai-studio"

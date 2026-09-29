@@ -1,0 +1,17 @@
+services:
+  web:
+    build: .
+    container_name: llm5
+    ports:
+      - "5173:5173"
+      - "8788:8788"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - CF_AI_GATEWAY_URL=${CF_AI_GATEWAY_URL:-}
+      - NODE_ENV=development
+    env_file:
+      - .env
+    restart: unless-stopped
