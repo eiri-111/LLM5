@@ -105,14 +105,15 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
   };
 
   return (
-    <div className="glass-panel chat-wrapper">
+    <div className="chat-wrapper">
       <div className="chat-status-bar">
         <div className="counselor-info">
           <div className="counselor-avatar">
-            <Bot size={18} />
+            <Bot size={20} />
           </div>
           <div>
             <div className="counselor-name">Dr. OCEAN</div>
+            <div className="counselor-sub">ビッグファイブ心理分析官</div>
           </div>
         </div>
         <div className="chat-progress-chip">
@@ -127,45 +128,43 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
           </div>
         ))}
         {isLoading && (
-          <div className="chat-bubble assistant" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Dr. OCEANが考え中...</span>
+          <div className="chat-bubble assistant" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Dr. OCEANが考え中...</span>
           </div>
         )}
       </div>
 
       <div className="chat-input-bar">
-        <div style={{ flex: 1 }}>
-          {isReady && (
-            <button 
-              onClick={handleAnalyze} 
-              disabled={isAnalyzing} 
-              className="btn-analyze-ready"
-            >
-              <Sparkles size={18} />
-              {isAnalyzing ? '分析中...' : '性格分析レポートを生成する'}
-            </button>
-          )}
-          <form onSubmit={handleSend} style={{ display: 'flex', gap: 6, marginTop: isReady ? 6 : 0 }}>
-            <textarea
-              ref={inputRef}
-              className="chat-input-textarea"
-              rows={1}
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="メッセージを入力..."
-              disabled={isLoading || isAnalyzing}
-            />
-            <button 
-              type="submit" 
-              className="chat-send-btn" 
-              disabled={isLoading || isAnalyzing || !inputText.trim()}
-              aria-label="送信"
-            >
-              <Send size={18} />
-            </button>
-          </form>
-        </div>
+        {isReady && (
+          <button 
+            onClick={handleAnalyze} 
+            disabled={isAnalyzing} 
+            className="btn-analyze-ready"
+          >
+            <Sparkles size={18} />
+            {isAnalyzing ? '分析中...' : '性格分析レポートを生成する'}
+          </button>
+        )}
+        <form onSubmit={handleSend} style={{ display: 'flex', gap: 8 }}>
+          <textarea
+            ref={inputRef}
+            className="chat-input-textarea"
+            rows={1}
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="メッセージを入力..."
+            disabled={isLoading || isAnalyzing}
+          />
+          <button 
+            type="submit" 
+            className="chat-send-btn" 
+            disabled={isLoading || isAnalyzing || !inputText.trim()}
+            aria-label="送信"
+          >
+            <Send size={18} />
+          </button>
+        </form>
       </div>
     </div>
   );

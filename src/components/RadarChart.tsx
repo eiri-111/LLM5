@@ -26,8 +26,6 @@ export const RadarChart: React.FC<RadarChartProps> = ({ scores }) => {
     '情緒安定性\n(ストレス耐性)'
   ];
 
-  // 神経症傾向(Neuroticism)は直感的に分かりやすいよう「情緒安定性 (100 - Neuroticism)」としてチャート表示するか、あるいは元のスコアをそのまま表示するか。
-  // 一般的な心理テストでは、右上がポジティブになるよう「情緒安定性」として表示されることが多いですが、ここではビッグファイブの正確な定義として表示しつつ、注記を付与。
   const dataValues = [
     scores.openness ? scores.openness.score : 50,
     scores.conscientiousness ? scores.conscientiousness.score : 50,
@@ -42,14 +40,14 @@ export const RadarChart: React.FC<RadarChartProps> = ({ scores }) => {
       {
         label: 'パーソナリティスコア',
         data: dataValues,
-        backgroundColor: 'rgba(99, 102, 241, 0.35)',
-        borderColor: '#818cf8',
+        backgroundColor: 'rgba(59, 130, 246, 0.22)',
+        borderColor: '#3b82f6',
         borderWidth: 2.5,
-        pointBackgroundColor: '#a855f7',
+        pointBackgroundColor: '#2563eb',
         pointBorderColor: '#ffffff',
         pointBorderWidth: 2,
-        pointRadius: 4,
-        pointHoverRadius: 6
+        pointRadius: 4.5,
+        pointHoverRadius: 6.5
       }
     ]
   };
@@ -60,6 +58,11 @@ export const RadarChart: React.FC<RadarChartProps> = ({ scores }) => {
     plugins: {
       legend: { display: false },
       tooltip: {
+        backgroundColor: '#0f172a',
+        titleColor: '#ffffff',
+        bodyColor: '#e2e8f0',
+        padding: 10,
+        cornerRadius: 8,
         callbacks: {
           label: (context: any) => ` スコア: ${context.raw}点`
         }
@@ -71,21 +74,22 @@ export const RadarChart: React.FC<RadarChartProps> = ({ scores }) => {
         max: 100,
         ticks: {
           stepSize: 20,
-          color: '#64748b',
+          color: '#94a3b8',
           backdropColor: 'transparent',
-          font: { size: 9 }
+          font: { size: 9, family: 'Plus Jakarta Sans' }
         },
         grid: {
-          color: 'rgba(255, 255, 255, 0.08)'
+          color: 'rgba(0, 0, 0, 0.08)'
         },
         angleLines: {
-          color: 'rgba(255, 255, 255, 0.12)'
+          color: 'rgba(0, 0, 0, 0.1)'
         },
         pointLabels: {
-          color: '#cbd5e1',
+          color: '#1e293b',
           font: {
-            size: 10,
-            weight: '600'
+            size: 11,
+            weight: '700',
+            family: 'Plus Jakarta Sans, Noto Sans JP'
           }
         }
       }

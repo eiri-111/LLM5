@@ -12,18 +12,18 @@ export const Header: React.FC<HeaderProps> = ({ onReset }) => {
         <button 
           onClick={onReset} 
           className="brand-link" 
-          style={{ background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+          aria-label="トップに戻る"
         >
           <div className="brand-icon-box">
-            <span style={{ fontSize: '1.2rem', fontWeight: 800 }}>◈</span>
+            <span style={{ fontSize: '1.25rem', fontWeight: 800 }}>◈</span>
           </div>
           <div>
             <h1 className="brand-title">OCEAN AI</h1>
-            <span className="brand-tagline">Big Five Personality Intelligence</span>
+            <span className="brand-tagline">対話型ビッグファイブ性格分析</span>
           </div>
         </button>
 
-        <div className="badge-powered">
+        <div className="badge-clean">
           <Sparkles size={12} style={{ display: 'inline', marginRight: 4 }} />
           Cloudflare AI
         </div>

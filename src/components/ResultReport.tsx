@@ -34,11 +34,11 @@ export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, sh
   };
 
   const dimensions = [
-    { key: 'openness', name: '開放性 (Openness)', badge: 'O', color: '#8b5cf6' },
-    { key: 'conscientiousness', name: '誠実性 (Conscientiousness)', badge: 'C', color: '#06b6d4' },
-    { key: 'extraversion', name: '外向性 (Extraversion)', badge: 'E', color: '#f59e0b' },
-    { key: 'agreeableness', name: '協調性 (Agreeableness)', badge: 'A', color: '#10b981' },
-    { key: 'neuroticism', name: '情緒安定性 (Emotional Stability)', badge: 'N', color: '#f43f5e' }
+    { key: 'openness', name: '開放性 (Openness)', badge: 'O', color: '#7c3aed' },
+    { key: 'conscientiousness', name: '誠実性 (Conscientiousness)', badge: 'C', color: '#0891b2' },
+    { key: 'extraversion', name: '外向性 (Extraversion)', badge: 'E', color: '#d97706' },
+    { key: 'agreeableness', name: '協調性 (Agreeableness)', badge: 'A', color: '#059669' },
+    { key: 'neuroticism', name: '情緒安定性 (Emotional Stability)', badge: 'N', color: '#e11d48' }
   ] as const;
 
   return (
@@ -52,7 +52,7 @@ export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, sh
       </div>
 
       {/* Radar Chart Card */}
-      <div className="glass-panel radar-chart-card">
+      <div className="radar-chart-card">
         <h3 className="card-section-title">
           📊 ビッグファイブ・レーダーチャート
         </h3>
@@ -60,7 +60,7 @@ export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, sh
       </div>
 
       {/* Dimension Breakdown */}
-      <div className="glass-panel" style={{ padding: '1.2rem' }}>
+      <div className="dimensions-section">
         <h3 className="card-section-title">
           🎯 5因子の詳細スコア分析
         </h3>
@@ -72,11 +72,11 @@ export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, sh
               <div className="dim-header-row">
                 <div className="dim-name-group">
                   <span className="dim-avatar" style={{ backgroundColor: d.color }}>{d.badge}</span>
-                  <span style={{ fontSize: '0.88rem', fontWeight: 600 }}>{d.name}</span>
+                  <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e293b' }}>{d.name}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
                   <span className="dim-score-badge" style={{ color: d.color }}>{dimData.score}</span>
-                  <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>点 ({dimData.level})</span>
+                  <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>点 ({dimData.level})</span>
                 </div>
               </div>
               <div className="progress-rail">
@@ -99,8 +99,8 @@ export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, sh
       </div>
 
       {/* Strengths */}
-      <div className="glass-panel insight-block" style={{ borderLeft: '4px solid #10b981' }}>
-        <h3 className="card-section-title" style={{ color: '#10b981' }}>
+      <div className="insight-block" style={{ borderLeft: '4px solid #059669' }}>
+        <h3 className="card-section-title" style={{ color: '#059669' }}>
           <Award size={18} /> あなたの強み・ポテンシャル
         </h3>
         <ul className="insight-item-list">
@@ -111,8 +111,8 @@ export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, sh
       </div>
 
       {/* Growth Areas */}
-      <div className="glass-panel insight-block" style={{ borderLeft: '4px solid #f59e0b' }}>
-        <h3 className="card-section-title" style={{ color: '#f59e0b' }}>
+      <div className="insight-block" style={{ borderLeft: '4px solid #d97706' }}>
+        <h3 className="card-section-title" style={{ color: '#d97706' }}>
           <Lightbulb size={18} /> 注意点・成長へのヒント
         </h3>
         <ul className="insight-item-list">
@@ -123,8 +123,8 @@ export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, sh
       </div>
 
       {/* Career */}
-      <div className="glass-panel insight-block" style={{ borderLeft: '4px solid #06b6d4' }}>
-        <h3 className="card-section-title" style={{ color: '#06b6d4' }}>
+      <div className="insight-block" style={{ borderLeft: '4px solid #0891b2' }}>
+        <h3 className="card-section-title" style={{ color: '#0891b2' }}>
           <Briefcase size={18} /> 適した環境・ワークスタイル
         </h3>
         <ul className="insight-item-list">
@@ -135,28 +135,28 @@ export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, sh
       </div>
 
       {/* Relationships */}
-      <div className="glass-panel insight-block" style={{ borderLeft: '4px solid #8b5cf6' }}>
-        <h3 className="card-section-title" style={{ color: '#8b5cf6' }}>
+      <div className="insight-block" style={{ borderLeft: '4px solid #7c3aed' }}>
+        <h3 className="card-section-title" style={{ color: '#7c3aed' }}>
           <HeartHandshake size={18} /> 対人関係・コミュニケーション
         </h3>
-        <p style={{ fontSize: '0.88rem', color: '#cbd5e1', lineHeight: 1.65 }}>
+        <p style={{ fontSize: '0.9rem', color: '#334155', lineHeight: 1.7 }}>
           {result.relationship_style}
         </p>
       </div>
 
       {/* Stress */}
-      <div className="glass-panel insight-block" style={{ borderLeft: '4px solid #f43f5e' }}>
-        <h3 className="card-section-title" style={{ color: '#f43f5e' }}>
+      <div className="insight-block" style={{ borderLeft: '4px solid #e11d48' }}>
+        <h3 className="card-section-title" style={{ color: '#e11d48' }}>
           <ShieldAlert size={18} /> ストレス傾向とリフレッシュ法
         </h3>
-        <p style={{ fontSize: '0.88rem', color: '#cbd5e1', lineHeight: 1.65 }}>
+        <p style={{ fontSize: '0.9rem', color: '#334155', lineHeight: 1.7 }}>
           {result.stress_management}
         </p>
       </div>
 
       {/* Share & Actions */}
-      <div className="glass-panel" style={{ padding: '1.2rem' }}>
-        <h3 className="card-section-title" style={{ fontSize: '0.95rem' }}>
+      <div className="actions-section">
+        <h3 className="card-section-title" style={{ fontSize: '0.98rem' }}>
           <Share2 size={16} /> 結果をシェア・保存
         </h3>
         <div className="share-action-grid">
@@ -178,7 +178,7 @@ export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, sh
           </a>
         </div>
 
-        <div className="share-action-grid" style={{ marginTop: '0.6rem' }}>
+        <div className="share-action-grid" style={{ marginTop: '0.65rem' }}>
           <button onClick={handleCopyShare} className="btn-secondary">
             📋 テキストをコピー
           </button>
@@ -189,11 +189,10 @@ export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, sh
 
         <button 
           onClick={onRetake}
-          className="btn-submit-main"
-          style={{ marginTop: '1.2rem', background: 'rgba(255, 255, 255, 0.08)' }}
+          className="btn-retake"
         >
           <RotateCcw size={16} />
-          もう一度診断する
+          もう一度対話診断する
         </button>
       </div>
     </div>

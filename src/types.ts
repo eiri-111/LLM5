@@ -30,13 +30,3 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'model';
   content: string;
 }
-
-export interface Question {
-  id: number;
-  text: string;
-  dimension: 'openness' | 'conscientiousness' | 'extraversion' | 'agreeableness' | 'neuroticism';
-  dimension_name: string;
-  is_reverse: boolean;
-}
-
-export type AnalysisMode = 'chat' | 'questionnaire' | 'text';
