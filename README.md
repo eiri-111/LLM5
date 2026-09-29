@@ -50,11 +50,14 @@ sequenceDiagram
 
 ## ☁️ Cloudflare Pages での設定
 
-Cloudflare Pages の **Settings > Environment variables** にて以下を設定（デフォルトで自動解決されるため、基本はデフォルトで動作します）:
+Cloudflare Pages の **Settings > Environment variables** にて以下を設定（デフォルトで自動設定されているため、基本は自動で動作します）:
 
-| 変数名 (Variable name) | 推奨値 / 例 | 説明 |
+| 変数名 (Variable name) | デフォルト / 例 | 説明 |
 | :--- | :--- | :--- |
-| **`CF_ACCOUNT_ID`** | `e809b1129ec4b6f69520858ac79b2095` | アカウントID（未指定時もコード内でデフォルト設定済） |
-| **`CF_AIG_TOKEN`** | `あなたのGatewayトークン` | 【任意】AI Gatewayでトークン認証を設定している場合のみ |
-| **`CF_AI_GATEWAY_ANALYST_URL`** | `https://gateway.ai.cloudflare.com/v1/e809b1129ec4b6f69520858ac79b2095/dynamic/llm5-analyst` | 【任意】分析官用RouteのカスタムURL |
-| **`CF_AI_GATEWAY_CHAT_URL`** | `https://gateway.ai.cloudflare.com/v1/e809b1129ec4b6f69520858ac79b2095/dynamic/llm5` | 【任意】対話・レポート用RouteのカスタムURL |
+| **`CF_ACCOUNT_ID`** | `e809b1129ec4b6f69520858ac79b2095` | Cloudflare アカウントID |
+| **`CF_GATEWAY_ID`** | `llm5` | AI Gatewayの名称（slug）。ダッシュボードで作成した名前を指定 |
+| **`CF_AIG_TOKEN`** | `（あなたのToken）` | 【任意】AI Gatewayで認証トークンを有効化している場合のみ設定 |
+| **`CF_AI_GATEWAY_URL`** | `https://gateway.ai.cloudflare.com/v1/.../compat/chat/completions` | 【任意】エンドポイントURL全体を手動指定したい場合 |
+
+### 🔍 疎通確認用エンドポイント
+デプロイ後、`https://<あなたのPagesドメイン>/api/health` にアクセスすると、AI Gatewayへの接続先URLや設定状況をJSONで即座に確認できます。

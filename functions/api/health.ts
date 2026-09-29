@@ -1,19 +1,25 @@
-import { Env } from './_gateway';
+import { Env, getGatewayCompatUrl } from './_gateway';
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
   const { env } = context;
 
-  const hasAnalystUrl = Boolean(env.CF_AI_GATEWAY_ANALYST_URL);
-  const hasChatUrl = Boolean(env.CF_AI_GATEWAY_CHAT_URL);
-  const hasToken = Boolean(env.CF_AIG_TOKEN);
+  const endpoint = getGatewayCompatUrl(env);
+  const accountId = env.CF_ACCOUNT_ID || 'e809b1129ec4b6f69520858ac79b2095';
+  const gatewayId = env.CF_GATEWAY_ID || 'llm5';
+  const hasToken = Boolean(env.CF_AIG_TOKEN && env.CF_AIG_TOKEN.trim() !== '');
 
   return new Response(
     JSON.stringify({
       status: 'ok',
-      architecture: 'Dual-LLM (Analyst: dynamic/llm5-analyst, Interviewer: dynamic/llm5)',
-      has_analyst_route: hasAnalystUrl,
-      has_chat_route: hasChatUrl,
+      architecture: 'Cloudflare AI Gateway Dynamic Routes (/compat/chat/completions)',
+      gateway_endpoint: endpoint,
+      account_id: accountId,
+      gateway_id: gatewayId,
       has_token: hasToken,
+      routes: {
+        analyst: 'dynamic/llm5-analyst',
+        interviewer_and_report: 'dynamic/llm5'
+      },
       timestamp: new Date().toISOString()
     }),
     {

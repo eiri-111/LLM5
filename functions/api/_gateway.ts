@@ -1,8 +1,8 @@
 export interface Env {
   CF_ACCOUNT_ID?: string;
-  CF_AI_GATEWAY_ANALYST_URL?: string;
-  CF_AI_GATEWAY_CHAT_URL?: string;
+  CF_GATEWAY_ID?: string;
   CF_AIG_TOKEN?: string;
+  CF_AI_GATEWAY_URL?: string;
 }
 
 export interface ChatMessage {
@@ -44,14 +44,19 @@ export interface AnalysisResult {
 }
 
 const DEFAULT_ACCOUNT_ID = 'e809b1129ec4b6f69520858ac79b2095';
+const DEFAULT_GATEWAY_ID = 'llm5';
 
 /**
- * AI Gateway Route URLを取得
+ * Cloudflare AI Gateway Dynamic Routing (OpenAI互換 compat) エンドポイントURLを取得
+ * 公式仕様: https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/compat/chat/completions
  */
-export function getGatewayRouteUrl(env: Env, routePath: string): string {
+export function getGatewayCompatUrl(env: Env): string {
+  if (env.CF_AI_GATEWAY_URL && env.CF_AI_GATEWAY_URL.trim() !== '') {
+    return env.CF_AI_GATEWAY_URL.trim();
+  }
   const accountId = env.CF_ACCOUNT_ID || DEFAULT_ACCOUNT_ID;
-  const cleanRoute = routePath.replace(/^\/+|\/+$/g, '');
-  return `https://gateway.ai.cloudflare.com/v1/${accountId}/${cleanRoute}`;
+  const gatewayId = env.CF_GATEWAY_ID || DEFAULT_GATEWAY_ID;
+  return `https://gateway.ai.cloudflare.com/v1/${accountId}/${gatewayId}/compat/chat/completions`;
 }
 
 /**
@@ -112,14 +117,15 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
 }
 `;
 
-  const analystUrl = env.CF_AI_GATEWAY_ANALYST_URL || getGatewayRouteUrl(env, 'dynamic/llm5-analyst');
+  const endpoint = getGatewayCompatUrl(env);
   const headers = getGatewayHeaders(env);
 
   try {
-    const res = await fetch(analystUrl, {
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers,
       body: JSON.stringify({
+        model: 'dynamic/llm5-analyst',
         messages: [
           { role: 'system', content: analystSystemPrompt },
           { role: 'user', content: `【対話履歴】\n${dialogueHistory}\n\n分析と次の質問戦略をJSONで出力してください。` }
@@ -136,7 +142,8 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
         return JSON.parse(jsonMatch[0]);
       }
     } else {
-      console.warn('Analyst route returned status:', res.status, await res.text());
+      const errText = await res.text();
+      console.warn(`Analyst route returned status ${res.status}:`, errText);
     }
   } catch (err) {
     console.error('Analyst Route fetch error:', err);
@@ -163,7 +170,7 @@ export async function runInterviewer(
   messages: ChatMessage[], 
   strategy: AnalystStrategy
 ): Promise<{ reply: string; isReady: boolean }> {
-  const chatUrl = env.CF_AI_GATEWAY_CHAT_URL || getGatewayRouteUrl(env, 'dynamic/llm5');
+  const endpoint = getGatewayCompatUrl(env);
   const headers = getGatewayHeaders(env);
 
   const isReady = strategy.is_ready_for_final_analysis;
@@ -188,10 +195,11 @@ export async function runInterviewer(
   }));
 
   try {
-    const res = await fetch(chatUrl, {
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers,
       body: JSON.stringify({
+        model: 'dynamic/llm5',
         messages: [
           { role: 'system', content: interviewerInstruction },
           ...formattedMessages
@@ -206,8 +214,8 @@ export async function runInterviewer(
       return { reply, isReady };
     } else {
       const errText = await res.text();
-      console.error('Interviewer Route error:', errText);
-      throw new Error(`AI Gateway (dynamic/llm5) エラー: ${res.status}`);
+      console.error(`Interviewer Route error (${res.status}):`, errText);
+      throw new Error(`AI Gateway (dynamic/llm5) エラー [${res.status}]: ${errText || '詳細なし'}`);
     }
   } catch (err: any) {
     console.error('runInterviewer error:', err);
@@ -220,7 +228,7 @@ export async function runInterviewer(
  * AI GatewayのRoute設定に委ね、詳細なプロファイルJSONを生成
  */
 export async function runFinalAnalysis(env: Env, messages: ChatMessage[]): Promise<AnalysisResult> {
-  const chatUrl = env.CF_AI_GATEWAY_CHAT_URL || getGatewayRouteUrl(env, 'dynamic/llm5');
+  const endpoint = getGatewayCompatUrl(env);
   const headers = getGatewayHeaders(env);
 
   const dialogueHistory = messages
@@ -252,10 +260,11 @@ export async function runFinalAnalysis(env: Env, messages: ChatMessage[]): Promi
 }
 `;
 
-  const res = await fetch(chatUrl, {
+  const res = await fetch(endpoint, {
     method: 'POST',
     headers,
     body: JSON.stringify({
+      model: 'dynamic/llm5',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: `【対話履歴】\n${dialogueHistory}\n\n上記対話からビッグファイブ性格プロファイルをJSONで生成してください。` }
@@ -266,8 +275,8 @@ export async function runFinalAnalysis(env: Env, messages: ChatMessage[]): Promi
 
   if (!res.ok) {
     const errText = await res.text();
-    console.error('Final analysis fetch error:', errText);
-    throw new Error(`AI Gateway (dynamic/llm5) 分析エラー: ${res.status}`);
+    console.error(`Final analysis fetch error (${res.status}):`, errText);
+    throw new Error(`AI Gateway (dynamic/llm5) 分析エラー [${res.status}]: ${errText || '詳細なし'}`);
   }
 
   const data: any = await res.json();
