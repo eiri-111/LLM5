@@ -11,6 +11,16 @@ const INITIAL_GREETING =
   "こんにちは。あなたの普段の過ごし方や考え方について、少しお話を聞かせてください。\n\n" +
   "まずは、休日は普段どのように過ごされることが多いですか？また、最近夢中になっていることやワクワクした体験はありますか？";
 
+function sanitizeMessage(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/<thought>[\s\S]*?<\/thought>/gi, '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<thought>[\s\S]*$/gi, '')
+    .replace(/<think>[\s\S]*$/gi, '')
+    .trim();
+}
+
 export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToast }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: 'assistant', content: INITIAL_GREETING }
@@ -55,7 +65,8 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
       }
 
       const data: any = await res.json();
-      setMessages([...newMessages, { role: 'assistant', content: data.response }]);
+      const cleanReply = sanitizeMessage(data.response);
+      setMessages([...newMessages, { role: 'assistant', content: cleanReply }]);
       if (data.is_ready_for_analysis) {
         setIsReady(true);
       }
@@ -106,7 +117,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
       <div className="chat-scroll-area" ref={scrollRef}>
         {messages.map((m, idx) => (
           <div key={idx} className={`chat-bubble ${m.role === 'user' ? 'user' : 'assistant'}`}>
-            {m.content}
+            {sanitizeMessage(m.content)}
           </div>
         ))}
         {isLoading && (

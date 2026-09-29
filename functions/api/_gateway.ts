@@ -75,22 +75,35 @@ export function getGatewayHeaders(env: Env): Record<string, string> {
 }
 
 /**
- * レスポンスからテキストを安全に抽出（OpenAI互換, Gemini互換, Workers AI互換すべてに対応）
+ * 推論モデル（DeepSeek, Qwen Reasoning, Gemini Thinking等）が出力する思考プロセス（<thought>や<think>）を除去
+ */
+export function cleanModelOutput(rawText: string): string {
+  if (!rawText) return '';
+  return rawText
+    .replace(/<thought>[\s\S]*?<\/thought>/gi, '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<thought>[\s\S]*$/gi, '') // 万一終了タグが欠落している場合
+    .replace(/<think>[\s\S]*$/gi, '')
+    .trim();
+}
+
+/**
+ * レスポンスからテキストを安全に抽出し、思考タグを自動除去
  */
 function extractResponseText(data: any): string {
+  let text = '';
   if (data?.choices?.[0]?.message?.content) {
-    return data.choices[0].message.content;
+    text = data.choices[0].message.content;
+  } else if (data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+    text = data.candidates[0].content.parts[0].text;
+  } else if (typeof data?.response === 'string') {
+    text = data.response;
+  } else if (typeof data?.result?.response === 'string') {
+    text = data.result.response;
+  } else {
+    text = JSON.stringify(data);
   }
-  if (data?.candidates?.[0]?.content?.parts?.[0]?.text) {
-    return data.candidates[0].content.parts[0].text;
-  }
-  if (typeof data?.response === 'string') {
-    return data.response;
-  }
-  if (typeof data?.result?.response === 'string') {
-    return data.result.response;
-  }
-  return JSON.stringify(data);
+  return cleanModelOutput(text);
 }
 
 /**
@@ -183,6 +196,7 @@ export async function runInterviewer(
 - 質問の方向性: ${strategy.target_question_strategy}
 
 【対話のルール】
+- 思考プロセスや内部推論（<thought>や<think>タグなど）は一切出力に含めず、ユーザーへの発話文のみを直接出力してください。
 - ユーザーの直前の発言に対して温かく共感・受容してください。
 - 分析官の指示に沿って、スマホで答えやすい日常の自然な質問を1つだけ投げかけてください。
 - 1回の返答は2〜3文（150文字程度）で簡潔に。
