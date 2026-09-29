@@ -1,6 +1,6 @@
 export interface Env {
-  GEMINI_API_KEY?: string;
   CF_AI_GATEWAY_URL?: string;
+  CF_AIG_TOKEN?: string;
 }
 
 export interface ChatMessage {
@@ -37,34 +37,41 @@ export interface AnalysisResult {
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 
 /**
- * Cloudflare AI GatewayまたはGoogle AI StudioのGemini API URLを解決
+ * Cloudflare AI GatewayのRoute/UnifiedエンドポイントへのリクエストURLとヘッダーを生成
+ * (Gemini APIキーはAI Gateway側のRoute設定で自動注入されるため、アプリ側では保持不要)
  */
-export function getGeminiEndpoint(env: Env, model: string = DEFAULT_MODEL): { url: string; apiKey: string } {
-  const apiKey = env.GEMINI_API_KEY || '';
-  if (!apiKey) {
-    throw new Error('Gemini APIキーが設定されていません。Cloudflare Pagesの環境変数 GEMINI_API_KEY を設定してください。');
+export function getAIGatewayRequest(env: Env, model: string = DEFAULT_MODEL): { url: string; headers: Record<string, string> } {
+  let baseUrl = env.CF_AI_GATEWAY_URL?.trim();
+  if (!baseUrl) {
+    throw new Error('Cloudflare AI Gateway URLが設定されていません。Pagesの環境変数 CF_AI_GATEWAY_URL を設定してください。(例: https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_name}/google-ai-studio)');
   }
 
-  // Cloudflare AI Gatewayが設定されている場合
-  // 例: https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_name}/google-ai-studio
-  if (env.CF_AI_GATEWAY_URL && env.CF_AI_GATEWAY_URL.trim() !== '') {
-    const baseUrl = env.CF_AI_GATEWAY_URL.replace(/\/+$/, '');
-    return {
-      url: `${baseUrl}/v1beta/models/${model}:generateContent?key=${apiKey}`,
-      apiKey
-    };
+  baseUrl = baseUrl.replace(/\/+$/, '');
+
+  // プロバイダーパスが含まれていない場合は google-ai-studio を付加
+  if (!baseUrl.includes('/google-ai-studio')) {
+    baseUrl = `${baseUrl}/google-ai-studio`;
   }
 
-  // 直接Google AI Studioにアクセスする場合
-  return {
-    url: `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-    apiKey
+  const url = `${baseUrl}/v1beta/models/${model}:generateContent`;
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
   };
+
+  // AI Gateway Token があれば付与
+  if (env.CF_AIG_TOKEN && env.CF_AIG_TOKEN.trim() !== '') {
+    const token = env.CF_AIG_TOKEN.trim();
+    headers['cf-aig-authorization'] = `Bearer ${token}`;
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  return { url, headers };
 }
 
 export const INTERVIEWER_SYSTEM_INSTRUCTION = `
 あなたは心理学の専門知識を持つプロフェッショナルな性格分析カウンセラー「Dr. OCEAN」です。
-スマートフォンで気軽に診断を受けているユーザーと、自然で心地よい会話を行いながら、ビッグファイブ理論（主要5因子）に基づいてユーザーのパーソナリティを深く理解することがあなたの使命です。
+ユーザーと自然で心地よい対話を行いながら、ビッグファイブ理論（主要5因子）に基づいてパーソナリティを深く理解することがあなたの使命です。
 
 【ビッグファイブの5因子】
 1. 開放性 (Openness): 知的好奇心、新しい体験への興味、創造性、美意識
@@ -74,10 +81,11 @@ export const INTERVIEWER_SYSTEM_INSTRUCTION = `
 5. 情緒不安定性 (Neuroticism): ストレスへの敏感さ、不安や緊張の感じやすさ、感情の起伏
 
 【対話のルール】
-- 丁寧で温かみがあり、知性的かつ親しみやすい日本語で対話してください。スマホで読みやすいよう、1回の返答は2〜3文（150文字程度以内）に簡潔にまとめてください。
+- 丁寧で温かみがあり、知性的かつ親しみやすい日本語で対話してください。
+- スマホ画面で読みやすいよう、1回の返答は2〜3文（150文字程度以内）に簡潔にまとめてください。
 - ユーザーの回答に対して、まずは「受容・共感・肯定」を一言伝えてください。
 - 一度に複数の質問をせず、必ず「1つの具体的な質問」に絞ってください。
-- 休日の過ごし方、予期せぬ予定変更があったときの対応、新しい趣味への挑戦、人間関係の距離感など、日常のシーンを尋ねてください。
+- 休日の過ごし方、予期せぬ予定変更があったときの対応、新しい趣味への挑戦、人間関係の心地よい距離感など、日常のシーンを尋ねてください。
 `;
 
 export const ANALYSIS_JSON_SCHEMA = {

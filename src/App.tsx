@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { AnalysisResult } from './types';
-import { Header } from './components/Header';
 import { ChatMode } from './components/ChatMode';
 import { ResultReport } from './components/ResultReport';
 
@@ -26,11 +25,9 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="app-container">
+    <div className={`app-container ${analysisResult ? 'scrollable-view' : 'fullscreen-chat'}`}>
       <div className="ambient-glow-1"></div>
       <div className="ambient-glow-2"></div>
-
-      <Header onReset={handleRetake} />
 
       <main className="main-content">
         {!analysisResult ? (

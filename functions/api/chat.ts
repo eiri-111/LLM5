@@ -1,4 +1,4 @@
-import { Env, ChatMessage, getGeminiEndpoint, INTERVIEWER_SYSTEM_INSTRUCTION } from './_gemini';
+import { Env, ChatMessage, getAIGatewayRequest, INTERVIEWER_SYSTEM_INSTRUCTION } from './_gemini';
 
 interface RequestBody {
   messages: ChatMessage[];
@@ -19,7 +19,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       });
     }
 
-    const { url } = getGeminiEndpoint(env);
+    const { url, headers } = getAIGatewayRequest(env);
 
     // アシスタントの質問回数を算出
     const assistantCount = messages.filter(m => m.role === 'assistant' || m.role === 'model').length;
@@ -53,14 +53,14 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: headers,
       body: JSON.stringify(geminiPayload)
     });
 
     if (!res.ok) {
       const errText = await res.text();
-      console.error('Gemini API Error in chat:', errText);
-      return new Response(JSON.stringify({ error: `Gemini API通信エラー (${res.status})`, details: errText }), {
+      console.error('AI Gateway Error in chat:', errText);
+      return new Response(JSON.stringify({ error: `Cloudflare AI Gateway通信エラー (${res.status})`, details: errText }), {
         status: 502,
         headers: { 'Content-Type': 'application/json' }
       });
