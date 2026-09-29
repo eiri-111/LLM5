@@ -7,32 +7,15 @@ interface ChatModeProps {
   showToast: (msg: string) => void;
 }
 
-interface GreetingPreset {
-  text: string;
-  chips: string[];
-}
-
-const GREETING_PRESETS: GreetingPreset[] = [
-  {
-    // 時間・シチュエーション
-    text: "こんにちは！簡単な会話から、あなたの本当の性格や強みを分析していきますね。\n\nテストではないので、リラックスしてお話ししましょう。ちなみに、今日はいまどんなシチュエーションで開いてくれていますか？",
-    chips: ["家でのんびり休憩中", "お仕事・勉強中", "寝る前のリラックス", "移動中・外出先"]
-  },
-  {
-    // 今の気分・状態
-    text: "こんにちは！何気ないおしゃべりを通して、あなたの隠れた個性や心理傾向を紐解いていきます。\n\nまずは肩の力を抜いて……今日一日を振り返ってみて、今の気分や体調はどんな感じですか？",
-    chips: ["のんびり落ち着いてる", "ちょっとお疲れ気味", "充実して元気！", "まったりぼんやり"]
-  },
-  {
-    // 天気・場所・環境
-    text: "こんにちは！AIとの自然な対話から、あなたのビッグファイブ性格を診断します。\n\n思いついたまま気楽にお話ししましょう。ちなみに今いる場所や外の様子はどんな雰囲気ですか？お部屋でまったり中ですか？",
-    chips: ["自分の部屋でゴロゴロ", "カフェや外出先", "職場や学校にいる", "移動中（電車や車など）"]
-  },
-  {
-    // 今日の出来事・リフレッシュ
-    text: "こんにちは！今日あなたとお話しできるのを楽しみに待っていました。\n\n形式張った質問はないので、友達とLINEする感覚でお答えくださいね。今日を振り返ってみて、何かホッとした瞬間や、印象に残っている出来事はありましたか？",
-    chips: ["いつも通りの穏やかな一日", "結構バタバタ忙しかった", "美味しいご飯を食べた！", "これからゆっくり過ごす予定"]
-  }
+const GREETING_PRESETS: string[] = [
+  // 時間・シチュエーション
+  "こんにちは！簡単な会話から、あなたの本当の性格や強みを分析していきますね。\n\nテストではないので、リラックスしてお話ししましょう。ちなみに、今日はいまどんなシチュエーションで開いてくれていますか？（お仕事帰り、休憩中、寝る前など、気軽に教えてくださいね）",
+  // 今の気分・状態
+  "こんにちは！何気ないおしゃべりを通して、あなたの隠れた個性や心理傾向を紐解いていきます。\n\nまずは肩の力を抜いて……今日一日を振り返ってみて、今の気分や体調はどんな感じですか？",
+  // 天気・場所・環境
+  "こんにちは！AIとの自然な対話から、あなたのビッグファイブ性格を診断します。\n\n思いついたまま気楽にお話ししましょう。ちなみに今いる場所や外の様子はどんな雰囲気ですか？お部屋でまったり中ですか？",
+  // 今日の出来事・リフレッシュ
+  "こんにちは！今日あなたとお話しできるのを楽しみに待っていました。\n\n形式張った質問はないので、友達とLINEする感覚でお答えくださいね。今日を振り返ってみて、何かホッとした瞬間や、印象に残っている出来事はありましたか？"
 ];
 
 function sanitizeMessage(text: string): string {
@@ -46,15 +29,14 @@ function sanitizeMessage(text: string): string {
 }
 
 export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToast }) => {
-  const [initialPreset] = useState<GreetingPreset>(() => {
+  const [initialGreeting] = useState<string>(() => {
     const idx = Math.floor(Math.random() * GREETING_PRESETS.length);
     return GREETING_PRESETS[idx];
   });
 
   const [messages, setMessages] = useState<ChatMessage[]>(() => [
-    { role: 'assistant', content: initialPreset.text }
+    { role: 'assistant', content: initialGreeting }
   ]);
-  const [activeChips, setActiveChips] = useState<string[]>(() => initialPreset.chips);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -67,13 +49,13 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isLoading, activeChips]);
+  }, [messages, isLoading]);
 
-  const sendMessage = async (textToSend: string) => {
-    const text = textToSend.trim();
+  const handleSend = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const text = inputText.trim();
     if (!text || isLoading) return;
 
-    setActiveChips([]);
     const newMessages: ChatMessage[] = [...messages, { role: 'user', content: text }];
     setMessages(newMessages);
     setInputText('');
@@ -108,10 +90,6 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
     }
   };
 
-  const handleSend = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    sendMessage(inputText);
-  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -163,20 +141,6 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
       </div>
 
       <div className="chat-input-bar">
-        {activeChips.length > 0 && !isLoading && (
-          <div className="quick-chips-container">
-            {activeChips.map((chip, idx) => (
-              <button
-                key={idx}
-                type="button"
-                className="quick-chip"
-                onClick={() => sendMessage(chip)}
-              >
-                {chip}
-              </button>
-            ))}
-          </div>
-        )}
         {isReady && (
           <button 
             onClick={handleAnalyze} 

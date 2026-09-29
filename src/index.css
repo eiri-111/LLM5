@@ -249,43 +249,6 @@ body {
   to { box-shadow: 0 0 20px rgba(99, 102, 241, 0.6); }
 }
 
-/* Quick Suggestion Chips */
-.quick-chips-container {
-  display: flex;
-  gap: 0.5rem;
-  overflow-x: auto;
-  padding: 0.2rem 0 0.65rem 0;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-}
-
-.quick-chips-container::-webkit-scrollbar {
-  display: none;
-}
-
-.quick-chip {
-  flex-shrink: 0;
-  background: #ffffff;
-  border: 1px solid var(--border-light);
-  border-radius: 9999px;
-  padding: 0.45rem 0.95rem;
-  font-size: 0.825rem;
-  font-weight: 500;
-  color: var(--text-main);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-}
-
-.quick-chip:hover {
-  border-color: var(--accent-blue);
-  color: var(--accent-blue);
-  background: #f0f7ff;
-}
-
-.quick-chip:active {
-  transform: scale(0.96);
-}
 
 /* Results View (Clean White Theme) */
 .result-container {
