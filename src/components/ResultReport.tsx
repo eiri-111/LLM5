@@ -1,5 +1,6 @@
-import React from 'react';
-import { Share2, Download, RotateCcw, Award, Lightbulb, Briefcase, HeartHandshake, ShieldAlert } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Share2, ImageDown, RotateCcw, Award, Lightbulb, Briefcase, HeartHandshake, ShieldAlert, Sparkles, Search } from 'lucide-react';
+import { toPng } from 'html-to-image';
 import { AnalysisResult } from '../types';
 import { RadarChart } from './RadarChart';
 
@@ -10,27 +11,47 @@ interface ResultReportProps {
 }
 
 export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, showToast }) => {
+  const [isSavingImage, setIsSavingImage] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
+
   const shareText = encodeURIComponent(
     `【LLM5 性格診断結果】\n私の性格タイプは「${result.personality_title}」でした！\n\n#LLM5 #性格診断`
   );
   const shareUrl = encodeURIComponent(window.location.origin);
 
-  const handleCopyShare = () => {
-    const text = `【LLM5 性格診断結果】\n私のタイプ: ${result.personality_title} (${result.personality_type})\n${window.location.origin}`;
-    navigator.clipboard.writeText(text);
-    showToast('診断結果のテキストをクリップボードにコピーしました');
-  };
+  const handleSaveAsImage = async () => {
+    if (!reportRef.current || isSavingImage) return;
+    setIsSavingImage(true);
+    showToast('診断結果の画像を生成しています...');
 
-  const handleDownloadJson = () => {
-    const jsonStr = JSON.stringify(result, null, 2);
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `llm5_${result.personality_type}_${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast('レポートJSONファイルを保存しました');
+    try {
+      // 少しレンダリング安定時間を置く
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      const dataUrl = await toPng(reportRef.current, {
+        quality: 0.98,
+        pixelRatio: 2,
+        backgroundColor: '#f8fafc',
+        filter: (node: HTMLElement) => {
+          // 保存ボタンやアクションエリアは画像に含めない
+          if (node?.classList?.contains('actions-section')) {
+            return false;
+          }
+          return true;
+        }
+      });
+
+      const link = document.createElement('a');
+      link.download = `LLM5_性格診断_${result.personality_type}_${new Date().toISOString().slice(0, 10)}.png`;
+      link.href = dataUrl;
+      link.click();
+      showToast('診断結果の画像を保存しました！');
+    } catch (err: any) {
+      console.error('画像生成エラー:', err);
+      showToast('画像の生成に失敗しました。もう一度お試しください。');
+    } finally {
+      setIsSavingImage(false);
+    }
   };
 
   const dimensions = [
@@ -42,7 +63,7 @@ export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, sh
   ] as const;
 
   return (
-    <div className="result-container">
+    <div className="result-container" ref={reportRef}>
       {/* Hero Header */}
       <div className="result-hero-box">
         <span className="result-badge-top">LLM5 PERSONALITY PROFILE</span>
@@ -58,6 +79,42 @@ export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, sh
         </h3>
         <RadarChart scores={result.scores} />
       </div>
+
+      {/* AI Analysis Rationale & Evidence Card */}
+      {(result.llm_analysis_rationale || (result.dialogue_evidence && result.dialogue_evidence.length > 0)) && (
+        <div className="rationale-card">
+          <div className="rationale-card-header">
+            <Sparkles size={20} className="rationale-header-icon" />
+            <div>
+              <h3 className="rationale-card-title">
+                AI分析官による深層プロファイリング根拠
+              </h3>
+              <p className="rationale-card-subtitle">
+                対話の言葉選びやエピソードからAIが読み解いた根拠
+              </p>
+            </div>
+          </div>
+
+          {result.llm_analysis_rationale && (
+            <div className="rationale-body">
+              <p className="rationale-text">{result.llm_analysis_rationale}</p>
+            </div>
+          )}
+
+          {result.dialogue_evidence && result.dialogue_evidence.length > 0 && (
+            <div className="dialogue-evidence-box">
+              <span className="evidence-box-title">
+                💡 対話から検出された特徴的な言動・エピソード
+              </span>
+              <ul className="evidence-list">
+                {result.dialogue_evidence.map((ev, idx) => (
+                  <li key={idx} className="evidence-item">{ev}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Dimension Breakdown */}
       <div className="dimensions-section">
@@ -93,6 +150,16 @@ export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, sh
                   <span key={idx} className="dim-tag-pill">{t}</span>
                 ))}
               </div>
+
+              {/* 因子の判定根拠 */}
+              {dimData.analysis_reasoning && (
+                <div className="dim-reasoning-box">
+                  <span className="dim-reasoning-title">
+                    <Search size={13} /> このスコアの対話根拠
+                  </span>
+                  <p className="dim-reasoning-text">{dimData.analysis_reasoning}</p>
+                </div>
+              )}
             </div>
           );
         })}
@@ -157,9 +224,20 @@ export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, sh
       {/* Share & Actions */}
       <div className="actions-section">
         <h3 className="card-section-title" style={{ fontSize: '0.98rem' }}>
-          <Share2 size={16} /> 結果をシェア・保存
+          <Share2 size={16} /> 結果をシェア・画像保存
         </h3>
-        <div className="share-action-grid">
+        
+        {/* 画像保存ボタン */}
+        <button 
+          onClick={handleSaveAsImage} 
+          disabled={isSavingImage} 
+          className="btn-save-image"
+        >
+          <ImageDown size={18} />
+          <span>{isSavingImage ? '診断結果の画像を生成中...' : '診断結果を画像（PNG）で保存'}</span>
+        </button>
+
+        <div className="share-action-grid" style={{ marginTop: '0.75rem' }}>
           <a 
             href={`https://twitter.com/intent/tweet?text=${shareText}&url=${shareUrl}`}
             target="_blank"
@@ -176,15 +254,6 @@ export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, sh
           >
             LINE で送る
           </a>
-        </div>
-
-        <div className="share-action-grid" style={{ marginTop: '0.65rem' }}>
-          <button onClick={handleCopyShare} className="btn-secondary">
-            📋 テキストをコピー
-          </button>
-          <button onClick={handleDownloadJson} className="btn-secondary">
-            <Download size={15} /> JSONを保存
-          </button>
         </div>
 
         <button 

@@ -586,6 +586,162 @@ body {
   background: #f1f5f9;
 }
 
+/* Image Save Button */
+.btn-save-image {
+  width: 100%;
+  background: linear-gradient(135deg, #0ea5e9 0%, #3b82f6 50%, #6366f1 100%);
+  color: white;
+  border: none;
+  padding: 0.95rem 1.2rem;
+  border-radius: var(--radius-md);
+  font-weight: 700;
+  font-size: 0.98rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.35);
+  transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn-save-image:hover:not(:disabled) {
+  opacity: 0.95;
+  box-shadow: 0 6px 18px rgba(59, 130, 246, 0.45);
+}
+
+.btn-save-image:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.btn-save-image:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+/* AI Analysis Rationale Card */
+.rationale-card {
+  background: #ffffff;
+  border: 1px solid #c7d2fe;
+  border-radius: var(--radius-lg);
+  padding: 1.3rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 18px rgba(99, 102, 241, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.rationale-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #6366f1, #8b5cf6, #ec4899);
+}
+
+.rationale-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+
+.rationale-header-icon {
+  color: #6366f1;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.rationale-card-title {
+  font-size: 1.02rem;
+  font-weight: 800;
+  color: #1e1b4b;
+  line-height: 1.4;
+}
+
+.rationale-card-subtitle {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.rationale-body {
+  margin-bottom: 1rem;
+}
+
+.rationale-text {
+  font-size: 0.92rem;
+  color: #334155;
+  line-height: 1.7;
+}
+
+.dialogue-evidence-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-md);
+  padding: 0.9rem 1rem;
+}
+
+.evidence-box-title {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #475569;
+  margin-bottom: 0.5rem;
+}
+
+.evidence-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.evidence-item {
+  font-size: 0.85rem;
+  color: #334155;
+  line-height: 1.5;
+  position: relative;
+  padding-left: 1.1rem;
+}
+
+.evidence-item::before {
+  content: '✔';
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: #6366f1;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+/* Dimension Reasoning Box */
+.dim-reasoning-box {
+  margin-top: 0.8rem;
+  padding: 0.65rem 0.85rem;
+  background: #f8fafc;
+  border-left: 3px solid #6366f1;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.dim-reasoning-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #4f46e5;
+  margin-bottom: 0.25rem;
+}
+
+.dim-reasoning-text {
+  font-size: 0.84rem;
+  color: #475569;
+  line-height: 1.55;
+}
+
 .btn-retake {
   width: 100%;
   margin-top: 1.2rem;

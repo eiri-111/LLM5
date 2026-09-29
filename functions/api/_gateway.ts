@@ -251,8 +251,8 @@ export async function runFinalAnalysis(env: Env, messages: ChatMessage[]): Promi
 
   const systemPrompt = `
 あなたは世界最高峰のパーソナリティ心理学者です。
-提供された対話履歴から、心理学のビッグファイブ理論（主要5因子: 開放性, 誠実性, 外向性, 協調性, 情緒安定性）に基づいて精密な性格プロファイリングを行ってください。
-各因子のスコア(score)は0〜100の範囲で客観的に推定し、自己理解を深める洞察に富んだ分析を提供してください。
+提供された対話履歴から、主要5因子（開放性, 誠実性, 外向性, 協調性, 情緒安定性）に基づいて精密な性格プロファイリングを行ってください。
+各因子のスコア(score)は0〜100の範囲で客観的に推定し、なぜその結果になったのかの具体的な対話上の根拠（発言やエピソード、回答傾向）を深く分析してください。
 
 必ず以下のJSON形式に厳密に従って出力してください（Markdown記法は含めず純粋なJSONのみ）:
 {
@@ -260,17 +260,58 @@ export async function runFinalAnalysis(env: Env, messages: ChatMessage[]): Promi
   "personality_type": "タイプ名 (例: '創造的探究型')",
   "summary": "全体的な人物像と個性の統合的解説（250〜400文字程度）",
   "scores": {
-    "openness": { "score": 85, "level": "非常に高い", "title": "旺盛な知的好奇心と発想力", "description": "新しい経験や創造的なアイデアに...", "traits": ["独創的", "探究心", "柔軟"] },
-    "conscientiousness": { "score": 70, "level": "高い", "title": "高い責任感と計画性", "description": "...", "traits": ["計画的", "着実", "自律"] },
-    "extraversion": { "score": 55, "level": "平均的", "title": "状況に応じた柔軟な社交性", "description": "...", "traits": ["バランス型", "聞き上手"] },
-    "agreeableness": { "score": 80, "level": "高い", "title": "深い共感と思いやり", "description": "...", "traits": ["協調性", "親身", "信頼"] },
-    "neuroticism": { "score": 40, "level": "控えめ", "title": "落ち着いた情緒安定性", "description": "...", "traits": ["冷静", "切り替えが早い"] }
+    "openness": {
+      "score": 85,
+      "level": "非常に高い",
+      "title": "旺盛な知的好奇心と発想力",
+      "description": "新しい経験や創造的なアイデアに...",
+      "traits": ["独創的", "探究心", "柔軟"],
+      "analysis_reasoning": "なぜこのスコアと判定したか、対話中の発言・エピソードから読み取れる心理的根拠（100〜150文字程度）"
+    },
+    "conscientiousness": {
+      "score": 70,
+      "level": "高い",
+      "title": "高い責任感と計画性",
+      "description": "...",
+      "traits": ["計画的", "着実", "自律"],
+      "analysis_reasoning": "対話のどの言動からこの計画性・責任感を読み取ったかの具体的根拠"
+    },
+    "extraversion": {
+      "score": 55,
+      "level": "平均的",
+      "title": "状況に応じた柔軟な社交性",
+      "description": "...",
+      "traits": ["バランス型", "聞き上手"],
+      "analysis_reasoning": "対話のテンポや人との距離感の取り方から分析した社交性の根拠"
+    },
+    "agreeableness": {
+      "score": 80,
+      "level": "高い",
+      "title": "深い共感と思いやり",
+      "description": "...",
+      "traits": ["協調性", "親身", "信頼"],
+      "analysis_reasoning": "言葉の端々や相手への気遣い、対立への姿勢から分析した根拠"
+    },
+    "neuroticism": {
+      "score": 40,
+      "level": "控えめ",
+      "title": "落ち着いた情緒安定性",
+      "description": "...",
+      "traits": ["冷静", "切り替えが早い"],
+      "analysis_reasoning": "トラブルや気分への対処法から分析した感情の安定度の根拠"
+    }
   },
   "strengths": ["強み1", "強み2", "強み3"],
   "growth_areas": ["成長のヒント1", "成長のヒント2"],
   "career_recommendations": ["適した環境1", "適した環境2", "適した環境3"],
   "relationship_style": "対人関係やコミュニケーションの特徴とアドバイス",
-  "stress_management": "ストレスを感じやすい要因と効果的なリフレッシュ法"
+  "stress_management": "ストレスを感じやすい要因と効果的なリフレッシュ法",
+  "llm_analysis_rationale": "対話全体からAIが読み解いた深層心理・思考プロセスの総括（対話の言葉選び、トーン、質問へのリアクションからどのように人物像を特定したかの専門的解説。200〜300文字程度）",
+  "dialogue_evidence": [
+    "対話から読み取れた特徴的な発言・行動エピソード1",
+    "対話から読み取れた特徴的な発言・行動エピソード2",
+    "対話から読み取れた特徴的な発言・行動エピソード3"
+  ]
 }
 `;
 
