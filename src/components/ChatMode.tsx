@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, Bot } from 'lucide-react';
+import { Send, Sparkles } from 'lucide-react';
 import { ChatMessage, AnalysisResult } from '../types';
 
 interface ChatModeProps {
@@ -8,9 +8,8 @@ interface ChatModeProps {
 }
 
 const INITIAL_GREETING = 
-  "こんにちは！AIパーソナリティ分析官の「Dr. OCEAN」です。心理学のビッグファイブ理論に基づいて、あなたの隠れた強みや行動パターンをプロファイリングします。\n\n" +
-  "まずはリラックスして、あなたの日常について少し教えてください。\n" +
-  "休日は普段どのように過ごされることが多いですか？また、最近夢中になっていることやワクワクした体験はありますか？";
+  "こんにちは。あなたの普段の過ごし方や考え方について、少しお話を聞かせてください。\n\n" +
+  "まずは、休日は普段どのように過ごされることが多いですか？また、最近夢中になっていることやワクワクした体験はありますか？";
 
 export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToast }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -19,7 +18,6 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [questionCount, setQuestionCount] = useState(0);
   const [isReady, setIsReady] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -58,7 +56,6 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
 
       const data: any = await res.json();
       setMessages([...newMessages, { role: 'assistant', content: data.response }]);
-      setQuestionCount(data.question_count || questionCount + 1);
       if (data.is_ready_for_analysis) {
         setIsReady(true);
       }
@@ -106,21 +103,6 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
 
   return (
     <div className="chat-wrapper">
-      <div className="chat-status-bar">
-        <div className="counselor-info">
-          <div className="counselor-avatar">
-            <Bot size={20} />
-          </div>
-          <div>
-            <div className="counselor-name">Dr. OCEAN</div>
-            <div className="counselor-sub">ビッグファイブ心理分析官</div>
-          </div>
-        </div>
-        <div className="chat-progress-chip">
-          対話進度: {questionCount} / 4
-        </div>
-      </div>
-
       <div className="chat-scroll-area" ref={scrollRef}>
         {messages.map((m, idx) => (
           <div key={idx} className={`chat-bubble ${m.role === 'user' ? 'user' : 'assistant'}`}>
@@ -129,7 +111,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
         ))}
         {isLoading && (
           <div className="chat-bubble assistant" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Dr. OCEANが考え中...</span>
+            <span style={{ fontSize: '0.85rem', color: '#64748b' }}>考え中...</span>
           </div>
         )}
       </div>

@@ -133,64 +133,12 @@ body {
   }
 }
 
-.chat-status-bar {
-  padding: calc(var(--safe-top) + 0.8rem) 1.1rem 0.8rem;
-  border-bottom: 1px solid var(--border-light);
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-shrink: 0;
-}
-
-.counselor-info {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-}
-
-.counselor-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--accent-gradient);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25);
-}
-
-.counselor-name {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: var(--text-main);
-  line-height: 1.2;
-}
-
-.counselor-sub {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-}
-
-.chat-progress-chip {
-  font-size: 0.76rem;
-  color: var(--accent-primary);
-  background: #eff6ff;
-  border: 1px solid #dbeafe;
-  padding: 0.25rem 0.7rem;
-  border-radius: var(--radius-full);
-  font-weight: 700;
-}
-
-/* Chat Messages Area */
+/* Chat Messages Area (Full Screen) */
 .chat-scroll-area {
   flex: 1;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 1.1rem 1rem;
+  padding: calc(var(--safe-top) + 1.2rem) 1rem 1.1rem;
   display: flex;
   flex-direction: column;
   gap: 0.95rem;
