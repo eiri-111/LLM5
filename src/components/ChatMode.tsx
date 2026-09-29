@@ -1,19 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles } from 'lucide-react';
+import { Send, Sparkles, Eye } from 'lucide-react';
 import { ChatMessage, AnalysisResult } from '../types';
 
 interface ChatModeProps {
   onAnalysisComplete: (result: AnalysisResult) => void;
   showToast: (msg: string) => void;
+  onShowSample?: () => void;
 }
 
 const GREETING_PRESETS: string[] = [
   // 時間・シチュエーション
-  "こんにちは！簡単な会話から、あなたの本当の性格や強みを分析していきますね。\n\nテストではないので、リラックスしてお話ししましょう。ちなみに、今日はいまどんなシチュエーションで開いてくれていますか？（お仕事帰り、休憩中、寝る前など、気軽に教えてくださいね）",
+  "こんにちは！簡単な会話から、あなたの性格を診断しますね。\n\nテストではないので、リラックスしてお話ししましょう。ちなみに、今日はいまどんなシチュエーションで開いてくれていますか？（お仕事帰り、休憩中、寝る前など、気軽に教えてくださいね）",
   // 今の気分・状態
-  "こんにちは！何気ないおしゃべりを通して、あなたの隠れた個性や心理傾向を紐解いていきます。\n\nまずは肩の力を抜いて……今日一日を振り返ってみて、今の気分や体調はどんな感じですか？",
+  "こんにちは！何気ないおしゃべりを通して、あなたの性格を診断します。\n\nまずは肩の力を抜いて……今日一日を振り返ってみて、今の気分や体調はどんな感じですか？",
   // 天気・場所・環境
-  "こんにちは！AIとの自然な対話から、あなたのビッグファイブ性格を診断します。\n\n思いついたまま気楽にお話ししましょう。ちなみに今いる場所や外の様子はどんな雰囲気ですか？お部屋でまったり中ですか？",
+  "こんにちは！AIとの自然な対話から、あなたの性格を診断します。\n\n思いついたまま気楽にお話ししましょう。ちなみに今いる場所や外の様子はどんな雰囲気ですか？お部屋でまったり中ですか？",
   // 今日の出来事・リフレッシュ
   "こんにちは！今日あなたとお話しできるのを楽しみに待っていました。\n\n形式張った質問はないので、友達とLINEする感覚でお答えくださいね。今日を振り返ってみて、何かホッとした瞬間や、印象に残っている出来事はありましたか？"
 ];
@@ -28,7 +29,7 @@ function sanitizeMessage(text: string): string {
     .trim();
 }
 
-export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToast }) => {
+export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToast, onShowSample }) => {
   const [initialGreeting] = useState<string>(() => {
     const idx = Math.floor(Math.random() * GREETING_PRESETS.length);
     return GREETING_PRESETS[idx];
@@ -127,6 +128,23 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
 
   return (
     <div className="chat-wrapper">
+      <header className="chat-header">
+        <div className="chat-header-title">
+          <span className="chat-app-name">LLM5</span>
+        </div>
+        {onShowSample && (
+          <button 
+            type="button" 
+            onClick={onShowSample} 
+            className="btn-sample-preview"
+            title="分析結果のサンプルを表示"
+          >
+            <Eye size={15} />
+            <span>結果サンプル</span>
+          </button>
+        )}
+      </header>
+
       <div className="chat-scroll-area" ref={scrollRef}>
         {messages.map((m, idx) => (
           <div key={idx} className={`chat-bubble ${m.role === 'user' ? 'user' : 'assistant'}`}>

@@ -1,10 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AnalysisResult } from './types';
 import { ChatMode } from './components/ChatMode';
 import { ResultReport } from './components/ResultReport';
+import { SAMPLE_ANALYSIS_RESULT } from './data/sampleResult';
 
 export const App: React.FC = () => {
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(() => {
+    if (typeof window !== 'undefined' && window.location.search.includes('sample')) {
+      return SAMPLE_ANALYSIS_RESULT;
+    }
+    return null;
+  });
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -16,6 +22,11 @@ export const App: React.FC = () => {
 
   const handleAnalysisComplete = (result: AnalysisResult) => {
     setAnalysisResult(result);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleShowSample = () => {
+    setAnalysisResult(SAMPLE_ANALYSIS_RESULT);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -34,6 +45,7 @@ export const App: React.FC = () => {
           <ChatMode
             onAnalysisComplete={handleAnalysisComplete}
             showToast={showToast}
+            onShowSample={handleShowSample}
           />
         ) : (
           <ResultReport

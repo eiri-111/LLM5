@@ -11,12 +11,12 @@ interface ResultReportProps {
 
 export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, showToast }) => {
   const shareText = encodeURIComponent(
-    `【OCEAN AI ビッグファイブ診断結果】\n私の性格タイプは「${result.personality_title}」でした！\n\n#OCEAN #ビッグファイブ #性格診断`
+    `【LLM5 性格診断結果】\n私の性格タイプは「${result.personality_title}」でした！\n\n#LLM5 #性格診断`
   );
   const shareUrl = encodeURIComponent(window.location.origin);
 
   const handleCopyShare = () => {
-    const text = `【OCEAN AI ビッグファイブ診断結果】\n私のタイプ: ${result.personality_title} (${result.personality_type})\n${window.location.origin}`;
+    const text = `【LLM5 性格診断結果】\n私のタイプ: ${result.personality_title} (${result.personality_type})\n${window.location.origin}`;
     navigator.clipboard.writeText(text);
     showToast('診断結果のテキストをクリップボードにコピーしました');
   };
@@ -27,7 +27,7 @@ export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, sh
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `bigfive_${result.personality_type}_${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `llm5_${result.personality_type}_${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
     showToast('レポートJSONファイルを保存しました');
@@ -45,7 +45,7 @@ export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, sh
     <div className="result-container">
       {/* Hero Header */}
       <div className="result-hero-box">
-        <span className="result-badge-top">BIG FIVE PERSONALITY PROFILE</span>
+        <span className="result-badge-top">LLM5 PERSONALITY PROFILE</span>
         <h2 className="result-hero-title">{result.personality_title}</h2>
         <span className="result-type-tag">{result.personality_type}</span>
         <p className="result-hero-summary">{result.summary}</p>
@@ -54,7 +54,7 @@ export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, sh
       {/* Radar Chart Card */}
       <div className="radar-chart-card">
         <h3 className="card-section-title">
-          📊 ビッグファイブ・レーダーチャート
+          📊 5因子レーダーチャート
         </h3>
         <RadarChart scores={result.scores} />
       </div>

@@ -1,6 +1,6 @@
-# OCEAN AI - ビッグファイブ対話型性格分析ツール (LLM5)
+# LLM5
 
-Cloudflare Pages × **Cloudflare AI Gateway (Routes: dynamic/llm5-analyst & dynamic/llm5)** で動作する、**デュアルLLM・完全対話集中・白基調スマートフォン特化型**のビッグファイブ（OCEAN）性格分析Webアプリケーションです。
+Cloudflare Pages × **Cloudflare AI Gateway (Routes: dynamic/llm5-analyst & dynamic/llm5)** で動作する、**デュアルLLM・完全対話集中・白基調スマートフォン特化型**の性格分析Webアプリケーションです。
 
 ---
 
