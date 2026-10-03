@@ -143,8 +143,7 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
           { role: 'system', content: analystSystemPrompt },
           { role: 'user', content: `【対話履歴】\n${dialogueHistory}\n\n分析と次の質問戦略をJSONで出力してください。` }
         ],
-        temperature: 0.2,
-        max_tokens: 150
+        temperature: 0.2
       })
     });
 
@@ -218,8 +217,7 @@ export async function runInterviewerStream(
         ...formattedMessages
       ],
       temperature: 0.7,
-      stream: true,
-      max_tokens: 350
+      stream: true
     })
   });
 
@@ -387,8 +385,7 @@ export async function runInterviewer(
           { role: 'system', content: interviewerInstruction },
           ...formattedMessages
         ],
-        temperature: 0.7,
-        max_tokens: 350
+        temperature: 0.7
       })
     });
 
