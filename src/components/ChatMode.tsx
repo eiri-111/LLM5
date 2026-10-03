@@ -40,6 +40,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
   ]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [streamingText, setStreamingText] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
@@ -50,7 +51,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isLoading]);
+  }, [messages, isLoading, streamingText]);
 
   const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -61,6 +62,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
     setMessages(newMessages);
     setInputText('');
     setIsLoading(true);
+    setStreamingText('');
 
     try {
       const res = await fetch('/api/chat', {
@@ -73,21 +75,77 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
       });
 
       if (!res.ok) {
-        const err: any = await res.json();
-        throw new Error(err.error || err.detail || 'メッセージの送信に失敗しました');
+        let errMessage = 'メッセージの送信に失敗しました';
+        try {
+          const err: any = await res.json();
+          errMessage = err.error || err.detail || errMessage;
+        } catch (_) {}
+        throw new Error(errMessage);
       }
 
-      const data: any = await res.json();
-      const cleanReply = sanitizeMessage(data.response);
-      setMessages([...newMessages, { role: 'assistant', content: cleanReply }]);
-      if (data.is_ready_for_analysis) {
-        setIsReady(true);
+      const contentType = res.headers.get('content-type') || '';
+
+      // SSEストリーミング対応
+      if (contentType.includes('text/event-stream') && res.body) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let accumulatedText = '';
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith('data:')) continue;
+
+            const dataStr = trimmed.slice(5).trim();
+            if (dataStr === '[DONE]') continue;
+
+            try {
+              const event = JSON.parse(dataStr);
+              if (event.type === 'chunk' && event.text) {
+                accumulatedText += event.text;
+                setStreamingText(accumulatedText);
+              } else if (event.type === 'done' || event.type === 'meta') {
+                if (event.is_ready_for_analysis) {
+                  setIsReady(true);
+                }
+              } else if (event.type === 'error') {
+                throw new Error(event.error);
+              }
+            } catch (err: any) {
+              if (err.message && !err.message.includes('JSON')) {
+                console.warn('SSE event error:', err);
+              }
+            }
+          }
+        }
+
+        const finalReply = sanitizeMessage(accumulatedText) || 'お答えいただきありがとうございます！';
+        setMessages([...newMessages, { role: 'assistant', content: finalReply }]);
+        setStreamingText('');
+      } else {
+        // フォールバック（JSONレスポンス）
+        const data: any = await res.json();
+        const cleanReply = sanitizeMessage(data.response);
+        setMessages([...newMessages, { role: 'assistant', content: cleanReply }]);
+        if (data.is_ready_for_analysis) {
+          setIsReady(true);
+        }
       }
     } catch (err: any) {
       console.error(err);
       showToast(`エラー: ${err.message}`);
+      setStreamingText('');
     } finally {
       setIsLoading(false);
+      setStreamingText('');
     }
   };
 
@@ -151,7 +209,13 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
             {sanitizeMessage(m.content)}
           </div>
         ))}
-        {isLoading && (
+        {streamingText && (
+          <div className="chat-bubble assistant">
+            {sanitizeMessage(streamingText)}
+            <span className="typing-cursor"></span>
+          </div>
+        )}
+        {isLoading && !streamingText && (
           <div className="chat-bubble assistant" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <span style={{ fontSize: '0.85rem', color: '#64748b' }}>考え中...</span>
           </div>
