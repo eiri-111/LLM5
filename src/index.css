@@ -225,6 +225,21 @@ body {
   box-shadow: 0 3px 12px rgba(59, 130, 246, 0.25);
 }
 
+.typing-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  background-color: var(--accent-primary);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: cursor-blink 0.8s infinite;
+}
+
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
 /* Bottom Input Bar */
 .chat-input-bar {
   padding: 0.75rem 1rem calc(var(--safe-bottom) + 0.75rem);
