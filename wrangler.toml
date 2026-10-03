@@ -11,3 +11,15 @@ CF_GATEWAY_ID = "llm5"
 # CF_AIG_TOKEN = "your-api-gateway-token"
 # エンドポイントURLを丸ごと指定したい場合は設定
 # CF_AI_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/e809b1129ec4b6f69520858ac79b2095/llm5/compat/chat/completions"
+
+# Cloudflare D1 データベースバインディング
+[[d1_databases]]
+binding = "DB"
+database_name = "llm5-db-d1"
+database_id = "9cdaa476-7091-4e37-b67f-f3c2af7cfb55"
+
+# Cloudflare R2 バケットバインディング
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "llm-db-r2"
+

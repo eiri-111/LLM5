@@ -1,22 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Sparkles, Eye } from 'lucide-react';
-import { ChatMessage, AnalysisResult } from '../types';
+import { ChatMessage, AnalysisResult, UserProfile } from '../types';
+import { User, Edit3 } from 'lucide-react';
 
 interface ChatModeProps {
-  onAnalysisComplete: (result: AnalysisResult) => void;
+  userProfile: UserProfile | null;
+  onEditProfile?: () => void;
+  onStartSurvey: (messages: ChatMessage[]) => void;
   showToast: (msg: string) => void;
   onShowSample?: () => void;
 }
 
 const GREETING_PRESETS: string[] = [
-  // 時間・シチュエーション
-  "こんにちは！簡単な会話から、あなたの性格を診断しますね。\n\nテストではないので、リラックスしてお話ししましょう。ちなみに、今日はいまどんなシチュエーションで開いてくれていますか？（お仕事帰り、休憩中、寝る前など、気軽に教えてくださいね）",
-  // 今の気分・状態
-  "こんにちは！何気ないおしゃべりを通して、あなたの性格を診断します。\n\nまずは肩の力を抜いて……今日一日を振り返ってみて、今の気分や体調はどんな感じですか？",
-  // 天気・場所・環境
-  "こんにちは！AIとの自然な対話から、あなたの性格を診断します。\n\n思いついたまま気楽にお話ししましょう。ちなみに今いる場所や外の様子はどんな雰囲気ですか？お部屋でまったり中ですか？",
-  // 今日の出来事・リフレッシュ
-  "こんにちは！今日あなたとお話しできるのを楽しみに待っていました。\n\n形式張った質問はないので、友達とLINEする感覚でお答えくださいね。今日を振り返ってみて、何かホッとした瞬間や、印象に残っている出来事はありましたか？"
+  "こんにちは！何気ない会話から、あなたの性格を精密に診断しますね。\n\nテストではないので、リラックスしてお話ししましょう！\nまずは診断の土台として、あなたが普段【一番時間やエネルギーを使っていること】を教えていただけますか？（お仕事、学校・サークル、夢中になっている趣味、資格の勉強など、何でも大丈夫です！）",
+  "こんにちは！AIとの自然なおしゃべりを通して、あなたのパーソナリティを分析します。\n\nお友達とLINEするような気軽な感覚でお答えくださいね。\nはじめに、あなたが今【多くの時間を注いでいることや、日頃熱中していること】は何ですか？（お仕事や学生生活、没頭している趣味や創作など、思いつくまま教えてください！）"
 ];
 
 function sanitizeMessage(text: string): string {
@@ -29,7 +26,13 @@ function sanitizeMessage(text: string): string {
     .trim();
 }
 
-export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToast, onShowSample }) => {
+export const ChatMode: React.FC<ChatModeProps> = ({
+  userProfile,
+  onEditProfile,
+  onStartSurvey,
+  showToast,
+  onShowSample
+}) => {
   const [initialGreeting] = useState<string>(() => {
     const idx = Math.floor(Math.random() * GREETING_PRESETS.length);
     return GREETING_PRESETS[idx];
@@ -41,7 +44,6 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [streamingText, setStreamingText] = useState('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -157,31 +159,8 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
     }
   };
 
-  const handleAnalyze = async () => {
-    setIsAnalyzing(true);
-    try {
-      const res = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'chat',
-          messages: messages
-        })
-      });
-
-      if (!res.ok) {
-        const err: any = await res.json();
-        throw new Error(err.error || err.detail || '性格分析に失敗しました');
-      }
-
-      const result: AnalysisResult = await res.json();
-      onAnalysisComplete(result);
-    } catch (err: any) {
-      console.error(err);
-      showToast(`分析エラー: ${err.message}`);
-    } finally {
-      setIsAnalyzing(false);
-    }
+  const handleProceedToSurvey = () => {
+    onStartSurvey(messages);
   };
 
   return (
@@ -189,6 +168,13 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
       <header className="chat-header">
         <div className="chat-header-title">
           <span className="chat-app-name">LLM5</span>
+          {userProfile && (
+            <div className="chat-user-badge" onClick={onEditProfile} title="学籍番号を変更">
+              <User size={13} />
+              <span>{userProfile.student_id}</span>
+              {onEditProfile && <Edit3 size={11} className="badge-edit-icon" />}
+            </div>
+          )}
         </div>
         {onShowSample && (
           <button 
@@ -225,12 +211,12 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
       <div className="chat-input-bar">
         {isReady && (
           <button 
-            onClick={handleAnalyze} 
-            disabled={isAnalyzing} 
+            type="button"
+            onClick={handleProceedToSurvey} 
             className="btn-analyze-ready"
           >
             <Sparkles size={18} />
-            {isAnalyzing ? '分析中...' : '性格分析レポートを生成する'}
+            <span>質問紙（アンケート）に回答して総合診断へ進む</span>
           </button>
         )}
         <form onSubmit={handleSend} style={{ display: 'flex', gap: 8 }}>
@@ -242,12 +228,12 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="メッセージを入力..."
-            disabled={isLoading || isAnalyzing}
+            disabled={isLoading}
           />
           <button 
             type="submit" 
             className="chat-send-btn" 
-            disabled={isLoading || isAnalyzing || !inputText.trim()}
+            disabled={isLoading || !inputText.trim()}
             aria-label="送信"
           >
             <Send size={18} />

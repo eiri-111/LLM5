@@ -1,18 +1,48 @@
-import React, { useState, useRef } from 'react';
-import { Share2, ImageDown, RotateCcw, Award, Lightbulb, Briefcase, HeartHandshake, ShieldAlert, Sparkles, Search } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Share2, ImageDown, RotateCcw, Award, Lightbulb, Briefcase, HeartHandshake, ShieldAlert, Sparkles, Search, UserCheck } from 'lucide-react';
 import { toPng } from 'html-to-image';
-import { AnalysisResult } from '../types';
+import { AnalysisResult, UserProfile, ChatMessage, SurveyResult } from '../types';
 import { RadarChart } from './RadarChart';
+import { ComparisonChart } from './ComparisonChart';
 
 interface ResultReportProps {
   result: AnalysisResult;
+  surveyResult?: SurveyResult | null;
+  userProfile: UserProfile | null;
+  messages: ChatMessage[];
+  sessionId: string;
   onRetake: () => void;
   showToast: (msg: string) => void;
 }
 
-export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, showToast }) => {
+export const ResultReport: React.FC<ResultReportProps> = ({
+  result,
+  surveyResult,
+  userProfile,
+  messages,
+  sessionId,
+  onRetake,
+  showToast
+}) => {
   const [isSavingImage, setIsSavingImage] = useState(false);
   const reportRef = useRef<HTMLDivElement>(null);
+
+  // 照合レポート表示時にD1/R2へ自動保存
+  useEffect(() => {
+    if (userProfile && sessionId && result) {
+      fetch('/api/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          user_profile: userProfile,
+          messages,
+          ai_result: result,
+          survey_result: surveyResult || undefined
+        })
+      }).catch(err => console.warn('Auto-save result error:', err));
+    }
+  }, [sessionId, userProfile, result, messages, surveyResult]);
 
   const shareText = encodeURIComponent(
     `【LLM5 性格診断結果】\n私の性格タイプは「${result.personality_title}」でした！\n\n#LLM5 #性格診断`
@@ -66,18 +96,37 @@ export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, sh
     <div className="result-container" ref={reportRef}>
       {/* Hero Header */}
       <div className="result-hero-box">
-        <span className="result-badge-top">LLM5 PERSONALITY PROFILE</span>
+        <div className="result-hero-meta-row">
+          <span className="result-badge-top">LLM5 PERSONALITY PROFILE</span>
+          {userProfile && (
+            <span className="result-user-badge">
+              <UserCheck size={13} />
+              <span>学籍番号: {userProfile.student_id}</span>
+            </span>
+          )}
+        </div>
         <h2 className="result-hero-title">{result.personality_title}</h2>
         <span className="result-type-tag">{result.personality_type}</span>
         <p className="result-hero-summary">{result.summary}</p>
       </div>
 
-      {/* Radar Chart Card */}
+      {/* Radar / Comparison Chart Card */}
       <div className="radar-chart-card">
-        <h3 className="card-section-title">
-          📊 5因子レーダーチャート
-        </h3>
-        <RadarChart scores={result.scores} />
+        {surveyResult ? (
+          <>
+            <h3 className="card-section-title">
+              📊 AI対話推定 × 質問紙測定（{surveyResult.scaleName}）の照合分析
+            </h3>
+            <ComparisonChart aiScores={result.scores} surveyResult={surveyResult} />
+          </>
+        ) : (
+          <>
+            <h3 className="card-section-title">
+              📊 5因子レーダーチャート
+            </h3>
+            <RadarChart scores={result.scores} />
+          </>
+        )}
       </div>
 
       {/* AI Analysis Rationale & Evidence Card */}
