@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Share2, ImageDown, RotateCcw, Award, Lightbulb, Briefcase, HeartHandshake, ShieldAlert, Sparkles, Search, UserCheck } from 'lucide-react';
 import { toPng } from 'html-to-image';
-import { AnalysisResult, UserProfile, ChatMessage } from '../types';
+import { AnalysisResult, UserProfile, ChatMessage, SurveyResult } from '../types';
 import { RadarChart } from './RadarChart';
-import { SurveySection } from './SurveySection';
+import { ComparisonChart } from './ComparisonChart';
 
 interface ResultReportProps {
   result: AnalysisResult;
+  surveyResult?: SurveyResult | null;
   userProfile: UserProfile | null;
   messages: ChatMessage[];
   sessionId: string;
@@ -16,6 +17,7 @@ interface ResultReportProps {
 
 export const ResultReport: React.FC<ResultReportProps> = ({
   result,
+  surveyResult,
   userProfile,
   messages,
   sessionId,
@@ -25,7 +27,7 @@ export const ResultReport: React.FC<ResultReportProps> = ({
   const [isSavingImage, setIsSavingImage] = useState(false);
   const reportRef = useRef<HTMLDivElement>(null);
 
-  // AI分析結果が出た段階で一度D1/R2へ自動保存
+  // 照合レポート表示時にD1/R2へ自動保存
   useEffect(() => {
     if (userProfile && sessionId && result) {
       fetch('/api/save', {
@@ -35,11 +37,12 @@ export const ResultReport: React.FC<ResultReportProps> = ({
           session_id: sessionId,
           user_profile: userProfile,
           messages,
-          ai_result: result
+          ai_result: result,
+          survey_result: surveyResult || undefined
         })
-      }).catch(err => console.warn('Auto-save AI result error:', err));
+      }).catch(err => console.warn('Auto-save result error:', err));
     }
-  }, [sessionId, userProfile, result, messages]);
+  }, [sessionId, userProfile, result, messages, surveyResult]);
 
   const shareText = encodeURIComponent(
     `【LLM5 性格診断結果】\n私の性格タイプは「${result.personality_title}」でした！\n\n#LLM5 #性格診断`
@@ -107,12 +110,23 @@ export const ResultReport: React.FC<ResultReportProps> = ({
         <p className="result-hero-summary">{result.summary}</p>
       </div>
 
-      {/* Radar Chart Card */}
+      {/* Radar / Comparison Chart Card */}
       <div className="radar-chart-card">
-        <h3 className="card-section-title">
-          📊 5因子レーダーチャート
-        </h3>
-        <RadarChart scores={result.scores} />
+        {surveyResult ? (
+          <>
+            <h3 className="card-section-title">
+              📊 AI対話推定 × 質問紙測定（{surveyResult.scaleName}）の照合分析
+            </h3>
+            <ComparisonChart aiScores={result.scores} surveyResult={surveyResult} />
+          </>
+        ) : (
+          <>
+            <h3 className="card-section-title">
+              📊 5因子レーダーチャート
+            </h3>
+            <RadarChart scores={result.scores} />
+          </>
+        )}
       </div>
 
       {/* AI Analysis Rationale & Evidence Card */}
@@ -255,16 +269,6 @@ export const ResultReport: React.FC<ResultReportProps> = ({
           {result.stress_management}
         </p>
       </div>
-
-      {/* 心理測定尺度アンケートセクション (TIPI-J / 並川ら短縮版 / BFI-2-S) */}
-      <SurveySection
-        aiScores={result.scores}
-        userProfile={userProfile}
-        messages={messages}
-        aiResult={result}
-        sessionId={sessionId}
-        showToast={showToast}
-      />
 
       {/* Share & Actions */}
       <div className="actions-section">

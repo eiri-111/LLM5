@@ -1400,3 +1400,80 @@ body {
   border-color: #94a3b8;
 }
 
+/* ==========================================================================
+   Survey View Container & AI Status Banner
+   ========================================================================== */
+.survey-view-container {
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 3rem;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.ai-status-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  background: #ffffff;
+  border: 1px solid #e0e7ff;
+  border-left: 4px solid #6366f1;
+  padding: 1rem 1.1rem;
+  border-radius: var(--radius-lg);
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 10px rgba(99, 102, 241, 0.08);
+}
+
+.ai-status-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  background: #f5f7ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.ai-status-content {
+  flex: 1;
+}
+
+.ai-status-title {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #1e293b;
+}
+
+.ai-status-desc {
+  font-size: 0.78rem;
+  color: #64748b;
+  margin-top: 0.25rem;
+  line-height: 1.45;
+}
+
+.survey-user-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #475569;
+  background: #f1f5f9;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+/* Spinner Animation */
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+

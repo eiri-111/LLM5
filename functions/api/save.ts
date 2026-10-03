@@ -38,6 +38,37 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     // 1. Cloudflare D1 保存処理
     if (env.DB) {
       try {
+        // テーブルが存在しない場合に備えて自動作成 (Auto-Migration)
+        await env.DB.prepare(`
+          CREATE TABLE IF NOT EXISTS assessment_sessions (
+            id TEXT PRIMARY KEY,
+            student_id TEXT NOT NULL,
+            age INTEGER NOT NULL,
+            gender TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            dialogue_turns INTEGER DEFAULT 0,
+            chat_messages TEXT,
+            ai_personality_title TEXT,
+            ai_personality_type TEXT,
+            ai_summary TEXT,
+            ai_openness REAL,
+            ai_conscientiousness REAL,
+            ai_extraversion REAL,
+            ai_agreeableness REAL,
+            ai_neuroticism REAL,
+            ai_full_result TEXT,
+            survey_scale_type TEXT,
+            survey_scale_name TEXT,
+            survey_raw_answers TEXT,
+            survey_openness REAL,
+            survey_conscientiousness REAL,
+            survey_extraversion REAL,
+            survey_agreeableness REAL,
+            survey_neuroticism REAL,
+            survey_completed_at TEXT
+          )
+        `).run();
+
         const userCount = messages.filter(m => m.role === 'user').length;
         
         await env.DB.prepare(`

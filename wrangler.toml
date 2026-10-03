@@ -13,13 +13,13 @@ CF_GATEWAY_ID = "llm5"
 # CF_AI_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/e809b1129ec4b6f69520858ac79b2095/llm5/compat/chat/completions"
 
 # Cloudflare D1 データベースバインディング
-# wrangler d1 create llm5-db で作成した database_id を設定してください
 [[d1_databases]]
 binding = "DB"
-database_name = "llm5-db"
-database_id = "your-d1-database-id"
+database_name = "llm5-db-d1"
+database_id = "9cdaa476-7091-4e37-b67f-f3c2af7cfb55"
 
-# Cloudflare R2 バケットバインディング (任意)
-# [[r2_buckets]]
-# binding = "BUCKET"
-# bucket_name = "llm5-sessions"
+# Cloudflare R2 バケットバインディング
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "llm-db-r2"
+

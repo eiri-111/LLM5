@@ -62,14 +62,17 @@ AIの対話推定スコアと、心理学で確立された質問紙（自己評
 - **AI分析結果**: 5因子推定スコア (0〜100)、性格タイプ、深層プロファイリング根拠
 - **質問紙回答データ**: 選択した尺度、各設問の生回答、尺度得点 (0〜100正規化)
 
-### D1 データベースのセットアップ
+### D1 データベース & R2 バケット設定
+
+本プロジェクトでは以下のCloudflareストレージが `wrangler.toml` に設定済みです：
+- **D1 データベース**: `llm5-db-d1` (`9cdaa476-7091-4e37-b67f-f3c2af7cfb55`)
+- **R2 バケット**: `llm-db-r2`
+
+※ `/api/save` 呼び出し時にテーブル（`assessment_sessions`）が存在しない場合は**自動でテーブル作成（Auto-Migration）が実行される**ため、手動でのスキーマ適用は不要ですが、手動実行する場合は以下で行えます：
 
 ```bash
-# 1. D1 データベースの作成
-npx wrangler d1 create llm5-db
-
-# 2. テーブルスキーマの適用
-npx wrangler d1 execute llm5-db --remote --file=./schema.sql
+# スキーマの手動適用（任意）
+npx wrangler d1 execute llm5-db-d1 --remote --file=./schema.sql
 ```
 
 ### 📥 研究データのエクスポート

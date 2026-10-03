@@ -6,7 +6,7 @@ import { User, Edit3 } from 'lucide-react';
 interface ChatModeProps {
   userProfile: UserProfile | null;
   onEditProfile?: () => void;
-  onAnalysisComplete: (result: AnalysisResult, messages: ChatMessage[]) => void;
+  onStartSurvey: (messages: ChatMessage[]) => void;
   showToast: (msg: string) => void;
   onShowSample?: () => void;
 }
@@ -29,7 +29,7 @@ function sanitizeMessage(text: string): string {
 export const ChatMode: React.FC<ChatModeProps> = ({
   userProfile,
   onEditProfile,
-  onAnalysisComplete,
+  onStartSurvey,
   showToast,
   onShowSample
 }) => {
@@ -44,7 +44,6 @@ export const ChatMode: React.FC<ChatModeProps> = ({
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [streamingText, setStreamingText] = useState('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -160,31 +159,8 @@ export const ChatMode: React.FC<ChatModeProps> = ({
     }
   };
 
-  const handleAnalyze = async () => {
-    setIsAnalyzing(true);
-    try {
-      const res = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'chat',
-          messages: messages
-        })
-      });
-
-      if (!res.ok) {
-        const err: any = await res.json();
-        throw new Error(err.error || err.detail || '性格分析に失敗しました');
-      }
-
-      const result: AnalysisResult = await res.json();
-      onAnalysisComplete(result, messages);
-    } catch (err: any) {
-      console.error(err);
-      showToast(`分析エラー: ${err.message}`);
-    } finally {
-      setIsAnalyzing(false);
-    }
+  const handleProceedToSurvey = () => {
+    onStartSurvey(messages);
   };
 
   return (
@@ -235,12 +211,12 @@ export const ChatMode: React.FC<ChatModeProps> = ({
       <div className="chat-input-bar">
         {isReady && (
           <button 
-            onClick={handleAnalyze} 
-            disabled={isAnalyzing} 
+            type="button"
+            onClick={handleProceedToSurvey} 
             className="btn-analyze-ready"
           >
             <Sparkles size={18} />
-            {isAnalyzing ? '分析中...' : '性格分析レポートを生成する'}
+            <span>質問紙（アンケート）に回答して総合診断へ進む</span>
           </button>
         )}
         <form onSubmit={handleSend} style={{ display: 'flex', gap: 8 }}>
@@ -252,12 +228,12 @@ export const ChatMode: React.FC<ChatModeProps> = ({
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="メッセージを入力..."
-            disabled={isLoading || isAnalyzing}
+            disabled={isLoading}
           />
           <button 
             type="submit" 
             className="chat-send-btn" 
-            disabled={isLoading || isAnalyzing || !inputText.trim()}
+            disabled={isLoading || !inputText.trim()}
             aria-label="送信"
           >
             <Send size={18} />
