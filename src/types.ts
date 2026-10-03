@@ -33,3 +33,58 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'model';
   content: string;
 }
+
+export type GenderType = 'male' | 'female' | 'other' | 'prefer_not_to_say';
+
+export interface UserProfile {
+  student_id: string; // 学籍番号
+  age: number;        // 年齢
+  gender: GenderType; // 性別
+}
+
+export type ScaleType = 'tipi-j' | 'namikawa' | 'bfi-2-s';
+
+export type DimensionKey = 'openness' | 'conscientiousness' | 'extraversion' | 'agreeableness' | 'neuroticism';
+
+export interface SurveyQuestion {
+  id: number;
+  text: string;
+  dimension: DimensionKey;
+  is_reverse: boolean;
+  facet?: string;
+}
+
+export interface SurveyScaleConfig {
+  id: ScaleType;
+  name: string;
+  shortName: string;
+  authorYear: string;
+  description: string;
+  questionCount: number;
+  estimatedMinutes: string;
+  likertPoints: number; // 5 or 7
+  scaleLabels: { value: number; label: string }[];
+  instruction: string;
+  questions: SurveyQuestion[];
+}
+
+export interface SurveyScoreDetail {
+  rawMean: number;        // 尺度の元の平均点 (1〜5 or 1〜7)
+  normalizedScore: number;// 0〜100に正規化したスコア
+}
+
+export interface SurveyResult {
+  scaleType: ScaleType;
+  scaleName: string;
+  rawAnswers: Record<number, number>; // { [questionId]: answerValue }
+  scores: Record<DimensionKey, SurveyScoreDetail>;
+  completedAt: string;
+}
+
+export interface AssessmentSessionPayload {
+  session_id: string;
+  user_profile: UserProfile;
+  messages: ChatMessage[];
+  ai_result?: AnalysisResult;
+  survey_result?: SurveyResult;
+}

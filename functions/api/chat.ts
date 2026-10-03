@@ -1,4 +1,4 @@
-import { Env, ChatMessage, runAnalyst, runInterviewer } from './_gateway';
+import { Env, ChatMessage, runAnalyst, runInterviewerStream } from './_gateway';
 
 interface RequestBody {
   messages: ChatMessage[];
@@ -29,19 +29,16 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const strategy = await runAnalyst(env, updatedMessages);
 
     // ステップ2: 質問係AI (Route: dynamic/llm5)
-    // 分析官の戦略ディレクションをもとに、ユーザーに自然で親しみやすい次の問いを生成
-    const { reply, isReady } = await runInterviewer(env, updatedMessages, strategy);
+    // SSEストリーミングでクライアントへ逐次送出
+    const stream = await runInterviewerStream(env, updatedMessages, strategy);
 
-    return new Response(
-      JSON.stringify({
-        response: reply,
-        is_ready_for_analysis: isReady,
-        strategy_focus: strategy.focus_dimension
-      }),
-      {
-        headers: { 'Content-Type': 'application/json' }
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
       }
-    );
+    });
 
   } catch (error: any) {
     console.error('Chat endpoint error:', error);
