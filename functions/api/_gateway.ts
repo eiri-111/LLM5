@@ -3,6 +3,9 @@ export interface Env {
   CF_GATEWAY_ID?: string;
   CF_AIG_TOKEN?: string;
   CF_AI_GATEWAY_URL?: string;
+  DB?: D1Database;
+  BUCKET?: R2Bucket;
+  R2?: R2Bucket;
 }
 
 export interface ChatMessage {

@@ -1,18 +1,45 @@
-import React, { useState, useRef } from 'react';
-import { Share2, ImageDown, RotateCcw, Award, Lightbulb, Briefcase, HeartHandshake, ShieldAlert, Sparkles, Search } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Share2, ImageDown, RotateCcw, Award, Lightbulb, Briefcase, HeartHandshake, ShieldAlert, Sparkles, Search, UserCheck } from 'lucide-react';
 import { toPng } from 'html-to-image';
-import { AnalysisResult } from '../types';
+import { AnalysisResult, UserProfile, ChatMessage } from '../types';
 import { RadarChart } from './RadarChart';
+import { SurveySection } from './SurveySection';
 
 interface ResultReportProps {
   result: AnalysisResult;
+  userProfile: UserProfile | null;
+  messages: ChatMessage[];
+  sessionId: string;
   onRetake: () => void;
   showToast: (msg: string) => void;
 }
 
-export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, showToast }) => {
+export const ResultReport: React.FC<ResultReportProps> = ({
+  result,
+  userProfile,
+  messages,
+  sessionId,
+  onRetake,
+  showToast
+}) => {
   const [isSavingImage, setIsSavingImage] = useState(false);
   const reportRef = useRef<HTMLDivElement>(null);
+
+  // AI分析結果が出た段階で一度D1/R2へ自動保存
+  useEffect(() => {
+    if (userProfile && sessionId && result) {
+      fetch('/api/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          user_profile: userProfile,
+          messages,
+          ai_result: result
+        })
+      }).catch(err => console.warn('Auto-save AI result error:', err));
+    }
+  }, [sessionId, userProfile, result, messages]);
 
   const shareText = encodeURIComponent(
     `【LLM5 性格診断結果】\n私の性格タイプは「${result.personality_title}」でした！\n\n#LLM5 #性格診断`
@@ -66,7 +93,15 @@ export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, sh
     <div className="result-container" ref={reportRef}>
       {/* Hero Header */}
       <div className="result-hero-box">
-        <span className="result-badge-top">LLM5 PERSONALITY PROFILE</span>
+        <div className="result-hero-meta-row">
+          <span className="result-badge-top">LLM5 PERSONALITY PROFILE</span>
+          {userProfile && (
+            <span className="result-user-badge">
+              <UserCheck size={13} />
+              <span>学籍番号: {userProfile.student_id}</span>
+            </span>
+          )}
+        </div>
         <h2 className="result-hero-title">{result.personality_title}</h2>
         <span className="result-type-tag">{result.personality_type}</span>
         <p className="result-hero-summary">{result.summary}</p>
@@ -220,6 +255,16 @@ export const ResultReport: React.FC<ResultReportProps> = ({ result, onRetake, sh
           {result.stress_management}
         </p>
       </div>
+
+      {/* 心理測定尺度アンケートセクション (TIPI-J / 並川ら短縮版 / BFI-2-S) */}
+      <SurveySection
+        aiScores={result.scores}
+        userProfile={userProfile}
+        messages={messages}
+        aiResult={result}
+        sessionId={sessionId}
+        showToast={showToast}
+      />
 
       {/* Share & Actions */}
       <div className="actions-section">

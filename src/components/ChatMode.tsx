@@ -1,9 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Sparkles, Eye } from 'lucide-react';
-import { ChatMessage, AnalysisResult } from '../types';
+import { ChatMessage, AnalysisResult, UserProfile } from '../types';
+import { User, Edit3 } from 'lucide-react';
 
 interface ChatModeProps {
-  onAnalysisComplete: (result: AnalysisResult) => void;
+  userProfile: UserProfile | null;
+  onEditProfile?: () => void;
+  onAnalysisComplete: (result: AnalysisResult, messages: ChatMessage[]) => void;
   showToast: (msg: string) => void;
   onShowSample?: () => void;
 }
@@ -23,7 +26,13 @@ function sanitizeMessage(text: string): string {
     .trim();
 }
 
-export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToast, onShowSample }) => {
+export const ChatMode: React.FC<ChatModeProps> = ({
+  userProfile,
+  onEditProfile,
+  onAnalysisComplete,
+  showToast,
+  onShowSample
+}) => {
   const [initialGreeting] = useState<string>(() => {
     const idx = Math.floor(Math.random() * GREETING_PRESETS.length);
     return GREETING_PRESETS[idx];
@@ -169,7 +178,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
       }
 
       const result: AnalysisResult = await res.json();
-      onAnalysisComplete(result);
+      onAnalysisComplete(result, messages);
     } catch (err: any) {
       console.error(err);
       showToast(`分析エラー: ${err.message}`);
@@ -183,6 +192,13 @@ export const ChatMode: React.FC<ChatModeProps> = ({ onAnalysisComplete, showToas
       <header className="chat-header">
         <div className="chat-header-title">
           <span className="chat-app-name">LLM5</span>
+          {userProfile && (
+            <div className="chat-user-badge" onClick={onEditProfile} title="学籍番号を変更">
+              <User size={13} />
+              <span>{userProfile.student_id}</span>
+              {onEditProfile && <Edit3 size={11} className="badge-edit-icon" />}
+            </div>
+          )}
         </div>
         {onShowSample && (
           <button 
