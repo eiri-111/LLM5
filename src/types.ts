@@ -27,6 +27,10 @@ export interface AnalysisResult {
   stress_management: string;
   llm_analysis_rationale?: string; // 対話全体の心理プロファイリング根拠・LLMの分析インサイト
   dialogue_evidence?: string[]; // 対話から抽出された行動パターン・発言エピソード
+  demographics?: {
+    age?: number | string | null;
+    gender?: string | null;
+  };
 }
 
 export interface ChatMessage {
@@ -37,9 +41,9 @@ export interface ChatMessage {
 export type GenderType = 'male' | 'female' | 'other' | 'prefer_not_to_say';
 
 export interface UserProfile {
-  student_id: string; // 学籍番号
-  age: number;        // 年齢
-  gender: GenderType; // 性別
+  student_id?: string; // 学籍番号（任意・未収集）
+  age?: number | string; // 年齢 / 年代
+  gender?: GenderType | string; // 性別
 }
 
 export type ScaleType = 'tipi-j' | 'namikawa' | 'bfi-2-s';

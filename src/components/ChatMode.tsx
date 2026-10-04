@@ -1,19 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Sparkles, Eye } from 'lucide-react';
 import { ChatMessage, AnalysisResult, UserProfile } from '../types';
-import { User, Edit3 } from 'lucide-react';
 
 interface ChatModeProps {
   userProfile: UserProfile | null;
-  onEditProfile?: () => void;
   onStartSurvey: (messages: ChatMessage[]) => void;
   showToast: (msg: string) => void;
   onShowSample?: () => void;
 }
 
 const GREETING_PRESETS: string[] = [
-  "こんにちは！何気ない会話から、あなたの性格を精密に診断しますね。\n\nテストではないので、リラックスしてお話ししましょう！\nまずは診断の土台として、あなたが普段【一番時間やエネルギーを使っていること】を教えていただけますか？（お仕事、学校・サークル、夢中になっている趣味、資格の勉強など、何でも大丈夫です！）",
-  "こんにちは！AIとの自然なおしゃべりを通して、あなたのパーソナリティを分析します。\n\nお友達とLINEするような気軽な感覚でお答えくださいね。\nはじめに、あなたが今【多くの時間を注いでいることや、日頃熱中していること】は何ですか？（お仕事や学生生活、没頭している趣味や創作など、思いつくまま教えてください！）"
+  "こんにちは！何気ない会話を通して、あなたの性格や心理特性を精密に分析しますね。\n\nテストではないので、リラックスしてお話ししましょう！\nはじめに、差し支えのない範囲で構いませんので、あなたの【ご年齢（または年代）】と【性別】、そして普段【一番時間やエネルギーを使っていること（お仕事や学業、熱中している趣味など）】を教えていただけますか？",
+  "こんにちは！AIとの自然なおしゃべりを通して、あなたのパーソナリティを分析していきます。\n\nお友達と話すような気軽な感覚でお答えくださいね。\nはじめに、差し支えなければ【ご年代・ご年齢】と【性別】、そして今【日頃熱中していることや力を注いでいること】を思いつくままに教えてください！"
 ];
 
 function sanitizeMessage(text: string): string {
@@ -28,7 +26,6 @@ function sanitizeMessage(text: string): string {
 
 export const ChatMode: React.FC<ChatModeProps> = ({
   userProfile,
-  onEditProfile,
   onStartSurvey,
   showToast,
   onShowSample
@@ -168,13 +165,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
       <header className="chat-header">
         <div className="chat-header-title">
           <span className="chat-app-name">LLM5</span>
-          {userProfile && (
-            <div className="chat-user-badge" onClick={onEditProfile} title="学籍番号を変更">
-              <User size={13} />
-              <span>{userProfile.student_id}</span>
-              {onEditProfile && <Edit3 size={11} className="badge-edit-icon" />}
-            </div>
-          )}
+          <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500, marginLeft: '0.25rem' }}>AI性格対話診断</span>
         </div>
         {onShowSample && (
           <button 

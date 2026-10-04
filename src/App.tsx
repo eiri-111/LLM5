@@ -3,7 +3,6 @@ import { AnalysisResult, UserProfile, ChatMessage, SurveyResult } from './types'
 import { ChatMode } from './components/ChatMode';
 import { ResultReport } from './components/ResultReport';
 import { SurveySection } from './components/SurveySection';
-import { ProfileModal } from './components/ProfileModal';
 import { SAMPLE_ANALYSIS_RESULT } from './data/sampleResult';
 import { Loader2 } from 'lucide-react';
 
@@ -17,7 +16,7 @@ function generateSessionId(): string {
 type AppPhase = 'chat' | 'survey' | 'result';
 
 export const App: React.FC = () => {
-  // ユーザープロファイル (学籍番号、年齢、性別)
+  // ユーザープロファイル (必要に応じてチャットから抽出)
   const [userProfile, setUserProfile] = useState<UserProfile | null>(() => {
     try {
       const saved = localStorage.getItem('llm5_user_profile');
@@ -26,7 +25,6 @@ export const App: React.FC = () => {
     return null;
   });
 
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(() => !userProfile);
   const [sessionId, setSessionId] = useState<string>(generateSessionId);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
@@ -132,15 +130,6 @@ export const App: React.FC = () => {
     }
   }, []);
 
-  const handleSaveProfile = (profile: UserProfile) => {
-    setUserProfile(profile);
-    try {
-      localStorage.setItem('llm5_user_profile', JSON.stringify(profile));
-    } catch (_) {}
-    setIsProfileModalOpen(false);
-    showToast(`学籍番号「${profile.student_id}」で登録しました`);
-  };
-
   /**
    * チャット対話終了 ➔ AI分析を実行してQualtrics質問紙へ自動遷移
    */
@@ -181,25 +170,23 @@ export const App: React.FC = () => {
       }
 
       // 3. サーバーへ事前保存 (D1 / R2)
-      if (userProfile) {
-        try {
-          await fetch('/api/save', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              session_id: sessionId,
-              user_profile: userProfile,
-              messages: messages,
-              ai_result: data
-            })
-          });
-        } catch (saveErr) {
-          console.warn('Pre-save session error:', saveErr);
-        }
+      try {
+        await fetch('/api/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: sessionId,
+            user_profile: userProfile || undefined,
+            messages: messages,
+            ai_result: data
+          })
+        });
+      } catch (saveErr) {
+        console.warn('Pre-save session error:', saveErr);
       }
 
       // 4. Qualtricsへ自動遷移
-      const studentIdParam = encodeURIComponent(userProfile?.student_id || 'anonymous');
+      const studentIdParam = encodeURIComponent(sessionId);
       const sessionIdParam = encodeURIComponent(sessionId);
       const qualtricsUrl = `${QUALTRICS_SURVEY_URL}?user_id=${studentIdParam}&session_id=${sessionIdParam}`;
 
@@ -287,17 +274,10 @@ export const App: React.FC = () => {
       <div className="ambient-glow-1"></div>
       <div className="ambient-glow-2"></div>
 
-      <ProfileModal
-        isOpen={isProfileModalOpen}
-        initialProfile={userProfile}
-        onSave={handleSaveProfile}
-      />
-
       <main className="main-content">
         {phase === 'chat' && (
           <ChatMode
             userProfile={userProfile}
-            onEditProfile={() => setIsProfileModalOpen(true)}
             onStartSurvey={handleStartSurvey}
             showToast={showToast}
             onShowSample={handleShowSample}

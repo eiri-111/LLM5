@@ -11,7 +11,7 @@ interface ProfileModalProps {
 export const ProfileModal: React.FC<ProfileModalProps> = ({ initialProfile, onSave, isOpen }) => {
   const [studentId, setStudentId] = useState(initialProfile?.student_id || '');
   const [age, setAge] = useState<string>(initialProfile?.age ? String(initialProfile.age) : '20');
-  const [gender, setGender] = useState<GenderType>(initialProfile?.gender || 'prefer_not_to_say');
+  const [gender, setGender] = useState<GenderType>((initialProfile?.gender as GenderType) || 'prefer_not_to_say');
   const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;

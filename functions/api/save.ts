@@ -2,10 +2,10 @@ import { Env, ChatMessage, AnalysisResult } from './_gateway';
 
 interface SaveRequestBody {
   session_id: string;
-  user_profile: {
-    student_id: string;
-    age: number;
-    gender: string;
+  user_profile?: {
+    student_id?: string;
+    age?: number | string;
+    gender?: string;
   };
   messages: ChatMessage[];
   ai_result?: AnalysisResult;
@@ -26,12 +26,26 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const body: SaveRequestBody = await request.json();
     const { session_id, user_profile, messages = [], ai_result, survey_result, qualtrics_id } = body;
 
-    if (!session_id || !user_profile?.student_id) {
-      return new Response(JSON.stringify({ error: 'セッションIDおよび学籍番号は必須です' }), {
+    if (!session_id) {
+      return new Response(JSON.stringify({ error: 'セッションIDは必須です' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
     }
+
+    const effectiveStudentId = user_profile?.student_id || `user_${session_id.slice(-8)}`;
+
+    let effectiveAge = 0;
+    if (typeof user_profile?.age === 'number' && user_profile.age > 0) {
+      effectiveAge = user_profile.age;
+    } else if (ai_result?.demographics?.age) {
+      const parsed = parseInt(String(ai_result.demographics.age), 10);
+      if (!isNaN(parsed)) effectiveAge = parsed;
+    }
+
+    const effectiveGender = (user_profile?.gender && user_profile.gender !== 'unspecified')
+      ? user_profile.gender
+      : (ai_result?.demographics?.gender || 'unspecified');
 
     const savedTargets: string[] = [];
     const timestamp = new Date().toISOString();
@@ -114,9 +128,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             survey_completed_at = COALESCE(excluded.survey_completed_at, assessment_sessions.survey_completed_at)
         `).bind(
           session_id,
-          user_profile.student_id,
-          user_profile.age || 0,
-          user_profile.gender || 'unspecified',
+          effectiveStudentId,
+          effectiveAge,
+          effectiveGender,
           timestamp,
           userCount,
           messages.length > 0 ? JSON.stringify(messages) : null,
@@ -153,7 +167,11 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       try {
         const fullPayload = {
           session_id,
-          user_profile,
+          user_profile: {
+            student_id: effectiveStudentId,
+            age: effectiveAge,
+            gender: effectiveGender
+          },
           messages,
           ai_result,
           survey_result,
@@ -161,7 +179,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
           saved_at: timestamp
         };
 
-        const key = `sessions/${user_profile.student_id}_${session_id}.json`;
+        const key = `sessions/${effectiveStudentId}_${session_id}.json`;
         await r2Bucket.put(key, JSON.stringify(fullPayload, null, 2), {
           httpMetadata: { contentType: 'application/json' }
         });

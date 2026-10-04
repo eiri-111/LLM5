@@ -98,10 +98,15 @@ export const ResultReport: React.FC<ResultReportProps> = ({
       <div className="result-hero-box">
         <div className="result-hero-meta-row">
           <span className="result-badge-top">LLM5 PERSONALITY PROFILE</span>
-          {userProfile && (
+          {(result.demographics?.age || result.demographics?.gender) && (
             <span className="result-user-badge">
               <UserCheck size={13} />
-              <span>学籍番号: {userProfile.student_id}</span>
+              <span>
+                {[
+                  result.demographics.age ? (typeof result.demographics.age === 'number' ? `${result.demographics.age}歳` : result.demographics.age) : null,
+                  result.demographics.gender
+                ].filter(Boolean).join(' / ')}
+              </span>
             </span>
           )}
         </div>
