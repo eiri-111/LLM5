@@ -269,6 +269,16 @@ export const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleUpdateProfile = (partial: Partial<UserProfile>) => {
+    setUserProfile((prev) => {
+      const updated = { ...(prev || {}), ...partial };
+      try {
+        localStorage.setItem('llm5_user_profile', JSON.stringify(updated));
+      } catch (_) {}
+      return updated;
+    });
+  };
+
   return (
     <div className={`app-container ${phase === 'chat' ? 'fullscreen-chat' : 'scrollable-view'}`}>
       <div className="ambient-glow-1"></div>
@@ -278,6 +288,7 @@ export const App: React.FC = () => {
         {phase === 'chat' && (
           <ChatMode
             userProfile={userProfile}
+            onUpdateProfile={handleUpdateProfile}
             onStartSurvey={handleStartSurvey}
             showToast={showToast}
             onShowSample={handleShowSample}
