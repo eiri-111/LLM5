@@ -87,4 +87,5 @@ export interface AssessmentSessionPayload {
   messages: ChatMessage[];
   ai_result?: AnalysisResult;
   survey_result?: SurveyResult;
+  qualtrics_id?: string;
 }

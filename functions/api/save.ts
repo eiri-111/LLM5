@@ -16,6 +16,7 @@ interface SaveRequestBody {
     scores: Record<string, { rawMean: number; normalizedScore: number }>;
     completedAt: string;
   };
+  qualtrics_id?: string;
 }
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
@@ -23,7 +24,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
   try {
     const body: SaveRequestBody = await request.json();
-    const { session_id, user_profile, messages = [], ai_result, survey_result } = body;
+    const { session_id, user_profile, messages = [], ai_result, survey_result, qualtrics_id } = body;
 
     if (!session_id || !user_profile?.student_id) {
       return new Response(JSON.stringify({ error: 'セッションIDおよび学籍番号は必須です' }), {
@@ -57,6 +58,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             ai_agreeableness REAL,
             ai_neuroticism REAL,
             ai_full_result TEXT,
+            qualtrics_id TEXT,
             survey_scale_type TEXT,
             survey_scale_name TEXT,
             survey_raw_answers TEXT,
@@ -69,6 +71,11 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
           )
         `).run();
 
+        // 既存テーブルに qualtrics_id カラムがない場合に備えてカラム追加
+        try {
+          await env.DB.prepare('ALTER TABLE assessment_sessions ADD COLUMN qualtrics_id TEXT').run();
+        } catch (_) {}
+
         const userCount = messages.filter(m => m.role === 'user').length;
         
         await env.DB.prepare(`
@@ -78,31 +85,33 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             ai_personality_title, ai_personality_type, ai_summary,
             ai_openness, ai_conscientiousness, ai_extraversion, ai_agreeableness, ai_neuroticism,
             ai_full_result,
+            qualtrics_id,
             survey_scale_type, survey_scale_name, survey_raw_answers,
             survey_openness, survey_conscientiousness, survey_extraversion, survey_agreeableness, survey_neuroticism,
             survey_completed_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(id) DO UPDATE SET
-            dialogue_turns = excluded.dialogue_turns,
-            chat_messages = excluded.chat_messages,
-            ai_personality_title = excluded.ai_personality_title,
-            ai_personality_type = excluded.ai_personality_type,
-            ai_summary = excluded.ai_summary,
-            ai_openness = excluded.ai_openness,
-            ai_conscientiousness = excluded.ai_conscientiousness,
-            ai_extraversion = excluded.ai_extraversion,
-            ai_agreeableness = excluded.ai_agreeableness,
-            ai_neuroticism = excluded.ai_neuroticism,
-            ai_full_result = excluded.ai_full_result,
-            survey_scale_type = excluded.survey_scale_type,
-            survey_scale_name = excluded.survey_scale_name,
-            survey_raw_answers = excluded.survey_raw_answers,
-            survey_openness = excluded.survey_openness,
-            survey_conscientiousness = excluded.survey_conscientiousness,
-            survey_extraversion = excluded.survey_extraversion,
-            survey_agreeableness = excluded.survey_agreeableness,
-            survey_neuroticism = excluded.survey_neuroticism,
-            survey_completed_at = excluded.survey_completed_at
+            dialogue_turns = COALESCE(excluded.dialogue_turns, assessment_sessions.dialogue_turns),
+            chat_messages = COALESCE(excluded.chat_messages, assessment_sessions.chat_messages),
+            ai_personality_title = COALESCE(excluded.ai_personality_title, assessment_sessions.ai_personality_title),
+            ai_personality_type = COALESCE(excluded.ai_personality_type, assessment_sessions.ai_personality_type),
+            ai_summary = COALESCE(excluded.ai_summary, assessment_sessions.ai_summary),
+            ai_openness = COALESCE(excluded.ai_openness, assessment_sessions.ai_openness),
+            ai_conscientiousness = COALESCE(excluded.ai_conscientiousness, assessment_sessions.ai_conscientiousness),
+            ai_extraversion = COALESCE(excluded.ai_extraversion, assessment_sessions.ai_extraversion),
+            ai_agreeableness = COALESCE(excluded.ai_agreeableness, assessment_sessions.ai_agreeableness),
+            ai_neuroticism = COALESCE(excluded.ai_neuroticism, assessment_sessions.ai_neuroticism),
+            ai_full_result = COALESCE(excluded.ai_full_result, assessment_sessions.ai_full_result),
+            qualtrics_id = COALESCE(excluded.qualtrics_id, assessment_sessions.qualtrics_id),
+            survey_scale_type = COALESCE(excluded.survey_scale_type, assessment_sessions.survey_scale_type),
+            survey_scale_name = COALESCE(excluded.survey_scale_name, assessment_sessions.survey_scale_name),
+            survey_raw_answers = COALESCE(excluded.survey_raw_answers, assessment_sessions.survey_raw_answers),
+            survey_openness = COALESCE(excluded.survey_openness, assessment_sessions.survey_openness),
+            survey_conscientiousness = COALESCE(excluded.survey_conscientiousness, assessment_sessions.survey_conscientiousness),
+            survey_extraversion = COALESCE(excluded.survey_extraversion, assessment_sessions.survey_extraversion),
+            survey_agreeableness = COALESCE(excluded.survey_agreeableness, assessment_sessions.survey_agreeableness),
+            survey_neuroticism = COALESCE(excluded.survey_neuroticism, assessment_sessions.survey_neuroticism),
+            survey_completed_at = COALESCE(excluded.survey_completed_at, assessment_sessions.survey_completed_at)
         `).bind(
           session_id,
           user_profile.student_id,
@@ -110,7 +119,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
           user_profile.gender || 'unspecified',
           timestamp,
           userCount,
-          JSON.stringify(messages),
+          messages.length > 0 ? JSON.stringify(messages) : null,
           ai_result?.personality_title || null,
           ai_result?.personality_type || null,
           ai_result?.summary || null,
@@ -120,6 +129,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
           ai_result?.scores?.agreeableness?.score ?? null,
           ai_result?.scores?.neuroticism?.score ?? null,
           ai_result ? JSON.stringify(ai_result) : null,
+          qualtrics_id || null,
           survey_result?.scaleType || null,
           survey_result?.scaleName || null,
           survey_result?.rawAnswers ? JSON.stringify(survey_result.rawAnswers) : null,
@@ -147,6 +157,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
           messages,
           ai_result,
           survey_result,
+          qualtrics_id,
           saved_at: timestamp
         };
 

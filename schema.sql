@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS assessment_sessions (
   ai_full_result TEXT,                        -- JSON: AI分析結果フルデータ
 
   -- 心理測定尺度（質問紙アンケート）
+  qualtrics_id TEXT,                          -- Qualtrics回答ID (ResponseID: R_xxxx)
   survey_scale_type TEXT,                     -- 'tipi-j' | 'namikawa' | 'bfi-2-s'
   survey_scale_name TEXT,                     -- 尺度名称
   survey_raw_answers TEXT,                    -- JSON: 設問ごとの回答 { "1": 5, "2": 3, ... }
@@ -38,3 +39,4 @@ CREATE TABLE IF NOT EXISTS assessment_sessions (
 CREATE INDEX IF NOT EXISTS idx_student_id ON assessment_sessions(student_id);
 CREATE INDEX IF NOT EXISTS idx_created_at ON assessment_sessions(created_at);
 CREATE INDEX IF NOT EXISTS idx_survey_scale ON assessment_sessions(survey_scale_type);
+CREATE INDEX IF NOT EXISTS idx_qualtrics_id ON assessment_sessions(qualtrics_id);
