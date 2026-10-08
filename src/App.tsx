@@ -393,12 +393,24 @@ export const App: React.FC = () => {
       {/* 分析結果集計待ちモーダル */}
       {isWaitingForAnalysis && (
         <div className="modal-backdrop">
-          <div className="profile-modal-card text-center" style={{ textAlign: 'center' }}>
-            <Loader2 size={36} className="spinner text-indigo-600" style={{ margin: '0 auto 1rem' }} />
-            <h3 className="font-bold text-slate-800 text-lg">
+          <div className="profile-modal-card" style={{ maxWidth: '440px', textAlign: 'center', padding: '2.5rem 1.8rem' }}>
+            <div style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '20px',
+              background: 'rgba(59, 130, 246, 0.08)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 1.25rem',
+              color: '#2563eb'
+            }}>
+              <Loader2 size={28} className="spinner" />
+            </div>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.5rem' }}>
               AI対話分析と質問紙スコアを照合中...
             </h3>
-            <p className="text-slate-500 text-sm mt-2">
+            <p style={{ fontSize: '0.82rem', color: '#64748b', lineHeight: 1.6 }}>
               アンケートへのご回答ありがとうございました！<br />
               AI分析官による深層プロファイリングとBFI-2-S測定値を統合し、照合レポートを生成しています。
             </p>

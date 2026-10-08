@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CheckCircle2, ChevronRight, HelpCircle, Sparkles, AlertCircle } from 'lucide-react';
+import { CheckCircle2, ChevronRight, ChevronLeft, Sparkles, Check, Wand2 } from 'lucide-react';
 import { SurveyResult } from '../types';
 import { BFI_2_S_CONFIG, calculateBfiScores } from '../data/bfi2s';
 
@@ -7,6 +7,8 @@ interface BfiSurveySectionProps {
   onCompleteSurvey: (result: SurveyResult) => void;
   showToast: (msg: string) => void;
 }
+
+const QUESTIONS_PER_PAGE = 5;
 
 export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
   onCompleteSurvey,
@@ -20,12 +22,22 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
     return {};
   });
 
+  const [currentPage, setCurrentPage] = useState<number>(0);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const questions = BFI_2_S_CONFIG.questions;
   const totalQuestions = questions.length;
+  const totalPages = Math.ceil(totalQuestions / QUESTIONS_PER_PAGE);
+
   const answeredCount = Object.keys(answers).length;
   const progressPercent = Math.round((answeredCount / totalQuestions) * 100);
+
+  // 現在のページの質問リスト
+  const startIndex = currentPage * QUESTIONS_PER_PAGE;
+  const currentQuestions = questions.slice(startIndex, startIndex + QUESTIONS_PER_PAGE);
+
+  // 現在のページがすべて回答済みか
+  const isCurrentPageComplete = currentQuestions.every(q => typeof answers[q.id] === 'number');
   const isAllAnswered = answeredCount === totalQuestions;
 
   const handleSelectAnswer = (questionId: number, value: number) => {
@@ -36,6 +48,20 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
       } catch (_) {}
       return updated;
     });
+  };
+
+  const handleNextPage = () => {
+    if (currentPage < totalPages - 1) {
+      setCurrentPage(prev => prev + 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (currentPage > 0) {
+      setCurrentPage(prev => prev - 1);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const handleSubmit = () => {
@@ -72,91 +98,182 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
     }
   };
 
-  // テスト・動作確認用: サンプル一括入力
+  // テスト用自動入力
   const handleAutoFillSample = () => {
     const sampleAnswers: Record<number, number> = {};
     questions.forEach((q) => {
-      // 3を中心に2〜4の自然な回答を生成
-      const val = Math.floor(Math.random() * 3) + 2;
+      const val = Math.floor(Math.random() * 3) + 2; // 2〜4
       sampleAnswers[q.id] = val;
     });
     setAnswers(sampleAnswers);
     try {
       localStorage.setItem('llm5_bfi_answers', JSON.stringify(sampleAnswers));
     } catch (_) {}
-    showToast('テスト用にすべての設問にサンプル回答を入力しました');
+    showToast('すべての設問にサンプル回答を入力しました');
   };
 
   return (
-    <div className="survey-container max-w-2xl mx-auto px-4 py-6">
-      {/* 尺度ヘッダー */}
-      <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200 mb-6">
-        <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
-          <span className="inline-block px-3 py-1 bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold rounded-full">
-            学術標準尺度: BFI-2-S
-          </span>
+    <div style={{ maxWidth: '600px', margin: '0 auto', padding: '0.5rem 0 2rem' }}>
+      {/* 尺度ヘッダーカード */}
+      <div style={{
+        backgroundColor: '#ffffff',
+        borderRadius: '24px',
+        padding: '1.5rem',
+        border: '1px solid #e2e8f0',
+        boxShadow: '0 4px 20px -2px rgba(0,0,0,0.05)',
+        marginBottom: '1.25rem'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'between', marginBottom: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              padding: '3px 10px',
+              borderRadius: '9999px',
+              backgroundColor: 'rgba(59, 130, 246, 0.08)',
+              color: '#2563eb',
+              fontSize: '0.72rem',
+              fontWeight: 700
+            }}>
+              <Sparkles size={12} />
+              心理尺度測定（BFI-2-S）
+            </span>
+            <span style={{
+              fontSize: '0.72rem',
+              color: '#64748b',
+              fontWeight: 600
+            }}>
+              Part {currentPage + 1} / {totalPages}
+            </span>
+          </div>
+
           <button
             type="button"
             onClick={handleAutoFillSample}
-            className="text-xs text-indigo-600 hover:text-indigo-800 underline cursor-pointer"
+            title="テスト用自動入力"
+            style={{
+              marginLeft: 'auto',
+              background: 'none',
+              border: 'none',
+              color: '#94a3b8',
+              cursor: 'pointer',
+              padding: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '0.7rem'
+            }}
           >
-            （テスト用）全問自動入力
+            <Wand2 size={13} />
+            <span style={{ fontSize: '0.68rem' }}>自動入力</span>
           </button>
         </div>
 
-        <h1 className="text-xl sm:text-2xl font-bold text-slate-900 mb-2">
-          性格特性 質問紙アンケート（BFI-2-S）
+        <h1 style={{
+          fontSize: '1.15rem',
+          fontWeight: 800,
+          color: '#0f172a',
+          letterSpacing: '-0.02em',
+          marginBottom: '0.35rem'
+        }}>
+          自己認識アンケート
         </h1>
-        <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-          {BFI_2_S_CONFIG.description}（{BFI_2_S_CONFIG.authorYear}）<br />
-          {BFI_2_S_CONFIG.instruction}
+        <p style={{
+          fontSize: '0.78rem',
+          color: '#64748b',
+          lineHeight: 1.5,
+          marginBottom: '1rem'
+        }}>
+          あなた自身の普段の性格や傾向について、直感で当てはまる度合いを選んでください。
         </p>
 
         {/* 進捗バー */}
-        <div className="mt-4 pt-4 border-t border-slate-100">
-          <div className="flex justify-between items-center text-xs font-bold text-slate-700 mb-1.5">
-            <span>回答進捗</span>
-            <span className="text-indigo-600 font-mono">{answeredCount} / {totalQuestions}問 ({progressPercent}%)</span>
+        <div>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            fontSize: '0.75rem',
+            fontWeight: 700,
+            color: '#334155',
+            marginBottom: '6px'
+          }}>
+            <span>全体の回答進捗</span>
+            <span style={{ color: '#2563eb', fontFamily: 'monospace' }}>
+              {answeredCount} / {totalQuestions}問 ({progressPercent}%)
+            </span>
           </div>
-          <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 transition-all duration-300 rounded-full"
-              style={{ width: `${progressPercent}%` }}
-            />
+          <div style={{
+            width: '100%',
+            height: '8px',
+            backgroundColor: '#f1f5f9',
+            borderRadius: '9999px',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              width: `${progressPercent}%`,
+              height: '100%',
+              background: 'linear-gradient(90deg, #3b82f6 0%, #6366f1 100%)',
+              borderRadius: '9999px',
+              transition: 'width 0.3s ease'
+            }} />
           </div>
         </div>
       </div>
 
-      {/* 設問リスト */}
-      <div className="space-y-4 mb-8">
-        {questions.map((q) => {
+      {/* 設問カードリスト（5問ずつ） */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', marginBottom: '1.5rem' }}>
+        {currentQuestions.map((q, idx) => {
           const selectedValue = answers[q.id];
           const isAnswered = typeof selectedValue === 'number';
 
           return (
             <div
               key={q.id}
-              className={`bg-white rounded-2xl p-5 border transition-all ${
-                isAnswered
-                  ? 'border-indigo-200 shadow-xs'
-                  : 'border-slate-200 shadow-xs'
-              }`}
+              style={{
+                backgroundColor: '#ffffff',
+                borderRadius: '18px',
+                padding: '1.1rem 1.2rem',
+                border: isAnswered ? '1.5px solid rgba(59, 130, 246, 0.4)' : '1px solid #e2e8f0',
+                boxShadow: isAnswered ? '0 2px 8px rgba(59, 130, 246, 0.06)' : '0 1px 3px rgba(0,0,0,0.02)',
+                transition: 'all 0.2s ease'
+              }}
             >
-              <div className="flex items-start gap-3 mb-3">
-                <span className={`w-7 h-7 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
-                  isAnswered
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-slate-100 text-slate-600'
-                }`}>
-                  {q.id}
+              {/* 設問文 */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', marginBottom: '12px' }}>
+                <span style={{
+                  width: '26px',
+                  height: '26px',
+                  borderRadius: '8px',
+                  backgroundColor: isAnswered ? '#2563eb' : '#f1f5f9',
+                  color: isAnswered ? '#ffffff' : '#64748b',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  {isAnswered ? <Check size={14} /> : q.id}
                 </span>
-                <p className="text-sm font-semibold text-slate-900 pt-0.5 leading-snug">
+                <p style={{
+                  fontSize: '0.88rem',
+                  fontWeight: 700,
+                  color: '#1e293b',
+                  lineHeight: 1.45,
+                  paddingTop: '2px'
+                }}>
                   「私は普段、{q.text}」
                 </p>
               </div>
 
-              {/* 5件法 選択ボタングリッド */}
-              <div className="grid grid-cols-5 gap-1.5 sm:gap-2 pt-1">
+              {/* 5段階の選択カード */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(5, 1fr)',
+                gap: '6px'
+              }}>
                 {BFI_2_S_CONFIG.scaleLabels.map((opt) => {
                   const isSelected = selectedValue === opt.value;
                   return (
@@ -164,64 +281,150 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
                       key={opt.value}
                       type="button"
                       onClick={() => handleSelectAnswer(q.id, opt.value)}
-                      className={`py-3 px-1 rounded-xl text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
-                        isSelected
-                          ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 font-bold scale-[1.02]'
-                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200/60 font-medium'
-                      }`}
+                      style={{
+                        padding: '10px 4px',
+                        borderRadius: '12px',
+                        border: isSelected ? '1.5px solid #2563eb' : '1px solid #e2e8f0',
+                        backgroundColor: isSelected ? '#eff6ff' : '#f8fafc',
+                        color: isSelected ? '#1d4ed8' : '#475569',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '2px',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        boxShadow: isSelected ? '0 2px 6px rgba(37, 99, 235, 0.15)' : 'none'
+                      }}
                     >
-                      <span className="text-sm font-bold">{opt.value}</span>
-                      <span className="text-[10px] leading-tight opacity-90 line-clamp-1 hidden sm:block">
-                        {opt.label}
+                      <span style={{
+                        fontSize: '0.88rem',
+                        fontWeight: 800,
+                        color: isSelected ? '#2563eb' : '#334155'
+                      }}>
+                        {opt.value}
+                      </span>
+                      <span style={{
+                        fontSize: '0.62rem',
+                        fontWeight: isSelected ? 700 : 500,
+                        color: isSelected ? '#1d4ed8' : '#64748b',
+                        whiteSpace: 'nowrap',
+                        textAlign: 'center'
+                      }}>
+                        {opt.value === 1 ? '全く違う' : opt.value === 5 ? 'とてもそう' : opt.value === 3 ? 'どちらでも' : ''}
                       </span>
                     </button>
                   );
                 })}
               </div>
 
-              {/* スマホ用ラベル表示 (選択中のラベル) */}
-              <div className="sm:hidden text-center text-[11px] text-slate-500 mt-2">
-                {isAnswered ? (
-                  <span className="text-indigo-600 font-semibold">
-                    選択: {BFI_2_S_CONFIG.scaleLabels.find(l => l.value === selectedValue)?.label}
-                  </span>
-                ) : (
-                  <span>1: 全くあてはまらない 〜 5: とてもよくあてはまる</span>
-                )}
-              </div>
+              {/* 選択中のラベル表示 */}
+              {isAnswered && (
+                <div style={{
+                  marginTop: '8px',
+                  textAlign: 'right',
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  color: '#2563eb'
+                }}>
+                  選択: {BFI_2_S_CONFIG.scaleLabels.find(l => l.value === selectedValue)?.label}
+                </div>
+              )}
             </div>
           );
         })}
       </div>
 
-      {/* 送信アクションバー */}
-      <div className="sticky bottom-4 bg-white/95 backdrop-blur-md p-4 rounded-2xl shadow-xl border border-slate-200 flex items-center justify-between gap-4">
-        <div className="text-xs">
-          {isAllAnswered ? (
-            <span className="text-emerald-600 font-bold flex items-center gap-1.5">
-              <CheckCircle2 size={16} /> 全30問の回答が完了しました！
-            </span>
-          ) : (
-            <span className="text-slate-500 flex items-center gap-1.5">
-              <AlertCircle size={16} className="text-amber-500" />
-              残り <strong className="text-slate-800">{totalQuestions - answeredCount}問</strong> 未回答です
-            </span>
-          )}
+      {/* ページナビゲーション / 送信バー */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '10px',
+        padding: '12px 16px',
+        backgroundColor: '#ffffff',
+        borderRadius: '20px',
+        border: '1px solid #e2e8f0',
+        boxShadow: '0 4px 20px -2px rgba(0,0,0,0.06)'
+      }}>
+        {currentPage > 0 ? (
+          <button
+            type="button"
+            onClick={handlePrevPage}
+            style={{
+              padding: '10px 16px',
+              borderRadius: '12px',
+              border: '1px solid #cbd5e1',
+              backgroundColor: '#f8fafc',
+              color: '#475569',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            <ChevronLeft size={16} />
+            <span>前へ</span>
+          </button>
+        ) : (
+          <div style={{ width: '70px' }} />
+        )}
+
+        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>
+          ページ {currentPage + 1} / {totalPages}
         </div>
 
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={!isAllAnswered || isSubmitting}
-          className={`py-3 px-6 rounded-xl font-bold text-sm shadow-md transition-all flex items-center gap-2 ${
-            isAllAnswered && !isSubmitting
-              ? 'bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer active:scale-[0.98]'
-              : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-          }`}
-        >
-          <Sparkles size={16} />
-          <span>{isSubmitting ? '照合中...' : '回答を送信して総合照合レポートを見る'}</span>
-        </button>
+        {currentPage < totalPages - 1 ? (
+          <button
+            type="button"
+            onClick={handleNextPage}
+            disabled={!isCurrentPageComplete}
+            style={{
+              padding: '10px 18px',
+              borderRadius: '12px',
+              border: 'none',
+              background: isCurrentPageComplete ? 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)' : '#e2e8f0',
+              color: isCurrentPageComplete ? '#ffffff' : '#94a3b8',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              cursor: isCurrentPageComplete ? 'pointer' : 'not-allowed',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              boxShadow: isCurrentPageComplete ? '0 2px 8px rgba(59, 130, 246, 0.3)' : 'none',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <span>次へ</span>
+            <ChevronRight size={16} />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={!isAllAnswered || isSubmitting}
+            style={{
+              padding: '10px 20px',
+              borderRadius: '12px',
+              border: 'none',
+              background: isAllAnswered && !isSubmitting ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : '#e2e8f0',
+              color: isAllAnswered && !isSubmitting ? '#ffffff' : '#94a3b8',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              cursor: isAllAnswered && !isSubmitting ? 'pointer' : 'not-allowed',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: isAllAnswered && !isSubmitting ? '0 2px 10px rgba(16, 185, 129, 0.3)' : 'none',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <Sparkles size={16} />
+            <span>{isSubmitting ? '照合中...' : '総合照合レポートを見る'}</span>
+          </button>
+        )}
       </div>
     </div>
   );

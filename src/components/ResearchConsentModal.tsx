@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShieldCheck, FileText, User, Check, AlertCircle } from 'lucide-react';
+import { ShieldCheck, ChevronDown, ChevronUp, User, Sparkles, Check, AlertCircle, Lock, GraduationCap, Clock } from 'lucide-react';
 import { UserProfile, GenderType } from '../types';
 
 interface ResearchConsentModalProps {
@@ -21,12 +21,13 @@ export const ResearchConsentModal: React.FC<ResearchConsentModalProps> = ({
     initialProfile?.student_id || ''
   );
   const [hasAgreed, setHasAgreed] = useState<boolean>(false);
+  const [isDetailOpen, setIsDetailOpen] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!hasAgreed) {
-      setErrorMessage('研究参加への同意チェックボックスにチェックを入れてください。');
+      setErrorMessage('研究参加への同意チェックを入れてください。');
       return;
     }
 
@@ -46,136 +47,348 @@ export const ResearchConsentModal: React.FC<ResearchConsentModalProps> = ({
     onConsentAndSubmit(profile);
   };
 
+  const genderOptions: { key: GenderType; label: string }[] = [
+    { key: 'male', label: '男性' },
+    { key: 'female', label: '女性' },
+    { key: 'other', label: 'その他' },
+    { key: 'prefer_not_to_say', label: '回答しない' }
+  ];
+
   return (
     <div className="modal-backdrop">
-      <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-slate-200 m-4 max-h-[92vh] overflow-y-auto">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-            <ShieldCheck size={22} />
+      <div className="profile-modal-card" style={{ maxWidth: '520px', padding: '2rem 1.8rem', maxHeight: '92vh', overflowY: 'auto' }}>
+        {/* Brand Header */}
+        <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '4px 12px',
+            borderRadius: '9999px',
+            backgroundColor: 'rgba(59, 130, 246, 0.08)',
+            border: '1px solid rgba(59, 130, 246, 0.2)',
+            color: '#2563eb',
+            fontSize: '0.75rem',
+            fontWeight: 700,
+            letterSpacing: '0.05em',
+            marginBottom: '0.5rem'
+          }}>
+            <Sparkles size={13} />
+            <span>LLM5 RESEARCH PROJECT</span>
           </div>
-          <div>
-            <span className="text-xs font-bold text-indigo-600 tracking-wider uppercase">RESEARCH ETHICS & CONSENT</span>
-            <h2 className="text-lg font-bold text-slate-900 leading-tight">研究へのご協力のお願い</h2>
+          <h2 style={{
+            fontSize: '1.35rem',
+            fontWeight: 800,
+            color: '#0f172a',
+            letterSpacing: '-0.02em',
+            lineHeight: 1.3
+          }}>
+            対話型パーソナリティ診断
+          </h2>
+          <p style={{
+            fontSize: '0.82rem',
+            color: '#64748b',
+            marginTop: '0.25rem'
+          }}>
+            生成AIと標準心理測定尺度を用いた共同研究のご案内
+          </p>
+        </div>
+
+        {/* 3つの要点バッジ (スッキリ読みやすい) */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: '8px',
+          marginBottom: '1rem'
+        }}>
+          <div style={{
+            padding: '10px 8px',
+            backgroundColor: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            borderRadius: '12px',
+            textAlign: 'center'
+          }}>
+            <Lock size={16} style={{ margin: '0 auto 4px', color: '#3b82f6' }} />
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e293b' }}>完全匿名</div>
+            <div style={{ fontSize: '0.65rem', color: '#64748b' }}>乱数ID管理</div>
+          </div>
+          <div style={{
+            padding: '10px 8px',
+            backgroundColor: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            borderRadius: '12px',
+            textAlign: 'center'
+          }}>
+            <Clock size={16} style={{ margin: '0 auto 4px', color: '#10b981' }} />
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e293b' }}>中断自由</div>
+            <div style={{ fontSize: '0.65rem', color: '#64748b' }}>いつでも終了可</div>
+          </div>
+          <div style={{
+            padding: '10px 8px',
+            backgroundColor: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            borderRadius: '12px',
+            textAlign: 'center'
+          }}>
+            <GraduationCap size={16} style={{ margin: '0 auto 4px', color: '#8b5cf6' }} />
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e293b' }}>学術目的</div>
+            <div style={{ fontSize: '0.65rem', color: '#64748b' }}>心理尺度検証</div>
           </div>
         </div>
 
-        {/* 研究目的とデータ取り扱いの説明カード */}
-        <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-600 space-y-2.5 mb-5 leading-relaxed">
-          <div className="flex items-start gap-2">
-            <FileText size={15} className="text-indigo-500 mt-0.5 shrink-0" />
-            <div>
-              <strong className="text-slate-800">研究目的:</strong><br />
-              本研究は、AI（大規模言語モデル）との対話から推定される性格特性と、国際標準心理尺度（BFI-2-S）の測定結果を比較検証し、より自然で高精度な性格理解手法の開発を目的としています。
+        {/* アコーディオン式 詳細研究倫理説明 */}
+        <div style={{
+          marginBottom: '1.25rem',
+          border: '1px solid #e2e8f0',
+          borderRadius: '14px',
+          overflow: 'hidden'
+        }}>
+          <button
+            type="button"
+            onClick={() => setIsDetailOpen(!isDetailOpen)}
+            style={{
+              width: '100%',
+              padding: '10px 14px',
+              backgroundColor: '#f8fafc',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '0.78rem',
+              fontWeight: 600,
+              color: '#475569'
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <ShieldCheck size={14} color="#3b82f6" />
+              研究目的・プライバシー取り扱いの詳細
+            </span>
+            {isDetailOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+          {isDetailOpen && (
+            <div style={{
+              padding: '12px 14px',
+              fontSize: '0.75rem',
+              color: '#475569',
+              lineHeight: 1.6,
+              backgroundColor: '#ffffff',
+              borderTop: '1px solid #e2e8f0'
+            }}>
+              <p style={{ marginBottom: '6px' }}>
+                <strong>【研究目的】</strong><br />
+                本研究は、AIとの自由対話から推定されるビッグファイブ性格因子と、標準心理測定尺度（BFI-2-S）のスコアを比較し、より妥当性の高い対話型特性理解の確立を目指すものです。
+              </p>
+              <p style={{ marginBottom: '6px' }}>
+                <strong>【データの保護】</strong><br />
+                対話ログおよびアンケート回答は暗号化され、学術研究（論文・統計分析）にのみ利用されます。氏名やメールアドレス等の直接的な個人情報は収集しません。
+              </p>
+              <p>
+                <strong>【中断の権利】</strong><br />
+                診断の途中いつでもブラウザを閉じて中断でき、不利益を被ることは一切ありません。
+              </p>
             </div>
-          </div>
-          <div className="border-t border-slate-200/60 pt-2 space-y-1.5 text-slate-600">
-            <div>
-              <strong className="text-slate-800">🔒 データの取り扱いとプライバシー保護:</strong>
-            </div>
-            <ul className="list-disc pl-4 space-y-1 text-slate-500">
-              <li>収集された対話ログおよびアンケート回答は、厳重に暗号化され、学術研究（論文・学会発表等）にのみ使用されます。</li>
-              <li>氏名や連絡先等の直接的な個人情報は収集せず、ランダムな識別IDを用いて匿名・仮名化して安全に管理されます。</li>
-              <li>研究への参加はご自身の自由意思によるものであり、途中でいつでも中断・中止できます。不参加や中断によって不利益を被ることは一切ありません。</li>
-            </ul>
-          </div>
+          )}
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* 基本属性入力 (年齢・性別) */}
-          <div className="p-4 bg-indigo-50/40 border border-indigo-100 rounded-2xl space-y-3.5">
-            <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
-              <User size={14} className="text-indigo-600" />
-              <span>事前のご回答（分析精度向上のため）</span>
+        {/* 属性入力フォーム */}
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{
+            padding: '14px',
+            backgroundColor: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: '16px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              color: '#1e293b',
+              marginBottom: '10px'
+            }}>
+              <User size={15} color="#3b82f6" />
+              <span>被験者属性（対話分析の基準値）</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* 年齢 */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  年齢 <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    min="10"
-                    max="120"
-                    placeholder="例: 21"
-                    value={age}
-                    onChange={(e) => setAge(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 pr-8 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  />
-                  <span className="absolute right-3 top-2.5 text-xs text-slate-400">歳</span>
-                </div>
-              </div>
-
-              {/* 性別 */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  性別 <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  value={gender}
-                  onChange={(e) => setGender(e.target.value as GenderType)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white"
-                >
-                  <option value="male">男性</option>
-                  <option value="female">女性</option>
-                  <option value="other">その他</option>
-                  <option value="prefer_not_to_say">回答しない</option>
-                </select>
+            {/* 年齢入力 */}
+            <div style={{ marginBottom: '10px' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
+                ご年齢 <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="number"
+                  min="10"
+                  max="120"
+                  placeholder="例: 21"
+                  value={age}
+                  onChange={(e) => setAge(e.target.value)}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '8px 36px 8px 12px',
+                    borderRadius: '10px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.9rem',
+                    color: '#0f172a',
+                    outline: 'none',
+                    transition: 'border-color 0.15s ease'
+                  }}
+                />
+                <span style={{
+                  position: 'absolute',
+                  right: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  fontSize: '0.8rem',
+                  color: '#94a3b8'
+                }}>
+                  歳
+                </span>
               </div>
             </div>
 
-            {/* 学籍番号 / 被験者ID (任意) */}
+            {/* 性別選択 (ピル型ボタン) */}
+            <div style={{ marginBottom: '10px' }}>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>
+                性別 <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, 1fr)',
+                gap: '6px'
+              }}>
+                {genderOptions.map((g) => {
+                  const isSelected = gender === g.key;
+                  return (
+                    <button
+                      key={g.key}
+                      type="button"
+                      onClick={() => setGender(g.key)}
+                      style={{
+                        padding: '8px 4px',
+                        borderRadius: '10px',
+                        border: isSelected ? '1.5px solid #3b82f6' : '1px solid #e2e8f0',
+                        backgroundColor: isSelected ? '#eff6ff' : '#f8fafc',
+                        color: isSelected ? '#1d4ed8' : '#475569',
+                        fontSize: '0.78rem',
+                        fontWeight: isSelected ? 700 : 500,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {g.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 学籍番号 (任意) */}
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">
-                学籍番号 / 参加者ID <span className="text-slate-400 font-normal">(任意)</span>
+              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 500, color: '#64748b', marginBottom: '4px' }}>
+                学籍番号 / 参加ID <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>(指示がある場合のみ)</span>
               </label>
               <input
                 type="text"
-                placeholder="例: KGU12345 (指定がある場合のみ)"
+                placeholder="例: KGU12345"
                 value={studentId}
                 onChange={(e) => setStudentId(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '10px',
+                  border: '1px solid #e2e8f0',
+                  fontSize: '0.82rem',
+                  fontFamily: 'monospace',
+                  color: '#334155',
+                  outline: 'none'
+                }}
               />
             </div>
           </div>
 
-          {/* 同意チェックボックス */}
-          <div className="pt-1">
-            <label className="flex items-start gap-2.5 cursor-pointer select-none p-3 rounded-xl border border-slate-200 hover:bg-slate-50 transition-colors">
+          {/* 同意チェック */}
+          <div style={{
+            padding: '12px 14px',
+            borderRadius: '14px',
+            backgroundColor: hasAgreed ? '#eff6ff' : '#f8fafc',
+            border: hasAgreed ? '1.5px solid #93c5fd' : '1px solid #e2e8f0',
+            transition: 'all 0.15s ease'
+          }}>
+            <label style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              cursor: 'pointer',
+              userSelect: 'none'
+            }}>
               <input
                 type="checkbox"
                 checked={hasAgreed}
                 onChange={(e) => setHasAgreed(e.target.checked)}
-                className="mt-0.5 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer accent-indigo-600"
+                style={{
+                  width: '18px',
+                  height: '18px',
+                  accentColor: '#3b82f6',
+                  cursor: 'pointer'
+                }}
               />
-              <span className="text-xs font-semibold text-slate-800 leading-snug">
-                上記の研究目的およびデータの取り扱いについて理解し、同意の上で診断に参加します。
+              <span style={{
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                color: hasAgreed ? '#1e40af' : '#334155',
+                lineHeight: 1.4
+              }}>
+                上記の研究目的・データ管理に同意して参加します
               </span>
             </label>
           </div>
 
           {errorMessage && (
-            <div className="flex items-center gap-1.5 p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl">
-              <AlertCircle size={14} className="shrink-0" />
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 12px',
+              backgroundColor: '#fef2f2',
+              border: '1px solid #fecaca',
+              color: '#b91c1c',
+              fontSize: '0.78rem',
+              borderRadius: '10px'
+            }}>
+              <AlertCircle size={14} style={{ flexShrink: 0 }} />
               <span>{errorMessage}</span>
             </div>
           )}
 
-          {/* 送信ボタン */}
+          {/* 開始ボタン */}
           <button
             type="submit"
             disabled={!hasAgreed || !age}
-            className={`w-full py-3.5 px-4 rounded-2xl font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 ${
-              hasAgreed && age
-                ? 'bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer active:scale-[0.99]'
-                : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-            }`}
+            style={{
+              width: '100%',
+              padding: '12px 18px',
+              borderRadius: '14px',
+              border: 'none',
+              background: hasAgreed && age ? 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)' : '#e2e8f0',
+              color: hasAgreed && age ? '#ffffff' : '#94a3b8',
+              fontSize: '0.9rem',
+              fontWeight: 700,
+              cursor: hasAgreed && age ? 'pointer' : 'not-allowed',
+              boxShadow: hasAgreed && age ? '0 4px 14px rgba(59, 130, 246, 0.35)' : 'none',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px'
+            }}
           >
             <Check size={16} />
-            <span>同意してAI対話診断を開始する</span>
+            <span>同意して対話診断をはじめる</span>
           </button>
         </form>
       </div>
