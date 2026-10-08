@@ -439,7 +439,7 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
             }}
           >
             <ChevronLeft size={14} />
-            <span>対話へ</span>
+            <span>対話に戻る</span>
           </button>
         ) : (
           <div style={{ width: '70px' }} />
