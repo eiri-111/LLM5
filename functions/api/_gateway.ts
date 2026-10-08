@@ -232,7 +232,7 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
               notes: 'Parsed from JSON fallback'
             };
           }
-        } catch (_) {}
+        } catch (_) { }
       }
     } else {
       const errText = await res.text();
@@ -284,7 +284,6 @@ export async function runInterviewerStream(
   const targetStrategy = strategy.target_question_strategy || 'これまでの活動や具体的な行動エピソードについて尋ねる';
 
   const interviewerInstruction = `
-あなたはプロフェッショナルな性格分析インタビュアーです。
 裏方の分析官から以下の指示（戦略）が届いています:
 【分析官の指示】:
 - 狙う因子: ${focusDimension}
@@ -300,9 +299,7 @@ export async function runInterviewerStream(
    - ユーザーが年齢（年代）や性別について触れてくれた場合は優しく受け止めてください。もし最初の1〜2往復で年代や性別に全く触れられていない場合は、共感の言葉に添えて「差し支えなければご年代や性別も教えてくださいね！」とカジュアルに一言添えても良いです。
    - 1回の返答は2〜3文（120〜160文字程度）で簡潔に。スマホで読みやすくフランクな言葉遣いにしてください。
 4. 【分析完了時】:
-   - もし分析官が「分析完了」と判断している場合は、共感した上で「ここまでのお話であなたのパーソナリティを深く分析する準備が整いました！画面の『性格分析レポートを生成する』ボタンを押してください」と案内してください。
-5. 【思考タグの禁止】:
-   - 思考プロセスや内部推論（<thought>や<think>タグなど）は絶対に一切出力に含めず、ユーザーへの発話文のみを直接出力してください。
+   - もし分析官が「分析完了」と判断している場合は、共感した上で「ここまでのお話であなたのパーソナリティを深く分析する準備が整いました。画面の『性格分析レポートを生成する』ボタンを押してください」と案内してください。
 `;
 
   const formattedMessages = messages.map(m => ({
@@ -449,8 +446,8 @@ export async function runInterviewerStream(
  * AI GatewayのRoute設定に委ね、自然で共感的な問いを生成
  */
 export async function runInterviewer(
-  env: Env, 
-  messages: ChatMessage[], 
+  env: Env,
+  messages: ChatMessage[],
   strategy: AnalystStrategy,
   modelName: string = 'dynamic/llm5'
 ): Promise<{ reply: string; isReady: boolean }> {
@@ -662,7 +659,7 @@ export function verifyAdminPassword(request: Request, env: Env): boolean {
     if (queryKey && queryKey.trim() === expectedPassword) {
       return true;
     }
-  } catch (_) {}
+  } catch (_) { }
 
   return false;
 }

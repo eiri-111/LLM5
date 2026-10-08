@@ -454,10 +454,7 @@ export const App: React.FC = () => {
             userProfile={userProfile}
             onUpdateProfile={handleUpdateProfile}
             onStartSurvey={handleStartSurvey}
-            onSkipToSurvey={handleSkipToSurvey}
             showToast={showToast}
-            onShowSample={handleShowSample}
-            onResetChat={handleRetake}
           />
         )}
 
