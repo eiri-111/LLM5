@@ -27,10 +27,10 @@ sequenceDiagram
     Pages->>ユーザー: メッセージを表示
 ```
 
-1. **裏方の分析官AI (Route: `dynamic/llm5-analyst`)**:
+1. **裏方の分析官AI (Workers AI `@cf/cloudflare/clef-flash` / Route: `dynamic/llm5-analyst`)**:
    - 会話履歴からビッグファイブの5因子（開放性、誠実性、外向性、協調性、情緒安定性）の測定状況を冷徹に追跡。
-   - 「どの因子が情報不足か」「次にどんなシチュエーションを尋ねるべきか」の戦略JSONを高速生成。
-   - ※ 使用するAIモデル（Clef-flash, Qwen, Gemini等）はすべてCloudflare AI GatewayのDynamic Route側で自由に切り替え・管理可能。コード側でのモデルハードコードは一切不要です。
+   - Cloudflareの高速意思決定モデル `Clef-flash` により、「十分なエピソードが集まったか（yes/no判定）」「どの因子が情報不足か」「次にどんなシチュエーションを尋ねるべきか」をミリ秒単位で判定。
+   - `wrangler.toml` の `[ai]` バインディング（`env.AI.run`）により、**APIトークン不要で内部認証・AI Gateway自動ログ連携**を実現。HTTP外部経由時はトークン認証やルールベース判定への二重フォールバックを備えています。
 2. **表舞台の質問係AI (`dynamic/llm5`)**:
    - 分析官からの戦略指示を受け取り、会話の流れに寄り添いながら、日常の自然な言葉に変換してユーザーに語りかける。
 3. **最終プロファイラー (`dynamic/llm5`)**:

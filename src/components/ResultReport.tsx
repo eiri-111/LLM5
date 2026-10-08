@@ -71,8 +71,8 @@ export const ResultReport: React.FC<ResultReportProps> = ({
 
   const handleApplyQualtricsScores = () => {
     const newSurvey: SurveyResult = {
-      scaleType: 'qualtrics',
-      scaleName: 'Qualtrics BigFive質問紙',
+      scaleType: surveyResult?.scaleType || 'bfi-2-s',
+      scaleName: surveyResult?.scaleName || 'BFI-2-S (Big Five Inventory-2 短縮版)',
       scores: {
         openness: { rawMean: scoreOpenness, normalizedScore: scoreOpenness },
         conscientiousness: { rawMean: scoreConscientiousness, normalizedScore: scoreConscientiousness },
@@ -81,25 +81,24 @@ export const ResultReport: React.FC<ResultReportProps> = ({
         neuroticism: { rawMean: scoreNeuroticism, normalizedScore: scoreNeuroticism }
       },
       completedAt: new Date().toISOString(),
-      qualtrics_id: qualtricsIdInput || `R_${Date.now()}`,
-      isQualtrics: true
+      qualtrics_id: qualtricsIdInput || undefined,
+      isQualtrics: surveyResult?.isQualtrics || false
     };
 
     if (onUpdateSurveyResult) {
       onUpdateSurveyResult(newSurvey);
     }
     setIsQualtricsModalOpen(false);
-    showToast('クアルトリクス分析結果を反映し、D1/R2へ保存しました！');
+    showToast('質問紙スコアを反映し、D1/R2へ保存しました！');
   };
 
   const handleApplySampleQualtricsScores = () => {
-    setQualtricsIdInput('R_sample_qualtrics_response');
     setScoreOpenness(Math.min(100, Math.max(0, result.scores.openness.score + 6)));
     setScoreConscientiousness(Math.min(100, Math.max(0, result.scores.conscientiousness.score - 8)));
     setScoreExtraversion(Math.min(100, Math.max(0, result.scores.extraversion.score + 12)));
     setScoreAgreeableness(Math.min(100, Math.max(0, result.scores.agreeableness.score - 5)));
     setScoreNeuroticism(Math.min(100, Math.max(0, result.scores.neuroticism.score + 4)));
-    showToast('サンプルのクアルトリクス回答値をセットしました');
+    showToast('サンプルの質問紙回答値をセットしました');
   };
 
   const shareText = encodeURIComponent(
@@ -183,11 +182,7 @@ export const ResultReport: React.FC<ResultReportProps> = ({
           <>
             <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
               <h3 className="card-section-title" style={{ margin: 0 }}>
-                {isQualtricsMode ? (
-                  <span>📊 AI対話推定 × クアルトリクス分析結果の照合比較</span>
-                ) : (
-                  <span>📊 AI対話推定 × 質問紙測定（{surveyResult.scaleName}）の照合分析</span>
-                )}
+                <span>📊 AI対話推定 × 質問紙測定（{surveyResult.scaleName}）の照合分析</span>
               </h3>
               <button
                 type="button"
@@ -195,7 +190,7 @@ export const ResultReport: React.FC<ResultReportProps> = ({
                 className="text-xs font-semibold text-sky-600 hover:text-sky-800 bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-lg border border-sky-200 transition-colors flex items-center gap-1.5"
               >
                 <SlidersHorizontal size={14} />
-                <span>クアルトリクス結果を編集</span>
+                <span>質問紙スコアを調整</span>
               </button>
             </div>
             <ComparisonChart aiScores={result.scores} surveyResult={surveyResult} />
@@ -212,16 +207,16 @@ export const ResultReport: React.FC<ResultReportProps> = ({
                 className="text-xs font-semibold text-sky-600 hover:text-sky-800 bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-lg border border-sky-200 transition-colors flex items-center gap-1.5"
               >
                 <SlidersHorizontal size={14} />
-                <span>クアルトリクス結果を照合</span>
+                <span>質問紙スコアを照合</span>
               </button>
             </div>
             <RadarChart scores={result.scores} />
 
-            {/* クアルトリクス照合への案内バナー */}
+            {/* 質問紙照合への案内バナー */}
             <div className="mt-4 p-3 bg-sky-50/70 border border-sky-200 rounded-xl flex items-center justify-between flex-wrap gap-3">
               <div className="text-xs text-sky-900">
-                <div className="font-bold">📝 クアルトリクスの分析結果をお持ちですか？</div>
-                <div className="text-sky-700">数値を照合すると、AI対話結果と重ね合わせた比較チャートを表示し、D1/R2へ自動保存します。</div>
+                <div className="font-bold">📝 BFI-2-S 質問紙スコアとの照合</div>
+                <div className="text-sky-700">数値を照合すると、AI対話推定と重ね合わせた比較チャートを表示し、D1/R2へ自動保存します。</div>
               </div>
               <button
                 type="button"
@@ -229,7 +224,7 @@ export const ResultReport: React.FC<ResultReportProps> = ({
                 className="bg-sky-600 hover:bg-sky-700 text-white font-semibold text-xs px-3.5 py-2 rounded-lg shadow-sm transition-all flex items-center gap-1.5"
               >
                 <SlidersHorizontal size={14} />
-                <span>クアルトリクス結果を入力して比較</span>
+                <span>質問紙スコアを入力して比較</span>
               </button>
             </div>
           </>
@@ -427,15 +422,15 @@ export const ResultReport: React.FC<ResultReportProps> = ({
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 m-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center font-bold text-sm">
-                  Q
+                <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-sm">
+                  📊
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-900 text-base">
-                    クアルトリクス分析結果の入力・照合
+                    BFI-2-S 質問紙スコアの確認・調整
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Qualtrics質問紙のスコアを入力してLLM分析結果と比較します
+                    BFI-2-S尺度スコアを調整し、LLM対話推定結果と照合比較します
                   </p>
                 </div>
               </div>
@@ -449,16 +444,16 @@ export const ResultReport: React.FC<ResultReportProps> = ({
             </div>
 
             <div className="mt-4 space-y-4 text-sm">
-              {/* Qualtrics Response ID */}
+              {/* 回答ID (任意) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Qualtrics 回答ID (ResponseID - 任意)
+                  回答・被験者ID (任意)
                 </label>
                 <input
                   type="text"
                   value={qualtricsIdInput}
                   onChange={(e) => setQualtricsIdInput(e.target.value)}
-                  placeholder="例: R_2xY9abc12345678"
+                  placeholder="例: BFI_user_001"
                   className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
                 />
               </div>

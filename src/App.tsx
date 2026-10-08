@@ -2,18 +2,18 @@ import React, { useState, useRef, useEffect } from 'react';
 import { AnalysisResult, UserProfile, ChatMessage, SurveyResult } from './types';
 import { ChatMode } from './components/ChatMode';
 import { ResultReport } from './components/ResultReport';
+import { BfiSurveySection } from './components/BfiSurveySection';
+import { ResearchConsentModal } from './components/ResearchConsentModal';
 import { SAMPLE_ANALYSIS_RESULT } from './data/sampleResult';
 import { Loader2 } from 'lucide-react';
 import { AdminDashboard } from './components/AdminDashboard';
-
-const QUALTRICS_SURVEY_URL = 'https://kobegakuinpsy.qualtrics.com/jfe/form/SV_eqUN3SQZ8LNdZ5Q';
 
 function generateSessionId(): string {
   const rand = Math.random().toString(36).substring(2, 9);
   return `session_${Date.now()}_${rand}`;
 }
 
-type AppPhase = 'chat' | 'result';
+type AppPhase = 'chat' | 'survey' | 'result';
 
 export const App: React.FC = () => {
   // 管理画面モードフラグ (/admin, ?admin, #admin)
@@ -27,7 +27,14 @@ export const App: React.FC = () => {
     return false;
   });
 
-  // ユーザープロファイル (必要に応じてチャットから抽出)
+  // 研究倫理同意フラグ & ユーザープロファイル
+  const [hasConsented, setHasConsented] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('llm5_has_consented') === 'true';
+    } catch (_) {}
+    return false;
+  });
+
   const [userProfile, setUserProfile] = useState<UserProfile | null>(() => {
     try {
       const saved = localStorage.getItem('llm5_user_profile');
@@ -59,14 +66,14 @@ export const App: React.FC = () => {
     return [];
   });
 
-  // 画面フェーズ: 'chat' | 'result'
+  // 画面フェーズ: 'chat' | 'survey' | 'result'
   const [phase, setPhase] = useState<AppPhase>(() => {
     if (typeof window !== 'undefined') {
       const search = window.location.search;
       if (search.includes('sample')) return 'result';
       try {
         const saved = localStorage.getItem('llm5_current_phase') as AppPhase;
-        if (saved && ['chat', 'result'].includes(saved)) {
+        if (saved && ['chat', 'survey', 'result'].includes(saved)) {
           return saved;
         }
       } catch (_) {}
@@ -97,12 +104,8 @@ export const App: React.FC = () => {
     return null;
   });
 
-  // Qualtrics復帰時・結果取得中のローディング状態
-  const [isLoadingSessionResult, setIsLoadingSessionResult] = useState<boolean>(false);
-
-  // Qualtrics遷移準備中フラグ
-  const [isPreparingQualtrics, setIsPreparingQualtrics] = useState<boolean>(false);
-
+  // 分析結果集計中のローディング状態
+  const [isWaitingForAnalysis, setIsWaitingForAnalysis] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -160,158 +163,24 @@ export const App: React.FC = () => {
   }, [surveyResult]);
 
   /**
-   * Qualtricsからのリダイレクト戻り検知 & サーバーから分析結果を取得
-   * URLパラメータ: ?phase=result&qualtrics_id=R_xxxx&session_id=session_xxxx&o=...&c=...
+   * 研究倫理同意＆プロファイル入力の確定
    */
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const params = new URLSearchParams(window.location.search);
-    const qualtricsId = params.get('qualtrics_id') || params.get('ResponseID') || params.get('response_id');
-    const urlSessionId = params.get('session_id');
-    const phaseParam = params.get('phase');
-
-    // スコアの正規化ヘルパー (1〜7点平均は0〜100に正規化、0〜100はそのまま)
-    const normalizeParamScore = (valStr: string | null): number | null => {
-      if (valStr === null || valStr === undefined || valStr.trim() === '') return null;
-      const num = parseFloat(valStr);
-      if (isNaN(num)) return null;
-      if (num <= 7 && num >= 1) {
-        return Math.round(((num - 1) / 6) * 100);
-      }
-      return Math.min(100, Math.max(0, Math.round(num)));
-    };
-
-    const qO = normalizeParamScore(params.get('openness') || params.get('survey_openness') || params.get('o') || params.get('q_o'));
-    const qC = normalizeParamScore(params.get('conscientiousness') || params.get('survey_conscientiousness') || params.get('c') || params.get('q_c'));
-    const qE = normalizeParamScore(params.get('extraversion') || params.get('survey_extraversion') || params.get('e') || params.get('q_e'));
-    const qA = normalizeParamScore(params.get('agreeableness') || params.get('survey_agreeableness') || params.get('a') || params.get('q_a'));
-    const qN = normalizeParamScore(params.get('neuroticism') || params.get('survey_neuroticism') || params.get('n') || params.get('q_n'));
-    const qScaleName = params.get('scale_name') || params.get('survey_scale_name') || 'Qualtrics BigFive質問紙';
-
-    const hasUrlScores = qO !== null || qC !== null || qE !== null || qA !== null || qN !== null;
-
-    if (qualtricsId || phaseParam === 'result' || hasUrlScores) {
-      const targetSessionId = urlSessionId || localStorage.getItem('llm5_current_session_id') || sessionId;
-      if (urlSessionId) setSessionId(urlSessionId);
-
-      // URLからスコアが直接渡された場合、即座に SurveyResult を生成
-      let initialSurveyFromUrl: SurveyResult | null = null;
-      if (hasUrlScores) {
-        initialSurveyFromUrl = {
-          scaleType: 'qualtrics',
-          scaleName: qScaleName,
-          scores: {
-            openness: { rawMean: qO ?? 50, normalizedScore: qO ?? 50 },
-            conscientiousness: { rawMean: qC ?? 50, normalizedScore: qC ?? 50 },
-            extraversion: { rawMean: qE ?? 50, normalizedScore: qE ?? 50 },
-            agreeableness: { rawMean: qA ?? 50, normalizedScore: qA ?? 50 },
-            neuroticism: { rawMean: qN ?? 50, normalizedScore: qN ?? 50 }
-          },
-          completedAt: new Date().toISOString(),
-          qualtrics_id: qualtricsId || undefined,
-          isQualtrics: true
-        };
-        setSurveyResult(initialSurveyFromUrl);
-        try {
-          localStorage.setItem('llm5_survey_result', JSON.stringify(initialSurveyFromUrl));
-        } catch (_) {}
-      }
-
-      setIsLoadingSessionResult(true);
-
-      let attempts = 0;
-      const maxAttempts = 15; // 2秒 x 15回 = 最大30秒待機
-
-      const pollSessionResult = async () => {
-        attempts++;
-        try {
-          const queryParams: Record<string, string> = {
-            session_id: targetSessionId
-          };
-          if (qualtricsId) queryParams.qualtrics_id = qualtricsId;
-          if (qO !== null) queryParams.openness = String(qO);
-          if (qC !== null) queryParams.conscientiousness = String(qC);
-          if (qE !== null) queryParams.extraversion = String(qE);
-          if (qA !== null) queryParams.agreeableness = String(qA);
-          if (qN !== null) queryParams.neuroticism = String(qN);
-          if (qScaleName) queryParams.scale_name = qScaleName;
-
-          const query = new URLSearchParams(queryParams);
-          const res = await fetch(`/api/session?${query.toString()}`);
-          if (res.ok) {
-            const data: any = await res.json();
-            if (data.found && data.status === 'completed' && data.ai_result) {
-              setAiAnalysisResult(data.ai_result);
-              if (data.user_profile) setUserProfile(data.user_profile);
-              if (data.messages && data.messages.length > 0) setChatMessages(data.messages);
-              
-              if (data.survey_result) {
-                setSurveyResult({
-                  ...data.survey_result,
-                  isQualtrics: Boolean(data.qualtrics_id || data.survey_result.scaleType === 'qualtrics'),
-                  qualtrics_id: data.qualtrics_id || data.survey_result.qualtrics_id
-                });
-              } else if (initialSurveyFromUrl) {
-                setSurveyResult(initialSurveyFromUrl);
-              }
-
-              setPhase('result');
-              setIsLoadingSessionResult(false);
-              showToast('質問紙（Qualtrics）の回答結果を受信し、AI対話分析と照合しました！');
-              return;
-            }
-
-            // バックグラウンドでまだ分析中 (status === 'processing') の場合はリトライ
-            if (data.status === 'processing' && attempts < maxAttempts) {
-              setTimeout(pollSessionResult, 2000);
-              return;
-            }
-          }
-        } catch (err) {
-          console.warn('Session polling error:', err);
-        }
-
-        // タイムアウトまたはDB未接続時のフォールバック処理
-        try {
-          const savedAi = localStorage.getItem('llm5_ai_result');
-          if (savedAi) {
-            setAiAnalysisResult(JSON.parse(savedAi));
-            if (initialSurveyFromUrl) {
-              setSurveyResult(initialSurveyFromUrl);
-            }
-            setPhase('result');
-            setIsLoadingSessionResult(false);
-            showToast('質問紙の回答ありがとうございました！');
-            return;
-          }
-        } catch (_) {}
-
-        setAiAnalysisResult(SAMPLE_ANALYSIS_RESULT);
-        if (initialSurveyFromUrl) {
-          setSurveyResult(initialSurveyFromUrl);
-        }
-        setPhase('result');
-        setIsLoadingSessionResult(false);
-        showToast('質問紙の回答ありがとうございました！');
-      };
-
-      pollSessionResult();
-
-      // URLクエリパラメータをクリーンアップ
-      if (window.history?.replaceState) {
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
-    }
-  }, []);
+  const handleConsentAndSubmit = (profile: UserProfile) => {
+    setUserProfile(profile);
+    setHasConsented(true);
+    try {
+      localStorage.setItem('llm5_has_consented', 'true');
+      localStorage.setItem('llm5_user_profile', JSON.stringify(profile));
+    } catch (_) {}
+    showToast('研究へのご協力ありがとうございます。対話診断を開始します。');
+  };
 
   /**
-   * チャット対話終了 ➔ バックグラウンドでAI分析を非同期実行し、即座にQualtrics質問紙へ自動遷移
+   * チャット対話終了 ➔ バックグラウンドでAI分析を非同期実行し、アプリ内BFI-2-S質問紙へ移動
    */
   const handleStartSurvey = async (messages: ChatMessage[]) => {
     setChatMessages(messages);
-    setIsPreparingQualtrics(true);
-    showToast('質問紙（Qualtrics）の画面へ移動しています...');
+    showToast('BFI-2-S 心理測定アンケートへ進みます');
 
     // 1. localStorage にセッション情報を退避
     try {
@@ -325,9 +194,9 @@ export const App: React.FC = () => {
     }
 
     // 2. サーバーへバックグラウンド分析リクエストを送信 (analyze-async)
-    // Workersの context.waitUntil により、クライアントは待たずに即時リダイレクト
+    // ユーザーがアンケートに回答している間に裏側でAI分析を実行
     try {
-      await fetch('/api/analyze-async', {
+      fetch('/api/analyze-async', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -335,37 +204,77 @@ export const App: React.FC = () => {
           user_profile: userProfile || undefined,
           messages: messages
         })
-      });
-    } catch (apiErr) {
-      console.warn('Async analysis initiation error:', apiErr);
-      // フォールバックとして事前保存
-      try {
-        await fetch('/api/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            session_id: sessionId,
-            user_profile: userProfile || undefined,
-            messages: messages
-          })
-        });
-      } catch (_) {}
-    }
+      }).catch(err => console.warn('Async analysis trigger error:', err));
+    } catch (_) {}
 
-    // 3. Qualtricsへ自動遷移
-    const studentIdParam = encodeURIComponent(userProfile?.student_id || sessionId);
-    const sessionIdParam = encodeURIComponent(sessionId);
-    const qualtricsUrl = `${QUALTRICS_SURVEY_URL}?user_id=${studentIdParam}&session_id=${sessionIdParam}`;
-
-    // 画面遷移
-    window.location.href = qualtricsUrl;
+    // 3. アプリ内BFI-2-S画面へ遷移
+    setPhase('survey');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleShowSample = () => {
-    setAiAnalysisResult(SAMPLE_ANALYSIS_RESULT);
-    setSurveyResult(null);
+  /**
+   * BFI-2-S 質問紙回答完了 ➔ AI分析結果を取得・統合してD1/R2へ保存し、照合レポートへ
+   */
+  const handleCompleteSurvey = async (surveyData: SurveyResult) => {
+    setSurveyResult(surveyData);
+    setIsWaitingForAnalysis(true);
+    showToast('AI対話分析と質問紙スコアを照合しています...');
+
+    let attempts = 0;
+    const maxAttempts = 15; // 2秒 x 15回 = 最大30秒
+    let finalAiResult: AnalysisResult | null = aiAnalysisResult;
+
+    const fetchAiAnalysisResult = async (): Promise<AnalysisResult | null> => {
+      while (attempts < maxAttempts) {
+        attempts++;
+        try {
+          const res = await fetch(`/api/session?session_id=${encodeURIComponent(sessionId)}`);
+          if (res.ok) {
+            const data: any = await res.json();
+            if (data.found && data.status === 'completed' && data.ai_result) {
+              return data.ai_result;
+            }
+          }
+        } catch (err) {
+          console.warn('Session polling error:', err);
+        }
+        await new Promise(r => setTimeout(r, 2000));
+      }
+      return null;
+    };
+
+    if (!finalAiResult) {
+      finalAiResult = await fetchAiAnalysisResult();
+    }
+
+    // フォールバック
+    if (!finalAiResult) {
+      finalAiResult = SAMPLE_ANALYSIS_RESULT;
+    }
+
+    setAiAnalysisResult(finalAiResult);
+
+    // D1 & R2 へ保存
+    try {
+      await fetch('/api/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          user_profile: userProfile || undefined,
+          messages: chatMessages,
+          ai_result: finalAiResult,
+          survey_result: surveyData
+        })
+      });
+    } catch (saveErr) {
+      console.warn('Save on survey completion error:', saveErr);
+    }
+
+    setIsWaitingForAnalysis(false);
     setPhase('result');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    showToast('AI対話推定とBFI-2-Sのスコアを照合しました！');
   };
 
   const handleRetake = () => {
@@ -375,7 +284,6 @@ export const App: React.FC = () => {
     setChatMessages([]);
     const newId = generateSessionId();
     setSessionId(newId);
-    setIsPreparingQualtrics(false);
     try {
       localStorage.setItem('llm5_current_session_id', newId);
       localStorage.setItem('llm5_current_phase', 'chat');
@@ -384,6 +292,7 @@ export const App: React.FC = () => {
       localStorage.removeItem('llm5_chat_messages');
       localStorage.removeItem('llm5_onboarding_step');
       localStorage.removeItem('llm5_chat_is_ready');
+      localStorage.removeItem('llm5_bfi_answers');
     } catch (_) {}
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -414,11 +323,10 @@ export const App: React.FC = () => {
           user_profile: userProfile || undefined,
           messages: chatMessages,
           ai_result: aiAnalysisResult || undefined,
-          survey_result: updated,
-          qualtrics_id: updated.qualtrics_id
+          survey_result: updated
         })
       });
-      showToast('クアルトリクス分析結果を保存・更新しました！');
+      showToast('分析結果を保存・更新しました！');
     } catch (err) {
       console.warn('Save updated survey result error:', err);
     }
@@ -443,12 +351,27 @@ export const App: React.FC = () => {
       <div className="ambient-glow-1"></div>
       <div className="ambient-glow-2"></div>
 
+      {/* 研究倫理同意＆プロファイル入力モーダル（未同意の場合に表示） */}
+      {(!hasConsented || !userProfile) && (
+        <ResearchConsentModal
+          initialProfile={userProfile}
+          onConsentAndSubmit={handleConsentAndSubmit}
+        />
+      )}
+
       <main className="main-content">
         {phase === 'chat' && (
           <ChatMode
             userProfile={userProfile}
             onUpdateProfile={handleUpdateProfile}
             onStartSurvey={handleStartSurvey}
+            showToast={showToast}
+          />
+        )}
+
+        {phase === 'survey' && (
+          <BfiSurveySection
+            onCompleteSurvey={handleCompleteSurvey}
             showToast={showToast}
           />
         )}
@@ -467,33 +390,17 @@ export const App: React.FC = () => {
         )}
       </main>
 
-      {/* Qualtrics遷移直前のローディングモーダル */}
-      {isPreparingQualtrics && (
+      {/* 分析結果集計待ちモーダル */}
+      {isWaitingForAnalysis && (
         <div className="modal-backdrop">
           <div className="profile-modal-card text-center" style={{ textAlign: 'center' }}>
             <Loader2 size={36} className="spinner text-indigo-600" style={{ margin: '0 auto 1rem' }} />
             <h3 className="font-bold text-slate-800 text-lg">
-              質問紙（Qualtrics）へ移動しています...
-            </h3>
-            <p className="text-slate-500 text-sm mt-2">
-              対話データを記録し、裏側でAI分析官による深層プロファイリングを開始しました。<br />
-              画面が自動的に切り替わります。
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Qualtrics復帰後のAI分析結果集計・取得待ちモーダル */}
-      {isLoadingSessionResult && (
-        <div className="modal-backdrop">
-          <div className="profile-modal-card text-center" style={{ textAlign: 'center' }}>
-            <Loader2 size={36} className="spinner text-indigo-600" style={{ margin: '0 auto 1rem' }} />
-            <h3 className="font-bold text-slate-800 text-lg">
-              AI性格診断の結果を集計しています...
+              AI対話分析と質問紙スコアを照合中...
             </h3>
             <p className="text-slate-500 text-sm mt-2">
               アンケートへのご回答ありがとうございました！<br />
-              並行して解析されたAIプロファイルを取得し、照合レポートを生成しています。
+              AI分析官による深層プロファイリングとBFI-2-S測定値を統合し、照合レポートを生成しています。
             </p>
           </div>
         </div>

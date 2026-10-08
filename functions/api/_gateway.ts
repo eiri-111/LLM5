@@ -2,8 +2,12 @@ export interface Env {
   CF_ACCOUNT_ID?: string;
   CF_GATEWAY_ID?: string;
   CF_AIG_TOKEN?: string;
+  CLOUDFLARE_API_TOKEN?: string;
+  CF_API_TOKEN?: string;
   CF_AI_GATEWAY_URL?: string;
+  CF_AI_GATEWAY_ANALYST_URL?: string;
   ADMIN_PASSWORD?: string;
+  AI?: any; // Cloudflare Workers AI バインディング (トークン不要・Gateway自動連携)
   DB?: D1Database;
   BUCKET?: R2Bucket;
   R2?: R2Bucket;
@@ -80,14 +84,14 @@ export function getGatewayWorkersAiUrl(env: Env, model: string = '@cf/cloudflare
 }
 
 /**
- * リクエストヘッダーを生成
+ * リクエストヘッダーを生成 (CF_AIG_TOKEN, CLOUDFLARE_API_TOKEN, CF_API_TOKEN に対応)
  */
 export function getGatewayHeaders(env: Env): Record<string, string> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json'
   };
-  if (env.CF_AIG_TOKEN && env.CF_AIG_TOKEN.trim() !== '') {
-    const token = env.CF_AIG_TOKEN.trim();
+  const token = (env.CF_AIG_TOKEN || env.CLOUDFLARE_API_TOKEN || env.CF_API_TOKEN || '').trim();
+  if (token) {
     headers['cf-aig-authorization'] = `Bearer ${token}`;
     headers['Authorization'] = `Bearer ${token}`;
   }
@@ -127,18 +131,70 @@ function extractResponseText(data: any): string {
 }
 
 /**
- * ステップ1: 分析官AI (AI Gateway経由で Workers AI @cf/cloudflare/clef-flash を呼び出し)
- * Clef-flashの意思決定APIスキーマ: { state, questions } を送信
+ * Clef-flashの意思決定レスポンスを解析してAnalystStrategyを生成
+ */
+function parseClefFlashDecision(resObj: any, userCount: number): AnalystStrategy | null {
+  if (!resObj) return null;
+
+  // resObjが { answers: { ... } } や { result: { ... } } の入れ子になっている場合を考慮
+  const target = resObj.answers || resObj.result || resObj;
+  if (!target || (target.is_ready === undefined && target.focus_dimension === undefined)) {
+    return null;
+  }
+
+  const isReadyItem = target.is_ready;
+  const isReadyProb = typeof isReadyItem === 'number'
+    ? isReadyItem
+    : (typeof isReadyItem?.probability === 'number'
+      ? isReadyItem.probability
+      : (typeof isReadyItem?.yes_probability === 'number' ? isReadyItem.yes_probability : 0));
+  const isReadyAnswer = isReadyItem === 'yes' || isReadyItem === true || isReadyItem?.answer === 'yes';
+  const isReady = (isReadyAnswer || isReadyProb >= 0.65) || userCount >= 4;
+
+  const focusDim = target.focus_dimension?.chosen
+    || target.focus_dimension?.answer
+    || target.focus_dimension?.choice
+    || (typeof target.focus_dimension === 'string' ? target.focus_dimension : null)
+    || '誠実性';
+
+  const strategyRaw = target.strategy_type?.chosen
+    || target.strategy_type?.answer
+    || target.strategy_type?.choice
+    || (typeof target.strategy_type === 'string' ? target.strategy_type : null)
+    || 'ハプニングへの対処';
+
+  const strategyMap: Record<string, string> = {
+    'ハプニングへの対処': '想定外のハプニングや予定の狂いへの対処エピソード',
+    '他者との協力や意見の相違': '周囲と意見が分かれた場面や協力して進めたエピソード',
+    '新しい工夫や試み': '新しく試みた工夫や好奇心・関心から始めた行動',
+    '対人関係のスタンス': '初対面や大人数の場、日常での対人関係のスタンス',
+    '感情のコントロール': 'プレッシャーや感情の浮き沈みへのセルフコントロール'
+  };
+  const strategyChoice = strategyMap[strategyRaw] || strategyRaw;
+
+  const targetStrategy = isReady
+    ? '十分な情報が集まったので、これまでの対話に共感しつつ性格分析レポートの生成を案内してください。'
+    : `${focusDim}の特性を客観的に測定するため、ユーザーの主要な活動の中で「${strategyChoice}」についての具体的な過去の体験・エピソードを尋ねてください。`;
+
+  return {
+    focus_dimension: focusDim,
+    target_question_strategy: targetStrategy,
+    is_ready_for_final_analysis: isReady,
+    notes: `Clef-flash (dim: ${focusDim}, isReady: ${isReady}, prob: ${isReadyProb.toFixed(2)})`
+  };
+}
+
+/**
+ * ステップ1: 分析官AI (Workers AI @cf/cloudflare/clef-flash を呼び出し)
+ * 1. Cloudflare Workers AI 内部バインディング (env.AI) を優先使用（トークン不要・401エラー防止）
+ * 2. HTTP Gateway (CF_AIG_TOKEN / CLOUDFLARE_API_TOKEN 付き) をフォールバック使用
+ * 3. 万一の障害時は堅牢なルールベース判定へ移行
  */
 export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<AnalystStrategy> {
   const dialogueHistory = messages
     .map(m => `${m.role === 'user' ? 'ユーザー' : '質問係'}: ${m.content}`)
     .join('\n');
   const userCount = messages.filter(m => m.role === 'user').length;
-
-  // AI Gateway の Workers AI ネイティブ直通エンドポイントを使用
-  const endpoint = getGatewayWorkersAiUrl(env, '@cf/cloudflare/clef-flash');
-  const headers = getGatewayHeaders(env);
 
   // Clef-flash が要求する意思決定スキーマ (System One / Jev 互換)
   const clefState = `【対話履歴】\n${dialogueHistory}\n\nユーザー発話回数: ${userCount}回`;
@@ -171,7 +227,40 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
     }
   };
 
+  // 1. Cloudflare Workers AI バインディング (env.AI) が存在する場合は最優先で直接実行
+  // ※ 内部バインディングのため API トークン認証エラー (HTTP 401) が原理的に発生せず、AI Gateway にも自動連携
+  if (env.AI && typeof env.AI.run === 'function') {
+    try {
+      const aiRes: any = await env.AI.run(
+        '@cf/cloudflare/clef-flash',
+        {
+          state: clefState,
+          questions: clefQuestions
+        },
+        {
+          gateway: {
+            id: env.CF_GATEWAY_ID || DEFAULT_GATEWAY_ID,
+            skipCache: false
+          }
+        }
+      );
+      const parsed = parseClefFlashDecision(aiRes, userCount);
+      if (parsed) {
+        parsed.notes = `${parsed.notes} [via env.AI binding]`;
+        return parsed;
+      }
+    } catch (aiErr: any) {
+      console.warn('env.AI.run Clef-flash warning, attempting HTTP fetch fallback:', aiErr?.message || aiErr);
+    }
+  }
+
+  // 2. HTTP fetch (AI Gateway または Workers AI Direct REST) による呼び出し
   try {
+    const endpoint = env.CF_AI_GATEWAY_ANALYST_URL && env.CF_AI_GATEWAY_ANALYST_URL.trim() !== ''
+      ? env.CF_AI_GATEWAY_ANALYST_URL.trim()
+      : getGatewayWorkersAiUrl(env, '@cf/cloudflare/clef-flash');
+    const headers = getGatewayHeaders(env);
+
     const res = await fetch(endpoint, {
       method: 'POST',
       headers,
@@ -183,56 +272,27 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
 
     if (res.ok) {
       const data: any = await res.json();
-
-      // 1. Clef-flash 意思決定レスポンス (System One / Workers AI 互換: result配下またはルート配下の質問IDマップ) を解析
-      const resObj = data?.result || data?.answers || data;
-      if (resObj && (resObj.is_ready !== undefined || resObj.focus_dimension !== undefined)) {
-        const isReadyItem = resObj.is_ready;
-        const isReadyAnswer = isReadyItem?.answer === 'yes' || isReadyItem === 'yes' || isReadyItem === true;
-        const isReadyProb = typeof isReadyItem?.probability === 'number'
-          ? isReadyItem.probability
-          : (typeof isReadyItem?.yes_probability === 'number' ? isReadyItem.yes_probability : 0);
-        const isReady = (isReadyAnswer || isReadyProb >= 0.65) || userCount >= 4;
-
-        const focusDim = resObj.focus_dimension?.answer || resObj.focus_dimension?.choice || (typeof resObj.focus_dimension === 'string' ? resObj.focus_dimension : null) || '誠実性';
-        const strategyRaw = resObj.strategy_type?.answer || resObj.strategy_type?.choice || (typeof resObj.strategy_type === 'string' ? resObj.strategy_type : null) || 'ハプニングへの対処';
-
-        const strategyMap: Record<string, string> = {
-          'ハプニングへの対処': '想定外のハプニングや予定の狂いへの対処エピソード',
-          '他者との協力や意見の相違': '周囲と意見が分かれた場面や協力して進めたエピソード',
-          '新しい工夫や試み': '新しく試みた工夫や好奇心・関心から始めた行動',
-          '対人関係のスタンス': '初対面や大人数の場、日常での対人関係のスタンス',
-          '感情のコントロール': 'プレッシャーや感情の浮き沈みへのセルフコントロール'
-        };
-        const strategyChoice = strategyMap[strategyRaw] || strategyRaw;
-
-        const targetStrategy = isReady
-          ? '十分な情報が集まったので、これまでの対話に共感しつつ性格分析レポートの生成を案内してください。'
-          : `${focusDim}の特性を客観的に測定するため、ユーザーの主要な活動の中で「${strategyChoice}」についての具体的な過去の体験・エピソードを尋ねてください。`;
-
-        return {
-          focus_dimension: focusDim,
-          target_question_strategy: targetStrategy,
-          is_ready_for_final_analysis: isReady,
-          notes: `Clef-flash (via workers-ai, ans: ${isReadyItem?.answer ?? (isReady ? 'yes' : 'no')}, prob: ${isReadyProb.toFixed(2)})`
-        };
+      const parsed = parseClefFlashDecision(data, userCount);
+      if (parsed) {
+        parsed.notes = `${parsed.notes} [via HTTP Gateway]`;
+        return parsed;
       }
 
-      // 2. 通常のチャットLLM形式（JSON出力）へのフォールバック対応
+      // 通常のチャットLLM形式（JSON出力）への互換フォールバック対応
       const rawText = extractResponseText(data);
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         try {
-          const parsed = JSON.parse(jsonMatch[0]);
-          if (parsed && typeof parsed === 'object' && parsed.focus_dimension && parsed.target_question_strategy) {
+          const jsonParsed = JSON.parse(jsonMatch[0]);
+          if (jsonParsed && typeof jsonParsed === 'object' && jsonParsed.focus_dimension && jsonParsed.target_question_strategy) {
             return {
-              focus_dimension: String(parsed.focus_dimension),
-              target_question_strategy: String(parsed.target_question_strategy),
-              is_ready_for_final_analysis: !!parsed.is_ready_for_final_analysis,
+              focus_dimension: String(jsonParsed.focus_dimension),
+              target_question_strategy: String(jsonParsed.target_question_strategy),
+              is_ready_for_final_analysis: !!jsonParsed.is_ready_for_final_analysis,
               notes: 'Parsed from JSON fallback'
             };
           }
-        } catch (_) { }
+        } catch (_) {}
       }
     } else {
       const errText = await res.text();
@@ -242,7 +302,7 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
     console.error('Analyst Route fetch error:', err);
   }
 
-  // フォールバック（発話ターン数に応じたルール判定）
+  // 3. ルールベースのフォールバック戦略（万一のAI障害・401エラー時でもユーザーの対話を絶対に止めない安全設計）
   const isReady = userCount >= 4;
   const fallbackDimensions = ['開放性', '誠実性', '外向性', '協調性', '情緒安定性'];
   const focusDim = isReady ? '全体' : fallbackDimensions[userCount % fallbackDimensions.length];

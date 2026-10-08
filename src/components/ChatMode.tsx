@@ -11,7 +11,10 @@ interface ChatModeProps {
 
 type OnboardingStep = 'age' | 'gender' | 'completed';
 
-const INITIAL_GREETING =
+const INITIAL_GREETING_WITH_PROFILE =
+  "こんにちは！研究へのご参加ありがとうございます。\nAIとの自然な会話を通して、あなたのパーソナリティを精密に分析しますね。\n\nテストではないので、リラックスしてお話ししましょう！\nまずは普段、あなたが【一番時間やエネルギーを使っていること】（お仕事や学業、夢中になっている趣味など）を教えていただけますか？";
+
+const INITIAL_GREETING_DEFAULT =
   "こんにちは！AIとの自然な会話を通して、あなたのパーソナリティを精密に診断しますね。\n\nテストではないので、リラックスしてお話ししましょう！\nまずははじめに、あなたの【ご年齢】（または年代）を教えていただけますか？";
 
 function sanitizeMessage(text: string): string {
@@ -30,12 +33,17 @@ export const ChatMode: React.FC<ChatModeProps> = ({
   onStartSurvey,
   showToast,
 }) => {
+  const hasProfile = Boolean(userProfile?.age && userProfile?.gender);
+
   // オンボーディング進行状況の復元
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>(() => {
     try {
       const saved = localStorage.getItem('llm5_onboarding_step') as OnboardingStep;
       if (saved && ['age', 'gender', 'completed'].includes(saved)) {
         return saved;
+      }
+      if (hasProfile) {
+        return 'completed';
       }
       const savedMessages = localStorage.getItem('llm5_chat_messages');
       if (savedMessages) {
@@ -46,7 +54,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
         }
       }
     } catch (_) {}
-    return 'age';
+    return hasProfile ? 'completed' : 'age';
   });
 
   // 会話履歴の復元
@@ -60,7 +68,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
         }
       }
     } catch (_) {}
-    return [{ role: 'assistant', content: INITIAL_GREETING }];
+    return [{ role: 'assistant', content: hasProfile ? INITIAL_GREETING_WITH_PROFILE : INITIAL_GREETING_DEFAULT }];
   });
 
   const [inputText, setInputText] = useState('');
@@ -309,7 +317,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
             className="btn-analyze-ready"
           >
             <Sparkles size={18} />
-            <span>質問紙（Qualtrics）に回答して総合診断へ進む</span>
+            <span>BFI-2-S 心理測定アンケートへ進む</span>
           </button>
         )}
         {onboardingStep === 'gender' && (

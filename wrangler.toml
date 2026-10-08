@@ -13,6 +13,10 @@ ADMIN_PASSWORD = "llm5admin"
 # エンドポイントURLを丸ごと指定したい場合は設定
 # CF_AI_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/e809b1129ec4b6f69520858ac79b2095/llm5/compat/chat/completions"
 
+# Cloudflare Workers AI バインディング (内部バインディングのためAPIトークン不要・Gateway連携対応)
+[ai]
+binding = "AI"
+
 # Cloudflare D1 データベースバインディング
 [[d1_databases]]
 binding = "DB"
