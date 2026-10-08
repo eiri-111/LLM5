@@ -182,7 +182,7 @@ export const ComparisonChart: React.FC<ComparisonChartProps> = ({ aiScores, surv
             <tr>
               <th>特性次元</th>
               <th>AI対話推定</th>
-              <th>{isQualtrics ? 'クアルトリクス測定' : '質問紙測定'}</th>
+              <th>{isQualtrics ? 'クアルトリクス測定' : 'BFI-2-S 心理測定'}</th>
               <th>差分 (AI - 測定)</th>
               <th>照合考察</th>
             </tr>
