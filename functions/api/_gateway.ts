@@ -129,33 +129,36 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
   const endpoint = getGatewayCompatUrl(env);
   const headers = getGatewayHeaders(env);
 
-  // Clef-flash が要求する意思決定スキーマ (Jev / System One 互換)
+  // Clef-flash が要求する意思決定スキーマ (System One / Jev 互換)
   const clefState = `【対話履歴】\n${dialogueHistory}\n\nユーザー発話回数: ${userCount}回`;
-  const clefQuestions = [
-    {
-      id: "is_ready",
+  const clefQuestions: Record<string, any> = {
+    is_ready: {
       type: "noul",
-      question: "これまでの対話から、ビッグファイブ性格診断を客観的・精密に行うのに十分な具体的行動エピソードが集まりましたか？（3〜4往復以上の具体的な対話実績がある場合にyes）"
+      instructions: "これまでの対話から、ビッグファイブ性格診断を客観的・精密に行うのに十分な具体的行動エピソードが集まりましたか？（3〜4往復以上の具体的な対話実績がある場合にyes）"
     },
-    {
-      id: "focus_dimension",
+    focus_dimension: {
       type: "choice",
-      question: "次の質問で深掘りすべき、情報が最も不足しているビッグファイブ性格因子はどれですか？",
-      options: ["開放性", "誠実性", "外向性", "協調性", "情緒安定性"]
+      instructions: "次の質問で深掘りすべき、情報が最も不足しているビッグファイブ性格因子はどれですか？",
+      criteria: {
+        "開放性": "知的好奇心、新しい体験への興味、独創性",
+        "誠実性": "責任感、計画性、ハプニングへの対処、着実さ",
+        "外向性": "社交性、活力、自己主張、人との関わり",
+        "協調性": "他者への共感、思いやり、協力、調和",
+        "情緒安定性": "ストレス耐性、冷静さ、セルフコントロール"
+      }
     },
-    {
-      id: "strategy_type",
+    strategy_type: {
       type: "choice",
-      question: "その因子を測定するために尋ねるべき、最も適切な行動エピソードのシチュエーションはどれですか？",
-      options: [
-        "想定外のハプニングや予定の狂いへの対処エピソード",
-        "周囲と意見が分かれた場面や協力して進めたエピソード",
-        "新しく試みた工夫や好奇心・関心から始めた行動",
-        "初対面や大人数の場、日常での対人関係のスタンス",
-        "プレッシャーや感情の浮き沈みへのセルフコントロール"
-      ]
+      instructions: "その因子を測定するために尋ねるべき、最も適切な行動エピソードのシチュエーションはどれですか？",
+      criteria: {
+        "ハプニングへの対処": "想定外のハプニングや予定の狂いへの対処エピソード",
+        "他者との協力や意見の相違": "周囲と意見が分かれた場面や協力して進めたエピソード",
+        "新しい工夫や試み": "新しく試みた工夫や好奇心・関心から始めた行動",
+        "対人関係のスタンス": "初対面や大人数の場、日常での対人関係のスタンス",
+        "感情のコントロール": "プレッシャーや感情の浮き沈みへのセルフコントロール"
+      }
     }
-  ];
+  };
 
   try {
     const res = await fetch(endpoint, {
@@ -171,15 +174,27 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
     if (res.ok) {
       const data: any = await res.json();
 
-      // 1. Clef-flash 意思決定レスポンス (answers) を解析
-      const answers = data?.result?.answers || data?.answers;
-      if (answers) {
-        const isReadyNoul = answers.is_ready;
-        const isReadyProb = typeof isReadyNoul === 'number' ? isReadyNoul : (isReadyNoul?.yes_probability ?? 0);
-        const isReady = isReadyProb >= 0.65 || userCount >= 4;
+      // 1. Clef-flash 意思決定レスポンス (System One 互換: result配下またはルート配下の質問IDマップ) を解析
+      const resObj = data?.result || data?.answers || data;
+      if (resObj?.is_ready || resObj?.focus_dimension) {
+        const isReadyItem = resObj.is_ready;
+        const isReadyAnswer = isReadyItem?.answer === 'yes';
+        const isReadyProb = typeof isReadyItem?.probability === 'number'
+          ? isReadyItem.probability
+          : (typeof isReadyItem?.yes_probability === 'number' ? isReadyItem.yes_probability : 0);
+        const isReady = (isReadyAnswer || isReadyProb >= 0.65) || userCount >= 4;
 
-        const focusDim = answers.focus_dimension?.choice || answers.focus_dimension || '誠実性';
-        const strategyChoice = answers.strategy_type?.choice || answers.strategy_type || '想定外のハプニングや予定の狂いへの対処エピソード';
+        const focusDim = resObj.focus_dimension?.answer || resObj.focus_dimension?.choice || resObj.focus_dimension || '誠実性';
+        const strategyRaw = resObj.strategy_type?.answer || resObj.strategy_type?.choice || resObj.strategy_type || 'ハプニングへの対処';
+
+        const strategyMap: Record<string, string> = {
+          'ハプニングへの対処': '想定外のハプニングや予定の狂いへの対処エピソード',
+          '他者との協力や意見の相違': '周囲と意見が分かれた場面や協力して進めたエピソード',
+          '新しい工夫や試み': '新しく試みた工夫や好奇心・関心から始めた行動',
+          '対人関係のスタンス': '初対面や大人数の場、日常での対人関係のスタンス',
+          '感情のコントロール': 'プレッシャーや感情の浮き沈みへのセルフコントロール'
+        };
+        const strategyChoice = strategyMap[strategyRaw] || strategyRaw;
 
         const targetStrategy = isReady
           ? '十分な情報が集まったので、これまでの対話に共感しつつ性格分析レポートの生成を案内してください。'
@@ -189,7 +204,7 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
           focus_dimension: focusDim,
           target_question_strategy: targetStrategy,
           is_ready_for_final_analysis: isReady,
-          notes: `Clef-flash (via dynamic/llm5-analyst, prob: ${typeof isReadyProb === 'number' ? isReadyProb.toFixed(2) : isReadyProb})`
+          notes: `Clef-flash (via dynamic/llm5-analyst, ans: ${isReadyItem?.answer ?? (isReady ? 'yes' : 'no')}, prob: ${isReadyProb.toFixed(2)})`
         };
       }
 
