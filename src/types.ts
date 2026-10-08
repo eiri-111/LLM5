@@ -46,7 +46,7 @@ export interface UserProfile {
   gender?: GenderType | string; // 性別
 }
 
-export type ScaleType = 'tipi-j' | 'namikawa' | 'bfi-2-s';
+export type ScaleType = 'tipi-j' | 'namikawa' | 'bfi-2-s' | 'qualtrics' | string;
 
 export type DimensionKey = 'openness' | 'conscientiousness' | 'extraversion' | 'agreeableness' | 'neuroticism';
 
@@ -59,7 +59,7 @@ export interface SurveyQuestion {
 }
 
 export interface SurveyScaleConfig {
-  id: ScaleType;
+  id: string;
   name: string;
   shortName: string;
   authorYear: string;
@@ -80,9 +80,11 @@ export interface SurveyScoreDetail {
 export interface SurveyResult {
   scaleType: ScaleType;
   scaleName: string;
-  rawAnswers: Record<number, number>; // { [questionId]: answerValue }
+  rawAnswers?: Record<string | number, number>; // { [questionId]: answerValue }
   scores: Record<DimensionKey, SurveyScoreDetail>;
   completedAt: string;
+  qualtrics_id?: string;
+  isQualtrics?: boolean;
 }
 
 export interface AssessmentSessionPayload {

@@ -175,19 +175,62 @@ export const App: React.FC = () => {
 
   /**
    * Qualtricsからのリダイレクト戻り検知 & サーバーから分析結果を取得
-   * URLパラメータ: ?phase=result&qualtrics_id=R_xxxx&session_id=session_xxxx
+   * URLパラメータ: ?phase=result&qualtrics_id=R_xxxx&session_id=session_xxxx&o=...&c=...
    */
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const params = new URLSearchParams(window.location.search);
-    const qualtricsId = params.get('qualtrics_id');
+    const qualtricsId = params.get('qualtrics_id') || params.get('ResponseID') || params.get('response_id');
     const urlSessionId = params.get('session_id');
     const phaseParam = params.get('phase');
 
-    if (qualtricsId || phaseParam === 'result') {
+    // スコアの正規化ヘルパー (1〜7点平均は0〜100に正規化、0〜100はそのまま)
+    const normalizeParamScore = (valStr: string | null): number | null => {
+      if (valStr === null || valStr === undefined || valStr.trim() === '') return null;
+      const num = parseFloat(valStr);
+      if (isNaN(num)) return null;
+      if (num <= 7 && num >= 1) {
+        return Math.round(((num - 1) / 6) * 100);
+      }
+      return Math.min(100, Math.max(0, Math.round(num)));
+    };
+
+    const qO = normalizeParamScore(params.get('openness') || params.get('survey_openness') || params.get('o') || params.get('q_o'));
+    const qC = normalizeParamScore(params.get('conscientiousness') || params.get('survey_conscientiousness') || params.get('c') || params.get('q_c'));
+    const qE = normalizeParamScore(params.get('extraversion') || params.get('survey_extraversion') || params.get('e') || params.get('q_e'));
+    const qA = normalizeParamScore(params.get('agreeableness') || params.get('survey_agreeableness') || params.get('a') || params.get('q_a'));
+    const qN = normalizeParamScore(params.get('neuroticism') || params.get('survey_neuroticism') || params.get('n') || params.get('q_n'));
+    const qScaleName = params.get('scale_name') || params.get('survey_scale_name') || 'Qualtrics BigFive質問紙';
+
+    const hasUrlScores = qO !== null || qC !== null || qE !== null || qA !== null || qN !== null;
+
+    if (qualtricsId || phaseParam === 'result' || hasUrlScores) {
       const targetSessionId = urlSessionId || localStorage.getItem('llm5_current_session_id') || sessionId;
       if (urlSessionId) setSessionId(urlSessionId);
+
+      // URLからスコアが直接渡された場合、即座に SurveyResult を生成
+      let initialSurveyFromUrl: SurveyResult | null = null;
+      if (hasUrlScores) {
+        initialSurveyFromUrl = {
+          scaleType: 'qualtrics',
+          scaleName: qScaleName,
+          scores: {
+            openness: { rawMean: qO ?? 50, normalizedScore: qO ?? 50 },
+            conscientiousness: { rawMean: qC ?? 50, normalizedScore: qC ?? 50 },
+            extraversion: { rawMean: qE ?? 50, normalizedScore: qE ?? 50 },
+            agreeableness: { rawMean: qA ?? 50, normalizedScore: qA ?? 50 },
+            neuroticism: { rawMean: qN ?? 50, normalizedScore: qN ?? 50 }
+          },
+          completedAt: new Date().toISOString(),
+          qualtrics_id: qualtricsId || undefined,
+          isQualtrics: true
+        };
+        setSurveyResult(initialSurveyFromUrl);
+        try {
+          localStorage.setItem('llm5_survey_result', JSON.stringify(initialSurveyFromUrl));
+        } catch (_) {}
+      }
 
       setIsLoadingSessionResult(true);
 
@@ -197,11 +240,18 @@ export const App: React.FC = () => {
       const pollSessionResult = async () => {
         attempts++;
         try {
-          const query = new URLSearchParams({
-            session_id: targetSessionId,
-            ...(qualtricsId ? { qualtrics_id: qualtricsId } : {})
-          });
+          const queryParams: Record<string, string> = {
+            session_id: targetSessionId
+          };
+          if (qualtricsId) queryParams.qualtrics_id = qualtricsId;
+          if (qO !== null) queryParams.openness = String(qO);
+          if (qC !== null) queryParams.conscientiousness = String(qC);
+          if (qE !== null) queryParams.extraversion = String(qE);
+          if (qA !== null) queryParams.agreeableness = String(qA);
+          if (qN !== null) queryParams.neuroticism = String(qN);
+          if (qScaleName) queryParams.scale_name = qScaleName;
 
+          const query = new URLSearchParams(queryParams);
           const res = await fetch(`/api/session?${query.toString()}`);
           if (res.ok) {
             const data: any = await res.json();
@@ -209,9 +259,20 @@ export const App: React.FC = () => {
               setAiAnalysisResult(data.ai_result);
               if (data.user_profile) setUserProfile(data.user_profile);
               if (data.messages && data.messages.length > 0) setChatMessages(data.messages);
+              
+              if (data.survey_result) {
+                setSurveyResult({
+                  ...data.survey_result,
+                  isQualtrics: Boolean(data.qualtrics_id || data.survey_result.scaleType === 'qualtrics'),
+                  qualtrics_id: data.qualtrics_id || data.survey_result.qualtrics_id
+                });
+              } else if (initialSurveyFromUrl) {
+                setSurveyResult(initialSurveyFromUrl);
+              }
+
               setPhase('result');
               setIsLoadingSessionResult(false);
-              showToast('質問紙（Qualtrics）へのご回答ありがとうございました！');
+              showToast('質問紙（Qualtrics）の回答結果を受信し、AI対話分析と照合しました！');
               return;
             }
 
@@ -230,6 +291,9 @@ export const App: React.FC = () => {
           const savedAi = localStorage.getItem('llm5_ai_result');
           if (savedAi) {
             setAiAnalysisResult(JSON.parse(savedAi));
+            if (initialSurveyFromUrl) {
+              setSurveyResult(initialSurveyFromUrl);
+            }
             setPhase('result');
             setIsLoadingSessionResult(false);
             showToast('質問紙の回答ありがとうございました！');
@@ -238,6 +302,9 @@ export const App: React.FC = () => {
         } catch (_) {}
 
         setAiAnalysisResult(SAMPLE_ANALYSIS_RESULT);
+        if (initialSurveyFromUrl) {
+          setSurveyResult(initialSurveyFromUrl);
+        }
         setPhase('result');
         setIsLoadingSessionResult(false);
         showToast('質問紙の回答ありがとうございました！');
@@ -429,6 +496,32 @@ export const App: React.FC = () => {
     });
   };
 
+  const handleUpdateSurveyResult = async (updated: SurveyResult) => {
+    setSurveyResult(updated);
+    try {
+      localStorage.setItem('llm5_survey_result', JSON.stringify(updated));
+    } catch (_) {}
+
+    // D1 & R2 に保存
+    try {
+      await fetch('/api/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          user_profile: userProfile || undefined,
+          messages: chatMessages,
+          ai_result: aiAnalysisResult || undefined,
+          survey_result: updated,
+          qualtrics_id: updated.qualtrics_id
+        })
+      });
+      showToast('クアルトリクス分析結果を保存・更新しました！');
+    } catch (err) {
+      console.warn('Save updated survey result error:', err);
+    }
+  };
+
   // 管理画面モード表示
   if (isAdminView) {
     return (
@@ -478,6 +571,7 @@ export const App: React.FC = () => {
             messages={chatMessages}
             sessionId={sessionId}
             onRetake={handleRetake}
+            onUpdateSurveyResult={handleUpdateSurveyResult}
             showToast={showToast}
           />
         )}

@@ -25,6 +25,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   try {
     const body: SaveRequestBody = await request.json();
     const { session_id, user_profile, messages = [], ai_result, survey_result, qualtrics_id } = body;
+    const effectiveQualtricsId = qualtrics_id || (survey_result as any)?.qualtrics_id || null;
 
     if (!session_id) {
       return new Response(JSON.stringify({ error: 'セッションIDは必須です' }), {
@@ -143,7 +144,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
           ai_result?.scores?.agreeableness?.score ?? null,
           ai_result?.scores?.neuroticism?.score ?? null,
           ai_result ? JSON.stringify(ai_result) : null,
-          qualtrics_id || null,
+          effectiveQualtricsId || null,
           survey_result?.scaleType || null,
           survey_result?.scaleName || null,
           survey_result?.rawAnswers ? JSON.stringify(survey_result.rawAnswers) : null,
@@ -175,7 +176,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
           messages,
           ai_result,
           survey_result,
-          qualtrics_id,
+          qualtrics_id: effectiveQualtricsId,
           saved_at: timestamp
         };
 
