@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Sparkles } from 'lucide-react';
-import { ChatMessage, AnalysisResult, UserProfile } from '../types';
+import { ChatMessage, UserProfile } from '../types';
 
 interface ChatModeProps {
   userProfile: UserProfile | null;
@@ -9,13 +9,8 @@ interface ChatModeProps {
   showToast: (msg: string) => void;
 }
 
-type OnboardingStep = 'age' | 'gender' | 'completed';
-
-const INITIAL_GREETING_WITH_PROFILE =
-  "こんにちは！研究へのご参加ありがとうございます。\nAIとの自然な会話を通して、あなたのパーソナリティを精密に分析しますね。\n\nテストではないので、リラックスしてお話ししましょう！\nまずは普段、あなたが【一番時間やエネルギーを使っていること】（お仕事や学業、夢中になっている趣味など）を教えていただけますか？";
-
-const INITIAL_GREETING_DEFAULT =
-  "こんにちは！AIとの自然な会話を通して、あなたのパーソナリティを精密に診断しますね。\n\nテストではないので、リラックスしてお話ししましょう！\nまずははじめに、あなたの【ご年齢】（または年代）を教えていただけますか？";
+const INITIAL_GREETING =
+  "こんにちは！研究へのご参加ありがとうございます。\nAIとの自然な会話を通して、あなたのパーソナリティを精密に分析しますね。\n\nテストではないので、リラックスしてお話ししましょう！\nまずは普段、あなたが【一番時間やエネルギーを使っていること】（お仕事や学業、趣味など）を教えていただけますか？";
 
 function sanitizeMessage(text: string): string {
   if (!text) return '';
@@ -29,34 +24,9 @@ function sanitizeMessage(text: string): string {
 
 export const ChatMode: React.FC<ChatModeProps> = ({
   userProfile,
-  onUpdateProfile,
   onStartSurvey,
   showToast,
 }) => {
-  const hasProfile = Boolean(userProfile?.age && userProfile?.gender);
-
-  // オンボーディング進行状況の復元
-  const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>(() => {
-    try {
-      const saved = localStorage.getItem('llm5_onboarding_step') as OnboardingStep;
-      if (saved && ['age', 'gender', 'completed'].includes(saved)) {
-        return saved;
-      }
-      if (hasProfile) {
-        return 'completed';
-      }
-      const savedMessages = localStorage.getItem('llm5_chat_messages');
-      if (savedMessages) {
-        const parsed = JSON.parse(savedMessages);
-        if (Array.isArray(parsed)) {
-          if (parsed.length >= 4) return 'completed';
-          if (parsed.length >= 2) return 'gender';
-        }
-      }
-    } catch (_) {}
-    return hasProfile ? 'completed' : 'age';
-  });
-
   // 会話履歴の復元
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     try {
@@ -68,7 +38,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
         }
       }
     } catch (_) {}
-    return [{ role: 'assistant', content: hasProfile ? INITIAL_GREETING_WITH_PROFILE : INITIAL_GREETING_DEFAULT }];
+    return [{ role: 'assistant', content: INITIAL_GREETING }];
   });
 
   const [inputText, setInputText] = useState('');
@@ -93,13 +63,6 @@ export const ChatMode: React.FC<ChatModeProps> = ({
     } catch (_) {}
   }, [messages]);
 
-  // オンボーディング進行状況の自動保存
-  useEffect(() => {
-    try {
-      localStorage.setItem('llm5_onboarding_step', onboardingStep);
-    } catch (_) {}
-  }, [onboardingStep]);
-
   // 診断準備完了フラグの自動保存
   useEffect(() => {
     try {
@@ -107,84 +70,17 @@ export const ChatMode: React.FC<ChatModeProps> = ({
     } catch (_) {}
   }, [isReady]);
 
-
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isLoading, streamingText]);
 
-
-  // 性別選択ボタン押下時
-  const handleSelectGender = (genderLabel: string) => {
-    if (isLoading) return;
-    processGenderInput(genderLabel);
-  };
-
-  const processGenderInput = (text: string) => {
-    let genderKey = 'other';
-    if (text.includes('男')) genderKey = 'male';
-    else if (text.includes('女')) genderKey = 'female';
-    else if (text.includes('回答しない') || text.includes('答えたくない') || text.includes('無回答')) genderKey = 'prefer_not_to_say';
-    
-    onUpdateProfile?.({ gender: genderKey });
-
-    const newMessages: ChatMessage[] = [...messages, { role: 'user', content: text }];
-    setMessages(newMessages);
-    setInputText('');
-    setIsLoading(true);
-
-    setTimeout(() => {
-      setIsLoading(false);
-      setMessages([
-        ...newMessages,
-        {
-          role: 'assistant',
-          content:
-            "お答えいただきありがとうございます！\n\nそれでは診断を始めていきますね。お友達とLINEするような気軽な感覚でお答えください。\nまずは普段、あなたが【一番時間やエネルギーを使っていること】（お仕事や学業、夢中になっている趣味など）を教えていただけますか？"
-        }
-      ]);
-      setOnboardingStep('completed');
-    }, 450);
-  };
-
   const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const text = inputText.trim();
     if (!text || isLoading) return;
 
-    // 1. 年齢の入力フェーズ
-    if (onboardingStep === 'age') {
-      const matchNum = text.match(/\d+/);
-      const parsedAge = matchNum ? parseInt(matchNum[0], 10) : text;
-      onUpdateProfile?.({ age: parsedAge });
-
-      const newMessages: ChatMessage[] = [...messages, { role: 'user', content: text }];
-      setMessages(newMessages);
-      setInputText('');
-      setIsLoading(true);
-
-      setTimeout(() => {
-        setIsLoading(false);
-        setMessages([
-          ...newMessages,
-          {
-            role: 'assistant',
-            content: "ありがとうございます！\n\n次に、差し支えなければ【性別】を教えていただけますか？"
-          }
-        ]);
-        setOnboardingStep('gender');
-      }, 450);
-      return;
-    }
-
-    // 2. 性別の入力フェーズ（手入力された場合）
-    if (onboardingStep === 'gender') {
-      processGenderInput(text);
-      return;
-    }
-
-    // 3. 通常のAI対話フェーズ
     const newMessages: ChatMessage[] = [...messages, { role: 'user', content: text }];
     setMessages(newMessages);
     setInputText('');
@@ -197,7 +93,8 @@ export const ChatMode: React.FC<ChatModeProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: messages,
-          user_input: text
+          user_input: text,
+          user_profile: userProfile || undefined
         })
       });
 
@@ -276,7 +173,6 @@ export const ChatMode: React.FC<ChatModeProps> = ({
     }
   };
 
-
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -320,32 +216,6 @@ export const ChatMode: React.FC<ChatModeProps> = ({
             <span>BFI-2-S 心理測定アンケートへ進む</span>
           </button>
         )}
-        {onboardingStep === 'gender' && (
-          <div className="gender-chips-wrapper" style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
-            {['男性', '女性', 'その他', '回答しない'].map((g) => (
-              <button
-                key={g}
-                type="button"
-                onClick={() => handleSelectGender(g)}
-                disabled={isLoading}
-                style={{
-                  padding: '6px 14px',
-                  borderRadius: '9999px',
-                  border: '1px solid #cbd5e1',
-                  backgroundColor: '#ffffff',
-                  color: '#1e293b',
-                  fontSize: '0.85rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                {g}
-              </button>
-            ))}
-          </div>
-        )}
 
         <form onSubmit={handleSend} style={{ display: 'flex', gap: 8 }}>
           <textarea
@@ -355,13 +225,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={
-              onboardingStep === 'age'
-                ? "ご年齢を入力（例: 21歳、20代）..."
-                : onboardingStep === 'gender'
-                ? "性別を入力（上のボタンまたは手入力）..."
-                : "メッセージを入力..."
-            }
+            placeholder="メッセージを入力..."
             disabled={isLoading}
           />
           <button 
