@@ -117,39 +117,45 @@ function extractResponseText(data: any): string {
 
 /**
  * ステップ1: 分析官AI (Route: dynamic/llm5-analyst)
- * AI GatewayのDynamic Route設定（Clef-flash等）に委ね、未測定因子と次の質問戦略を高速策定
+ * AI GatewayのDynamic Route設定（Clef-flash）に対応
+ * Clef-flashの必須プロパティ: { model, state, questions } を送信
  */
 export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<AnalystStrategy> {
   const dialogueHistory = messages
     .map(m => `${m.role === 'user' ? 'ユーザー' : '質問係'}: ${m.content}`)
     .join('\n');
-
-  const analystSystemPrompt = `
-あなたはビッグファイブ理論（主要5因子: 開放性, 誠実性, 外向性, 協調性, 情緒安定性）に基づく心理分析ストラテジストです。
-あなたの役割は、ユーザーの「自己申告（私は○○な性格です等）」ではなく、過去に経験した【具体的な行動エピソード（事実）】から客観的な性格特性を判定することです。
-
-【重要：行動面接（BEI）の原則】
-- 「あなたはAタイプですか？それともBタイプですか？」のような二者択一や直接の性格確認は絶対に指示しないでください。
-- ユーザーが話している主要な活動（仕事、学業、サークル、趣味等）を土台として認識し、そのフィールドの中で未測定の因子が現れる「具体的エピソード（ハプニングへの対処、他者との関わり、新しい試みなど）」を引き出すシチュエーションを質問係に指示してください。
-
-【因子の引き出し例】
-- 誠実性/情緒安定性: 「その活動の中で最近起きた想定外のハプニングや計画の狂いと、その時どう対処したか」
-- 協調性/外向性: 「誰かと意見が分かれた場面や、周囲と足並みを揃えて何かを進めた際のエピソード」
-- 開放性: 「最近新しく取り入れてみた工夫や、好奇心から試してみたこと」
-
-【判定基準】
-- 5因子の客観的エピソードが3〜4往復程度で十分に集まった場合のみ is_ready_for_final_analysis を true にしてください。
-
-必ず以下のJSON形式のみを出力してください（Markdownコードブロックは含めず純粋なJSONのみ）:
-{
-  "focus_dimension": "狙う因子名 (例: 誠実性)",
-  "target_question_strategy": "質問係への指示 (例: ユーザーの活動において、最近予定や計画が大きく狂ったハプニングと、その時どう乗り切ったかの具体例を尋ねさせる)",
-  "is_ready_for_final_analysis": false
-}
-`;
+  const userCount = messages.filter(m => m.role === 'user').length;
 
   const endpoint = getGatewayCompatUrl(env);
   const headers = getGatewayHeaders(env);
+
+  // Clef-flash が要求する意思決定スキーマ (Jev / System One 互換)
+  const clefState = `【対話履歴】\n${dialogueHistory}\n\nユーザー発話回数: ${userCount}回`;
+  const clefQuestions = [
+    {
+      id: "is_ready",
+      type: "noul",
+      question: "これまでの対話から、ビッグファイブ性格診断を客観的・精密に行うのに十分な具体的行動エピソードが集まりましたか？（3〜4往復以上の具体的な対話実績がある場合にyes）"
+    },
+    {
+      id: "focus_dimension",
+      type: "choice",
+      question: "次の質問で深掘りすべき、情報が最も不足しているビッグファイブ性格因子はどれですか？",
+      options: ["開放性", "誠実性", "外向性", "協調性", "情緒安定性"]
+    },
+    {
+      id: "strategy_type",
+      type: "choice",
+      question: "その因子を測定するために尋ねるべき、最も適切な行動エピソードのシチュエーションはどれですか？",
+      options: [
+        "想定外のハプニングや予定の狂いへの対処エピソード",
+        "周囲と意見が分かれた場面や協力して進めたエピソード",
+        "新しく試みた工夫や好奇心・関心から始めた行動",
+        "初対面や大人数の場、日常での対人関係のスタンス",
+        "プレッシャーや感情の浮き沈みへのセルフコントロール"
+      ]
+    }
+  ];
 
   try {
     const res = await fetch(endpoint, {
@@ -157,16 +163,37 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
       headers,
       body: JSON.stringify({
         model: 'dynamic/llm5-analyst',
-        messages: [
-          { role: 'system', content: analystSystemPrompt },
-          { role: 'user', content: `【対話履歴】\n${dialogueHistory}\n\n分析と次の質問戦略をJSONで出力してください。` }
-        ],
-        temperature: 0.2
+        state: clefState,
+        questions: clefQuestions
       })
     });
 
     if (res.ok) {
-      const data = await res.json();
+      const data: any = await res.json();
+
+      // 1. Clef-flash 意思決定レスポンス (answers) を解析
+      const answers = data?.result?.answers || data?.answers;
+      if (answers) {
+        const isReadyNoul = answers.is_ready;
+        const isReadyProb = typeof isReadyNoul === 'number' ? isReadyNoul : (isReadyNoul?.yes_probability ?? 0);
+        const isReady = isReadyProb >= 0.65 || userCount >= 4;
+
+        const focusDim = answers.focus_dimension?.choice || answers.focus_dimension || '誠実性';
+        const strategyChoice = answers.strategy_type?.choice || answers.strategy_type || '想定外のハプニングや予定の狂いへの対処エピソード';
+
+        const targetStrategy = isReady
+          ? '十分な情報が集まったので、これまでの対話に共感しつつ性格分析レポートの生成を案内してください。'
+          : `${focusDim}の特性を客観的に測定するため、ユーザーの主要な活動の中で「${strategyChoice}」についての具体的な過去の体験・エピソードを尋ねてください。`;
+
+        return {
+          focus_dimension: focusDim,
+          target_question_strategy: targetStrategy,
+          is_ready_for_final_analysis: isReady,
+          notes: `Clef-flash (via dynamic/llm5-analyst, prob: ${typeof isReadyProb === 'number' ? isReadyProb.toFixed(2) : isReadyProb})`
+        };
+      }
+
+      // 2. 通常のチャットLLM形式（JSON出力）へのフォールバック対応
       const rawText = extractResponseText(data);
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
@@ -180,8 +207,7 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
     console.error('Analyst Route fetch error:', err);
   }
 
-  // フォールバック
-  const userCount = messages.filter(m => m.role === 'user').length;
+  // フォールバック（発話ターン数ベースのルール判定）
   const isReady = userCount >= 4;
   return {
     focus_dimension: isReady ? '全体' : '行動特性',
