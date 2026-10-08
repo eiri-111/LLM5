@@ -17,9 +17,6 @@ export const ResearchConsentModal: React.FC<ResearchConsentModalProps> = ({
   const [gender, setGender] = useState<GenderType>(
     (initialProfile?.gender as GenderType) || 'male'
   );
-  const [studentId, setStudentId] = useState<string>(
-    initialProfile?.student_id || ''
-  );
   const [hasAgreed, setHasAgreed] = useState<boolean>(false);
   const [isDetailOpen, setIsDetailOpen] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -39,8 +36,7 @@ export const ResearchConsentModal: React.FC<ResearchConsentModalProps> = ({
 
     const profile: UserProfile = {
       age: parsedAge,
-      gender,
-      student_id: studentId.trim() || undefined
+      gender
     };
 
     setErrorMessage(null);
@@ -94,7 +90,7 @@ export const ResearchConsentModal: React.FC<ResearchConsentModalProps> = ({
           </p>
         </div>
 
-        {/* 3つの要点バッジ (スッキリ読みやすい) */}
+        {/* 3つの要点バッジ */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(3, 1fr)',
@@ -109,8 +105,8 @@ export const ResearchConsentModal: React.FC<ResearchConsentModalProps> = ({
             textAlign: 'center'
           }}>
             <Lock size={16} style={{ margin: '0 auto 4px', color: '#3b82f6' }} />
-            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e293b' }}>完全匿名</div>
-            <div style={{ fontSize: '0.65rem', color: '#64748b' }}>乱数ID管理</div>
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e293b' }}>安全な暗号化</div>
+            <div style={{ fontSize: '0.65rem', color: '#64748b' }}>個人情報非収集</div>
           </div>
           <div style={{
             padding: '10px 8px',
@@ -131,12 +127,12 @@ export const ResearchConsentModal: React.FC<ResearchConsentModalProps> = ({
             textAlign: 'center'
           }}>
             <GraduationCap size={16} style={{ margin: '0 auto 4px', color: '#8b5cf6' }} />
-            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e293b' }}>学術目的</div>
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e293b' }}>学術研究</div>
             <div style={{ fontSize: '0.65rem', color: '#64748b' }}>心理尺度検証</div>
           </div>
         </div>
 
-        {/* アコーディオン式 詳細研究倫理説明 */}
+        {/* 研究目的・プライバシー説明 */}
         <div style={{
           marginBottom: '1.25rem',
           border: '1px solid #e2e8f0',
@@ -162,7 +158,7 @@ export const ResearchConsentModal: React.FC<ResearchConsentModalProps> = ({
           >
             <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <ShieldCheck size={14} color="#3b82f6" />
-              研究目的・プライバシー取り扱いの詳細
+              研究目的・データの取り扱いについて
             </span>
             {isDetailOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
@@ -175,13 +171,13 @@ export const ResearchConsentModal: React.FC<ResearchConsentModalProps> = ({
               backgroundColor: '#ffffff',
               borderTop: '1px solid #e2e8f0'
             }}>
-              <p style={{ marginBottom: '6px' }}>
+              <p style={{ marginBottom: '8px' }}>
                 <strong>【研究目的】</strong><br />
                 本研究は、AIとの自由対話から推定されるビッグファイブ性格因子と、標準心理測定尺度（BFI-2-S）のスコアを比較し、より妥当性の高い対話型特性理解の確立を目指すものです。
               </p>
-              <p style={{ marginBottom: '6px' }}>
-                <strong>【データの保護】</strong><br />
-                対話ログおよびアンケート回答は暗号化され、学術研究（論文・統計分析）にのみ利用されます。氏名やメールアドレス等の直接的な個人情報は収集しません。
+              <p style={{ marginBottom: '8px' }}>
+                <strong>【データの取り扱い】</strong><br />
+                対話ログおよびアンケート回答は暗号化し、安全なデータベースに保存され、学術研究（論文・統計分析）にのみ利用されます。氏名やメールアドレス等の直接的な個人情報は収集しません。
               </p>
               <p>
                 <strong>【中断の権利】</strong><br />
@@ -216,7 +212,7 @@ export const ResearchConsentModal: React.FC<ResearchConsentModalProps> = ({
             {/* 年齢入力 */}
             <div style={{ marginBottom: '10px' }}>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
-                ご年齢 <span style={{ color: '#ef4444' }}>*</span>
+                年齢 <span style={{ color: '#ef4444' }}>*</span>
               </label>
               <div style={{ position: 'relative' }}>
                 <input
@@ -252,7 +248,7 @@ export const ResearchConsentModal: React.FC<ResearchConsentModalProps> = ({
             </div>
 
             {/* 性別選択 (ピル型ボタン) */}
-            <div style={{ marginBottom: '10px' }}>
+            <div>
               <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>
                 性別 <span style={{ color: '#ef4444' }}>*</span>
               </label>
@@ -285,29 +281,6 @@ export const ResearchConsentModal: React.FC<ResearchConsentModalProps> = ({
                   );
                 })}
               </div>
-            </div>
-
-            {/* 学籍番号 (任意) */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 500, color: '#64748b', marginBottom: '4px' }}>
-                学籍番号 / 参加ID <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>(指示がある場合のみ)</span>
-              </label>
-              <input
-                type="text"
-                placeholder="例: KGU12345"
-                value={studentId}
-                onChange={(e) => setStudentId(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  borderRadius: '10px',
-                  border: '1px solid #e2e8f0',
-                  fontSize: '0.82rem',
-                  fontFamily: 'monospace',
-                  color: '#334155',
-                  outline: 'none'
-                }}
-              />
             </div>
           </div>
 
