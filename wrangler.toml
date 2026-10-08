@@ -23,3 +23,7 @@ database_id = "9cdaa476-7091-4e37-b67f-f3c2af7cfb55"
 binding = "BUCKET"
 bucket_name = "llm-db-r2"
 
+# Cloudflare Workers AI バインディング (Clef-flash意思決定モデル)
+[ai]
+binding = "AI"
+
