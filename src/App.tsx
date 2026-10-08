@@ -28,18 +28,32 @@ export const App: React.FC = () => {
   const [sessionId, setSessionId] = useState<string>(generateSessionId);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
+  // 動作確認・スキップモード管理
+  const [isSkippedMode, setIsSkippedMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const search = window.location.search;
+      return search.includes('survey') || search.includes('skip');
+    }
+    return false;
+  });
+
   // 画面フェーズ: 'chat' | 'survey' | 'result'
   const [phase, setPhase] = useState<AppPhase>(() => {
-    if (typeof window !== 'undefined' && window.location.search.includes('sample')) {
-      return 'result';
+    if (typeof window !== 'undefined') {
+      const search = window.location.search;
+      if (search.includes('sample')) return 'result';
+      if (search.includes('survey') || search.includes('skip')) return 'survey';
     }
     return 'chat';
   });
 
   // AI分析結果 & 質問紙結果
   const [aiAnalysisResult, setAiAnalysisResult] = useState<AnalysisResult | null>(() => {
-    if (typeof window !== 'undefined' && window.location.search.includes('sample')) {
-      return SAMPLE_ANALYSIS_RESULT;
+    if (typeof window !== 'undefined') {
+      const search = window.location.search;
+      if (search.includes('sample') || search.includes('survey') || search.includes('skip')) {
+        return SAMPLE_ANALYSIS_RESULT;
+      }
     }
     return null;
   });
@@ -251,8 +265,43 @@ export const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  /**
+   * 動作確認用: LLMによる性格検査をスキップして質問紙（アンケート）回答画面へ直接移動
+   */
+  const handleSkipToSurvey = () => {
+    setIsSkippedMode(true);
+    // AI分析結果としてサンプルデータを適用（質問紙回答完了後のレーダーチャート照合用）
+    if (!aiAnalysisResult) {
+      setAiAnalysisResult(SAMPLE_ANALYSIS_RESULT);
+    }
+    if (!userProfile) {
+      const defaultProfile: UserProfile = {
+        age: 20,
+        gender: 'unspecified'
+      };
+      setUserProfile(defaultProfile);
+      try {
+        localStorage.setItem('llm5_user_profile', JSON.stringify(defaultProfile));
+      } catch (_) {}
+    }
+    setIsAiAnalyzing(false);
+    setIsPreparingQualtrics(false);
+    setPhase('survey');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    showToast('LLM性格検査をスキップし、質問紙の回答画面へ移動しました（動作確認モード）');
+  };
+
+  /**
+   * 質問紙画面からAI対話画面へ戻る
+   */
+  const handleBackToChat = () => {
+    setPhase('chat');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleRetake = () => {
     setPhase('chat');
+    setIsSkippedMode(false);
     setAiAnalysisResult(null);
     setSurveyResult(null);
     setChatMessages([]);
@@ -290,6 +339,7 @@ export const App: React.FC = () => {
             userProfile={userProfile}
             onUpdateProfile={handleUpdateProfile}
             onStartSurvey={handleStartSurvey}
+            onSkipToSurvey={handleSkipToSurvey}
             showToast={showToast}
             onShowSample={handleShowSample}
           />
@@ -301,6 +351,9 @@ export const App: React.FC = () => {
             isAiAnalyzing={isAiAnalyzing}
             onCompleteSurvey={handleCompleteSurvey}
             showToast={showToast}
+            onBackToChat={handleBackToChat}
+            isSkippedMode={isSkippedMode}
+            qualtricsUrl={`${QUALTRICS_SURVEY_URL}?user_id=${encodeURIComponent(sessionId)}&session_id=${encodeURIComponent(sessionId)}`}
           />
         )}
 

@@ -1,20 +1,26 @@
 import React, { useState } from 'react';
 import { ScaleType, SurveyResult, UserProfile } from '../types';
 import { PERSONALITY_SCALES, calculateSurveyScores } from '../data/personalityScales';
-import { ClipboardCheck, Sparkles, Loader2, UserCheck, HelpCircle } from 'lucide-react';
+import { ClipboardCheck, Sparkles, Loader2, UserCheck, HelpCircle, ArrowLeft, ExternalLink, Beaker } from 'lucide-react';
 
 interface SurveySectionProps {
   userProfile: UserProfile | null;
   isAiAnalyzing: boolean;
   onCompleteSurvey: (surveyResult: SurveyResult) => void;
   showToast: (msg: string) => void;
+  onBackToChat?: () => void;
+  isSkippedMode?: boolean;
+  qualtricsUrl?: string;
 }
 
 export const SurveySection: React.FC<SurveySectionProps> = ({
   userProfile,
   isAiAnalyzing,
   onCompleteSurvey,
-  showToast
+  showToast,
+  onBackToChat,
+  isSkippedMode,
+  qualtricsUrl
 }) => {
   const [selectedScale, setSelectedScale] = useState<ScaleType>('tipi-j');
   const [answers, setAnswers] = useState<Record<number, number>>({});
@@ -62,10 +68,58 @@ export const SurveySection: React.FC<SurveySectionProps> = ({
 
   return (
     <div className="survey-view-container">
+      {/* ナビゲーションバー */}
+      <div className="survey-top-nav" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        {onBackToChat && (
+          <button
+            type="button"
+            onClick={onBackToChat}
+            className="btn-back-chat"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 14px',
+              borderRadius: '9999px',
+              background: '#f1f5f9',
+              border: '1px solid #cbd5e1',
+              color: '#475569',
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            <ArrowLeft size={15} />
+            <span>AI対話画面へ戻る</span>
+          </button>
+        )}
+        {qualtricsUrl && (
+          <a
+            href={qualtricsUrl}
+            className="btn-qualtrics-link"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              color: '#6366f1',
+              fontSize: '0.8rem',
+              fontWeight: 500,
+              textDecoration: 'none'
+            }}
+          >
+            <span>Qualtrics質問紙へ移動</span>
+            <ExternalLink size={13} />
+          </a>
+        )}
+      </div>
+
       {/* AI並行分析ステータスバナー */}
-      <div className="ai-status-banner">
+      <div className={`ai-status-banner ${isSkippedMode ? 'skipped' : ''}`} style={isSkippedMode ? { borderColor: '#fde047', background: 'rgba(254, 240, 138, 0.15)' } : {}}>
         <div className="ai-status-icon-box">
-          {isAiAnalyzing ? (
+          {isSkippedMode ? (
+            <Beaker size={20} className="text-amber-500" style={{ color: '#d97706' }} />
+          ) : isAiAnalyzing ? (
             <Loader2 size={20} className="spinner text-indigo-600" />
           ) : (
             <Sparkles size={20} className="text-emerald-500" />
@@ -73,22 +127,26 @@ export const SurveySection: React.FC<SurveySectionProps> = ({
         </div>
         <div className="ai-status-content">
           <div className="ai-status-title">
-            {isAiAnalyzing ? (
+            {isSkippedMode ? (
+              <span style={{ color: '#b45309', fontWeight: 700 }}>動作確認モード（LLM対話スキップ中） 🧪</span>
+            ) : isAiAnalyzing ? (
               <span>AI分析官が対話ログを深層プロファイリング中... ⚡</span>
             ) : (
               <span className="text-emerald-700 font-bold">AIの対話分析が準備完了しました！✨</span>
             )}
           </div>
           <p className="ai-status-desc">
-            {isAiAnalyzing
+            {isSkippedMode
+              ? 'LLMによる対話検査をスキップして質問紙画面を表示しています。回答を完了すると、サンプルAI推定値との比較照合レポート・レーダーチャートを確認できます。'
+              : isAiAnalyzing
               ? '分析が完了する間に、客観的検証用の心理尺度（質問紙アンケート）にご回答ください。回答完了と同時に両方の照合レポートが表示されます。'
               : '質問紙の回答が完了すると、AIの推定スコアと質問紙測定値の完全な比較照合レポートを表示します。'}
           </p>
         </div>
-        {userProfile && (
+        {userProfile && (userProfile.student_id || userProfile.age || userProfile.gender) && (
           <div className="survey-user-badge">
             <UserCheck size={13} />
-            <span>{userProfile.student_id}</span>
+            <span>{userProfile.student_id || (userProfile.age ? `${userProfile.age}歳` : '被験者')}</span>
           </div>
         )}
       </div>

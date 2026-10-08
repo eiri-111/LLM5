@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, Eye } from 'lucide-react';
+import { Send, Sparkles, Eye, ClipboardCheck } from 'lucide-react';
 import { ChatMessage, AnalysisResult, UserProfile } from '../types';
 
 interface ChatModeProps {
   userProfile: UserProfile | null;
   onUpdateProfile?: (profile: Partial<UserProfile>) => void;
   onStartSurvey: (messages: ChatMessage[]) => void;
+  onSkipToSurvey?: () => void;
   showToast: (msg: string) => void;
   onShowSample?: () => void;
 }
@@ -29,6 +30,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
   userProfile,
   onUpdateProfile,
   onStartSurvey,
+  onSkipToSurvey,
   showToast,
   onShowSample
 }) => {
@@ -231,17 +233,30 @@ export const ChatMode: React.FC<ChatModeProps> = ({
           <span className="chat-app-name">LLM5</span>
           <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500, marginLeft: '0.25rem' }}>AI性格対話診断</span>
         </div>
-        {onShowSample && (
-          <button 
-            type="button" 
-            onClick={onShowSample} 
-            className="btn-sample-preview"
-            title="分析結果のサンプルを表示"
-          >
-            <Eye size={15} />
-            <span>結果サンプル</span>
-          </button>
-        )}
+        <div className="chat-header-actions" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+          {onSkipToSurvey && (
+            <button 
+              type="button" 
+              onClick={onSkipToSurvey} 
+              className="btn-skip-survey"
+              title="動作確認用: LLM性格検査をスキップして質問紙（アンケート）回答画面へ移動"
+            >
+              <ClipboardCheck size={14} />
+              <span>質問紙へスキップ</span>
+            </button>
+          )}
+          {onShowSample && (
+            <button 
+              type="button" 
+              onClick={onShowSample} 
+              className="btn-sample-preview"
+              title="分析結果のサンプルを表示"
+            >
+              <Eye size={14} />
+              <span>結果サンプル</span>
+            </button>
+          )}
+        </div>
       </header>
 
       <div className="chat-scroll-area" ref={scrollRef}>
@@ -327,6 +342,26 @@ export const ChatMode: React.FC<ChatModeProps> = ({
             <Send size={18} />
           </button>
         </form>
+
+        {onSkipToSurvey && (
+          <div style={{ textAlign: 'center', marginTop: '6px' }}>
+            <button
+              type="button"
+              onClick={onSkipToSurvey}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#64748b',
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                padding: '2px 6px'
+              }}
+            >
+              ※ 動作確認用: LLM対話をスキップして質問紙（アンケート）へ進む
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

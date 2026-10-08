@@ -187,6 +187,31 @@ body {
   transform: scale(0.96);
 }
 
+.btn-skip-survey {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--radius-full);
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #059669;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-skip-survey:hover {
+  background: rgba(16, 185, 129, 0.16);
+  border-color: #059669;
+  color: #047857;
+}
+
+.btn-skip-survey:active {
+  transform: scale(0.96);
+}
+
 /* Chat Messages Area (Full Screen) */
 .chat-scroll-area {
   flex: 1;
@@ -1475,5 +1500,21 @@ body {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+.ai-status-banner.skipped {
+  border-left-color: #f59e0b;
+}
+
+.btn-back-chat:hover {
+  background: #e2e8f0 !important;
+  color: #1e293b !important;
+  border-color: #94a3b8 !important;
+}
+
+.btn-qualtrics-link:hover {
+  text-decoration: underline !important;
+  color: #4f46e5 !important;
+}
+
 
 
