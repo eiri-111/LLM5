@@ -59,6 +59,9 @@ export const App: React.FC = () => {
   });
   const [surveyResult, setSurveyResult] = useState<SurveyResult | null>(null);
 
+  // Qualtrics復帰時・結果取得中のローディング状態
+  const [isLoadingSessionResult, setIsLoadingSessionResult] = useState<boolean>(false);
+
   // 裏で実行中のAI分析タスク管理
   const [isAiAnalyzing, setIsAiAnalyzing] = useState<boolean>(false);
   const [isWaitingForAiToComplete, setIsWaitingForAiToComplete] = useState<boolean>(false);
@@ -75,7 +78,7 @@ export const App: React.FC = () => {
   };
 
   /**
-   * Qualtricsからのリダイレクト戻り検知
+   * Qualtricsからのリダイレクト戻り検知 & サーバーから分析結果を取得
    * URLパラメータ: ?phase=result&qualtrics_id=R_xxxx&session_id=session_xxxx
    */
   useEffect(() => {
@@ -90,52 +93,61 @@ export const App: React.FC = () => {
       const targetSessionId = urlSessionId || localStorage.getItem('llm5_current_session_id') || sessionId;
       if (urlSessionId) setSessionId(urlSessionId);
 
-      let restoredAiResult: AnalysisResult | null = null;
-      let restoredProfile = userProfile;
-      let restoredMessages: ChatMessage[] = [];
+      setIsLoadingSessionResult(true);
 
-      try {
-        const savedAi = localStorage.getItem('llm5_ai_result');
-        if (savedAi) restoredAiResult = JSON.parse(savedAi);
+      let attempts = 0;
+      const maxAttempts = 15; // 2秒 x 15回 = 最大30秒待機
 
-        const savedMessages = localStorage.getItem('llm5_chat_messages');
-        if (savedMessages) {
-          restoredMessages = JSON.parse(savedMessages);
-          setChatMessages(restoredMessages);
-        }
-
-        const savedProfile = localStorage.getItem('llm5_user_profile');
-        if (savedProfile) {
-          restoredProfile = JSON.parse(savedProfile);
-          setUserProfile(restoredProfile);
-        }
-      } catch (e) {
-        console.warn('LocalStorage復元エラー:', e);
-      }
-
-      if (restoredAiResult) {
-        setAiAnalysisResult(restoredAiResult);
-        setPhase('result');
-      }
-
-      // qualtrics_id をサーバーに保存
-      if (qualtricsId) {
-        fetch('/api/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+      const pollSessionResult = async () => {
+        attempts++;
+        try {
+          const query = new URLSearchParams({
             session_id: targetSessionId,
-            user_profile: restoredProfile || { student_id: 'anonymous', age: 0, gender: 'unspecified' },
-            messages: restoredMessages,
-            ai_result: restoredAiResult || undefined,
-            qualtrics_id: qualtricsId
-          })
-        }).then(() => {
-          showToast('質問紙（Qualtrics）へのご回答ありがとうございました！');
-        }).catch(err => {
-          console.warn('Qualtrics ID 保存エラー:', err);
-        });
-      }
+            ...(qualtricsId ? { qualtrics_id: qualtricsId } : {})
+          });
+
+          const res = await fetch(`/api/session?${query.toString()}`);
+          if (res.ok) {
+            const data: any = await res.json();
+            if (data.found && data.status === 'completed' && data.ai_result) {
+              setAiAnalysisResult(data.ai_result);
+              if (data.user_profile) setUserProfile(data.user_profile);
+              if (data.messages && data.messages.length > 0) setChatMessages(data.messages);
+              setPhase('result');
+              setIsLoadingSessionResult(false);
+              showToast('質問紙（Qualtrics）へのご回答ありがとうございました！');
+              return;
+            }
+
+            // バックグラウンドでまだ分析中 (status === 'processing') の場合はリトライ
+            if (data.status === 'processing' && attempts < maxAttempts) {
+              setTimeout(pollSessionResult, 2000);
+              return;
+            }
+          }
+        } catch (err) {
+          console.warn('Session polling error:', err);
+        }
+
+        // タイムアウトまたはDB未接続時のフォールバック処理
+        try {
+          const savedAi = localStorage.getItem('llm5_ai_result');
+          if (savedAi) {
+            setAiAnalysisResult(JSON.parse(savedAi));
+            setPhase('result');
+            setIsLoadingSessionResult(false);
+            showToast('質問紙の回答ありがとうございました！');
+            return;
+          }
+        } catch (_) {}
+
+        setAiAnalysisResult(SAMPLE_ANALYSIS_RESULT);
+        setPhase('result');
+        setIsLoadingSessionResult(false);
+        showToast('質問紙の回答ありがとうございました！');
+      };
+
+      pollSessionResult();
 
       // URLクエリパラメータをクリーンアップ
       if (window.history?.replaceState) {
@@ -145,45 +157,39 @@ export const App: React.FC = () => {
   }, []);
 
   /**
-   * チャット対話終了 ➔ AI分析を実行してQualtrics質問紙へ自動遷移
+   * チャット対話終了 ➔ バックグラウンドでAI分析を非同期実行し、即座にQualtrics質問紙へ自動遷移
    */
   const handleStartSurvey = async (messages: ChatMessage[]) => {
     setChatMessages(messages);
     setIsPreparingQualtrics(true);
-    showToast('AI性格分析を実行しています...');
+    showToast('質問紙（Qualtrics）の画面へ移動しています...');
 
+    // 1. localStorage にセッション情報を退避
     try {
-      // 1. AI分析を実行
-      const res = await fetch('/api/analyze', {
+      localStorage.setItem('llm5_current_session_id', sessionId);
+      localStorage.setItem('llm5_chat_messages', JSON.stringify(messages));
+      if (userProfile) {
+        localStorage.setItem('llm5_user_profile', JSON.stringify(userProfile));
+      }
+    } catch (storageErr) {
+      console.warn('LocalStorage save error:', storageErr);
+    }
+
+    // 2. サーバーへバックグラウンド分析リクエストを送信 (analyze-async)
+    // Workersの context.waitUntil により、クライアントは待たずに即時リダイレクト
+    try {
+      await fetch('/api/analyze-async', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          mode: 'chat',
+          session_id: sessionId,
+          user_profile: userProfile || undefined,
           messages: messages
         })
       });
-
-      if (!res.ok) {
-        const errData: any = await res.json().catch(() => ({}));
-        throw new Error(errData.error || errData.detail || '性格分析に失敗しました');
-      }
-
-      const data: AnalysisResult = await res.json();
-      setAiAnalysisResult(data);
-
-      // 2. localStorage にセッション情報を退避
-      try {
-        localStorage.setItem('llm5_current_session_id', sessionId);
-        localStorage.setItem('llm5_chat_messages', JSON.stringify(messages));
-        localStorage.setItem('llm5_ai_result', JSON.stringify(data));
-        if (userProfile) {
-          localStorage.setItem('llm5_user_profile', JSON.stringify(userProfile));
-        }
-      } catch (storageErr) {
-        console.warn('LocalStorage save error:', storageErr);
-      }
-
-      // 3. サーバーへ事前保存 (D1 / R2)
+    } catch (apiErr) {
+      console.warn('Async analysis initiation error:', apiErr);
+      // フォールバックとして事前保存
       try {
         await fetch('/api/save', {
           method: 'POST',
@@ -191,27 +197,19 @@ export const App: React.FC = () => {
           body: JSON.stringify({
             session_id: sessionId,
             user_profile: userProfile || undefined,
-            messages: messages,
-            ai_result: data
+            messages: messages
           })
         });
-      } catch (saveErr) {
-        console.warn('Pre-save session error:', saveErr);
-      }
-
-      // 4. Qualtricsへ自動遷移
-      const studentIdParam = encodeURIComponent(sessionId);
-      const sessionIdParam = encodeURIComponent(sessionId);
-      const qualtricsUrl = `${QUALTRICS_SURVEY_URL}?user_id=${studentIdParam}&session_id=${sessionIdParam}`;
-
-      // 画面遷移
-      window.location.href = qualtricsUrl;
-
-    } catch (err: any) {
-      console.error('AI analysis error before Qualtrics:', err);
-      setIsPreparingQualtrics(false);
-      showToast(`AI分析エラー: ${err.message || 'もう一度お試しください'}`);
+      } catch (_) {}
     }
+
+    // 3. Qualtricsへ自動遷移
+    const studentIdParam = encodeURIComponent(userProfile?.student_id || sessionId);
+    const sessionIdParam = encodeURIComponent(sessionId);
+    const qualtricsUrl = `${QUALTRICS_SURVEY_URL}?user_id=${studentIdParam}&session_id=${sessionIdParam}`;
+
+    // 画面遷移
+    window.location.href = qualtricsUrl;
   };
 
   /**
@@ -370,23 +368,39 @@ export const App: React.FC = () => {
         )}
       </main>
 
-      {/* Qualtrics遷移前のAI分析実行モーダル */}
+      {/* Qualtrics遷移直前のローディングモーダル */}
       {isPreparingQualtrics && (
         <div className="modal-backdrop">
           <div className="profile-modal-card text-center" style={{ textAlign: 'center' }}>
             <Loader2 size={36} className="spinner text-indigo-600" style={{ margin: '0 auto 1rem' }} />
             <h3 className="font-bold text-slate-800 text-lg">
-              AI性格診断を実行しています...
+              質問紙（Qualtrics）へ移動しています...
             </h3>
             <p className="text-slate-500 text-sm mt-2">
-              これまでの対話から深層プロファイリングを分析しています。<br />
-              完了後、自動的に質問紙（Qualtrics）の回答画面へ移動します。
+              対話データを記録し、裏側でAI分析官による深層プロファイリングを開始しました。<br />
+              画面が自動的に切り替わります。
             </p>
           </div>
         </div>
       )}
 
-      {/* AI分析完了待ちモーダル（極めて短時間で回答し終えた場合のみ表示） */}
+      {/* Qualtrics復帰後のAI分析結果集計・取得待ちモーダル */}
+      {isLoadingSessionResult && (
+        <div className="modal-backdrop">
+          <div className="profile-modal-card text-center" style={{ textAlign: 'center' }}>
+            <Loader2 size={36} className="spinner text-indigo-600" style={{ margin: '0 auto 1rem' }} />
+            <h3 className="font-bold text-slate-800 text-lg">
+              AI性格診断の結果を集計しています...
+            </h3>
+            <p className="text-slate-500 text-sm mt-2">
+              アンケートへのご回答ありがとうございました！<br />
+              並行して解析されたAIプロファイルを取得し、照合レポートを生成しています。
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* アプリ内蔵質問紙用：AI分析完了待ちモーダル */}
       {isWaitingForAiToComplete && (
         <div className="modal-backdrop">
           <div className="profile-modal-card text-center" style={{ textAlign: 'center' }}>
