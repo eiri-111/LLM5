@@ -577,12 +577,19 @@ export async function runInterviewer(
 }
 
 /**
- * ステップ3: 最終性格分析 (Route: dynamic/llm5)
+ * ステップ3: 最終性格分析 (Route: dynamic/llm5-analyst ※Gemini)
  * AI GatewayのRoute設定に委ね、詳細なプロファイルJSONを生成
  */
-export async function runFinalAnalysis(env: Env, messages: ChatMessage[]): Promise<AnalysisResult> {
-  const endpoint = getGatewayCompatUrl(env);
+export async function runFinalAnalysis(
+  env: Env,
+  messages: ChatMessage[],
+  modelName: string = 'dynamic/llm5-analyst'
+): Promise<AnalysisResult> {
+  const endpoint = env.CF_AI_GATEWAY_ANALYST_URL && env.CF_AI_GATEWAY_ANALYST_URL.trim() !== ''
+    ? env.CF_AI_GATEWAY_ANALYST_URL.trim()
+    : getGatewayCompatUrl(env);
   const headers = getGatewayHeaders(env);
+  const targetModel = modelName || 'dynamic/llm5-analyst';
 
   const dialogueHistory = messages
     .map(m => `${m.role === 'user' ? 'ユーザー' : 'インタビュアー'}: ${m.content}`)
@@ -664,7 +671,7 @@ export async function runFinalAnalysis(env: Env, messages: ChatMessage[]): Promi
     method: 'POST',
     headers,
     body: JSON.stringify({
-      model: 'dynamic/llm5',
+      model: targetModel,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: `【対話履歴】\n${dialogueHistory}\n\n上記対話からビッグファイブ性格プロファイルをJSONで生成してください。` }
@@ -676,7 +683,7 @@ export async function runFinalAnalysis(env: Env, messages: ChatMessage[]): Promi
   if (!res.ok) {
     const errText = await res.text();
     console.error(`Final analysis fetch error (${res.status}):`, errText);
-    throw new Error(`AI Gateway (dynamic/llm5) 分析エラー [${res.status}]: ${errText || '詳細なし'}`);
+    throw new Error(`AI Gateway (${targetModel}) 分析エラー [${res.status}]: ${errText || '詳細なし'}`);
   }
 
   const data: any = await res.json();

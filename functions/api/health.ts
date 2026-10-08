@@ -17,8 +17,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       gateway_id: gatewayId,
       has_token: hasToken,
       routes: {
-        analyst: 'dynamic/llm5-analyst',
-        interviewer_and_report: 'dynamic/llm5'
+        analyst_and_report: 'dynamic/llm5-analyst',
+        interviewer: 'dynamic/llm5'
       },
       timestamp: new Date().toISOString()
     }),

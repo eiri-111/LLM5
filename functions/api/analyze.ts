@@ -19,7 +19,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       });
     }
 
-    // ステップ3: 最終性格分析 (Route: dynamic/llm5)
+    // ステップ3: 最終性格分析 (Route: dynamic/llm5-analyst ※Gemini)
     const result = await runFinalAnalysis(env, messages);
 
     return new Response(JSON.stringify(result), {
