@@ -4,7 +4,7 @@ import { ChatMode } from './components/ChatMode';
 import { ResultReport } from './components/ResultReport';
 import { SurveySection } from './components/SurveySection';
 import { SAMPLE_ANALYSIS_RESULT } from './data/sampleResult';
-import { Loader2, ShieldCheck } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { AdminDashboard } from './components/AdminDashboard';
 
 const QUALTRICS_SURVEY_URL = 'https://kobegakuinpsy.qualtrics.com/jfe/form/SV_eqUN3SQZ8LNdZ5Q';
@@ -539,26 +539,6 @@ export const App: React.FC = () => {
         </div>
       )}
 
-      {/* 研究者用管理画面リンク (URL直打ちまたはクリックでアクセス) */}
-      <footer className="w-full py-2.5 text-center text-xs text-slate-400 mt-auto border-t border-slate-800/10 z-10">
-        <div className="flex items-center justify-center gap-3">
-          <span>&copy; LLM5 Big Five Research</span>
-          <span>•</span>
-          <button
-            onClick={() => {
-              setIsAdminView(true);
-              if (window.history?.pushState) {
-                window.history.pushState(null, '', '/admin');
-              }
-            }}
-            className="text-slate-400 hover:text-slate-600 transition flex items-center gap-1 cursor-pointer bg-transparent border-0 text-xs"
-            title="研究者向け管理コンソール (/admin)"
-          >
-            <ShieldCheck size={13} />
-            <span>研究データ管理</span>
-          </button>
-        </div>
-      </footer>
     </div>
   );
 };

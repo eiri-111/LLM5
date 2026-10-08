@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, Eye, ClipboardCheck, RotateCcw, Bot } from 'lucide-react';
-import { ChatMessage, AnalysisResult, UserProfile, InterviewerModelType } from '../types';
+import { Send, Sparkles, Eye, ClipboardCheck, RotateCcw } from 'lucide-react';
+import { ChatMessage, AnalysisResult, UserProfile } from '../types';
 
 interface ChatModeProps {
   userProfile: UserProfile | null;
@@ -36,17 +36,6 @@ export const ChatMode: React.FC<ChatModeProps> = ({
   onShowSample,
   onResetChat
 }) => {
-  // 質問役モデル選択 ('dynamic/llm5' または 'dynamic/llm-qwen')
-  const [interviewerModel, setInterviewerModel] = useState<InterviewerModelType>(() => {
-    try {
-      const saved = localStorage.getItem('llm5_interviewer_model');
-      if (saved === 'dynamic/llm-qwen' || saved === 'dynamic/llm5') {
-        return saved as InterviewerModelType;
-      }
-    } catch (_) {}
-    return 'dynamic/llm5';
-  });
-
   // オンボーディング進行状況の復元
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>(() => {
     try {
@@ -116,12 +105,6 @@ export const ChatMode: React.FC<ChatModeProps> = ({
     } catch (_) {}
   }, [isReady]);
 
-  // 選択モデルの自動保存
-  useEffect(() => {
-    try {
-      localStorage.setItem('llm5_interviewer_model', interviewerModel);
-    } catch (_) {}
-  }, [interviewerModel]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -142,6 +125,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
         localStorage.removeItem('llm5_chat_messages');
         localStorage.removeItem('llm5_onboarding_step');
         localStorage.removeItem('llm5_chat_is_ready');
+        localStorage.removeItem('llm5_interviewer_model');
       } catch (_) {}
       onResetChat?.();
       showToast('会話をリセットしました');
@@ -230,8 +214,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: messages,
-          user_input: text,
-          model: interviewerModel
+          user_input: text
         })
       });
 
@@ -330,25 +313,6 @@ export const ChatMode: React.FC<ChatModeProps> = ({
           <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500, marginLeft: '0.25rem' }}>AI性格対話診断</span>
         </div>
         <div className="chat-header-actions" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-          {/* 質問役モデル切り替え */}
-          <div className="model-select-wrapper" title="質問役のAIモデルを切り替え">
-            <Bot size={13} style={{ color: '#6366f1', flexShrink: 0 }} />
-            <select
-              value={interviewerModel}
-              onChange={(e) => {
-                const nextModel = e.target.value as InterviewerModelType;
-                setInterviewerModel(nextModel);
-                showToast(`質問役を「${nextModel === 'dynamic/llm-qwen' ? 'Qwen (dynamic/llm-qwen)' : 'LLM5 (標準)'}」に切り替えました`);
-              }}
-              disabled={isLoading}
-              className="model-select-input"
-              aria-label="質問役AIモデルの選択"
-            >
-              <option value="dynamic/llm5">LLM5 (標準)</option>
-              <option value="dynamic/llm-qwen">Qwen (llm-qwen)</option>
-            </select>
-          </div>
-
           {/* 会話リセットボタン */}
           {messages.length > 1 && (
             <button

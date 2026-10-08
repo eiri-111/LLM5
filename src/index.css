@@ -212,41 +212,6 @@ body {
   transform: scale(0.96);
 }
 
-.model-select-wrapper {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0.35rem 0.65rem;
-  border-radius: var(--radius-full);
-  background: rgba(99, 102, 241, 0.08);
-  border: 1px solid rgba(99, 102, 241, 0.25);
-  font-size: 0.8rem;
-  color: #4f46e5;
-  transition: all 0.2s ease;
-}
-
-.model-select-wrapper:hover {
-  background: rgba(99, 102, 241, 0.14);
-  border-color: #6366f1;
-}
-
-.model-select-input {
-  background: transparent;
-  border: none;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: #4338ca;
-  cursor: pointer;
-  outline: none;
-  padding: 0;
-  font-family: inherit;
-}
-
-.model-select-input option {
-  background: #ffffff;
-  color: #1e293b;
-}
-
 .btn-reset-chat {
   display: inline-flex;
   align-items: center;
