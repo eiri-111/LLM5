@@ -6,7 +6,6 @@ export interface Env {
   DB?: D1Database;
   BUCKET?: R2Bucket;
   R2?: R2Bucket;
-  AI?: any; // Cloudflare Workers AI binding (@cf/cloudflare/clef-flash 等)
 }
 
 export interface ChatMessage {
@@ -117,139 +116,14 @@ function extractResponseText(data: any): string {
 }
 
 /**
- * Clef-flash の出力レスポンスを AnalystStrategy 型に変換
- */
-function parseClefResponse(data: any, userCount: number): AnalystStrategy | null {
-  try {
-    const answers = data?.result?.answers || data?.answers || data?.result || data;
-    if (!answers) return null;
-
-    // is_ready 判定: yes_probability が 0.65 以上、またはユーザー発話が4回以上
-    const isReadyNoul = answers.is_ready;
-    const isReadyProb = typeof isReadyNoul === 'number' ? isReadyNoul : (isReadyNoul?.yes_probability ?? 0);
-    const isReady = isReadyProb >= 0.65 || userCount >= 4;
-
-    // focus_dimension 判定
-    const focusDimChoice = answers.focus_dimension?.choice || answers.focus_dimension || '誠実性';
-
-    // strategy_type 判定
-    const strategyChoice = answers.strategy_type?.choice || answers.strategy_type || '想定外のハプニングや予定の狂いへの対処エピソード';
-
-    const targetStrategy = isReady
-      ? '十分な情報が集まったので、これまでの対話に共感しつつ性格分析レポートの生成を案内してください。'
-      : `${focusDimChoice}の特性を客観的に測定するため、ユーザーの主要な活動の中で「${strategyChoice}」についての具体的な過去の体験・エピソードを尋ねてください。`;
-
-    return {
-      focus_dimension: focusDimChoice,
-      target_question_strategy: targetStrategy,
-      is_ready_for_final_analysis: isReady,
-      notes: `Clef-flash Decision Model (@cf/cloudflare/clef-flash, prob: ${typeof isReadyProb === 'number' ? isReadyProb.toFixed(2) : isReadyProb})`
-    };
-  } catch (e) {
-    console.warn('Failed to parse Clef-flash response:', e);
-    return null;
-  }
-}
-
-/**
- * Cloudflare Clef-flash (@cf/cloudflare/clef-flash) による超高速意思決定分析 (~38.8ms)
- * Jev / System One API 互換の意思決定モデルスキーマ
- */
-async function callClefFlash(env: Env, dialogueHistory: string, userCount: number): Promise<AnalystStrategy | null> {
-  const accountId = env.CF_ACCOUNT_ID || DEFAULT_ACCOUNT_ID;
-  const gatewayId = env.CF_GATEWAY_ID || DEFAULT_GATEWAY_ID;
-
-  const state = `【対話履歴】\n${dialogueHistory}\n\n【コンテキスト】\nユーザー発話回数: ${userCount}回`;
-  const questions = [
-    {
-      id: "is_ready",
-      type: "noul",
-      question: "これまでの対話から、ビッグファイブ性格診断を客観的・精密に行うのに十分な具体的行動エピソードが集まりましたか？（3〜4往復以上の具体的な対話実績がある場合にyes）"
-    },
-    {
-      id: "focus_dimension",
-      type: "choice",
-      question: "次の質問で深掘りすべき、情報が最も不足しているビッグファイブ性格因子はどれですか？",
-      options: ["開放性", "誠実性", "外向性", "協調性", "情緒安定性"]
-    },
-    {
-      id: "strategy_type",
-      type: "choice",
-      question: "その因子を測定するために尋ねるべき、最も適切な行動エピソードのシチュエーションはどれですか？",
-      options: [
-        "想定外のハプニングや予定の狂いへの対処エピソード",
-        "周囲と意見が分かれた場面や協力して進めたエピソード",
-        "新しく試みた工夫や好奇心・関心から始めた行動",
-        "初対面や大人数の場、日常での対人関係のスタンス",
-        "プレッシャーや感情の浮き沈みへのセルフコントロール"
-      ]
-    }
-  ];
-
-  const payload = {
-    model: 'clef-flash',
-    state,
-    questions
-  };
-
-  // 1. Workers AI バインディング (env.AI) が存在する場合に直接実行
-  if (env.AI && typeof env.AI.run === 'function') {
-    try {
-      const aiRes: any = await env.AI.run('@cf/cloudflare/clef-flash', payload);
-      const parsed = parseClefResponse(aiRes, userCount);
-      if (parsed) return parsed;
-    } catch (aiErr) {
-      console.warn('env.AI.run clef-flash error, trying gateway endpoint:', aiErr);
-    }
-  }
-
-  // 2. Cloudflare AI Gateway Workers-AI エンドポイント経由
-  const gatewayClefUrl = `https://gateway.ai.cloudflare.com/v1/${accountId}/${gatewayId}/workers-ai/@cf/cloudflare/clef-flash`;
-  const headers = getGatewayHeaders(env);
-
-  try {
-    const res = await fetch(gatewayClefUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload)
-    });
-
-    if (res.ok) {
-      const data: any = await res.json();
-      const parsed = parseClefResponse(data, userCount);
-      if (parsed) return parsed;
-    } else {
-      const errText = await res.text();
-      console.warn(`Clef-flash gateway endpoint returned ${res.status}:`, errText);
-    }
-  } catch (err) {
-    console.warn('Clef-flash gateway fetch error:', err);
-  }
-
-  return null;
-}
-
-/**
- * ステップ1: 分析官AI (Clef-flash優先 ➔ AI Gateway dynamic/llm5-analyst フォールバック)
- * 超高速意思決定モデル Clef-flash を主軸とし、未測定因子と次の質問戦略を瞬時に策定
+ * ステップ1: 分析官AI (Route: dynamic/llm5-analyst)
+ * AI GatewayのDynamic Route設定（Clef-flash等）に委ね、未測定因子と次の質問戦略を高速策定
  */
 export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<AnalystStrategy> {
   const dialogueHistory = messages
     .map(m => `${m.role === 'user' ? 'ユーザー' : '質問係'}: ${m.content}`)
     .join('\n');
-  const userCount = messages.filter(m => m.role === 'user').length;
 
-  // 1. Clef-flash 意思決定モデルによる超高速分析を優先試行 (~38.8ms)
-  try {
-    const clefResult = await callClefFlash(env, dialogueHistory, userCount);
-    if (clefResult) {
-      return clefResult;
-    }
-  } catch (clefErr) {
-    console.warn('Clef-flash analyst error, falling back to dynamic route:', clefErr);
-  }
-
-  // 2. フォールバック: AI Gateway (Route: dynamic/llm5-analyst)
   const analystSystemPrompt = `
 あなたはビッグファイブ理論（主要5因子: 開放性, 誠実性, 外向性, 協調性, 情緒安定性）に基づく心理分析ストラテジストです。
 あなたの役割は、ユーザーの「自己申告（私は○○な性格です等）」ではなく、過去に経験した【具体的な行動エピソード（事実）】から客観的な性格特性を判定することです。
@@ -306,7 +180,8 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
     console.error('Analyst Route fetch error:', err);
   }
 
-  // 3. 最終フォールバック（発話ターン数ベースのルール判定）
+  // フォールバック
+  const userCount = messages.filter(m => m.role === 'user').length;
   const isReady = userCount >= 4;
   return {
     focus_dimension: isReady ? '全体' : '行動特性',
