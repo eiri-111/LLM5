@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, Eye, ClipboardCheck } from 'lucide-react';
-import { ChatMessage, AnalysisResult, UserProfile } from '../types';
+import { Send, Sparkles, Eye, ClipboardCheck, RotateCcw, Bot } from 'lucide-react';
+import { ChatMessage, AnalysisResult, UserProfile, InterviewerModelType } from '../types';
 
 interface ChatModeProps {
   userProfile: UserProfile | null;
@@ -9,6 +9,7 @@ interface ChatModeProps {
   onSkipToSurvey?: () => void;
   showToast: (msg: string) => void;
   onShowSample?: () => void;
+  onResetChat?: () => void;
 }
 
 type OnboardingStep = 'age' | 'gender' | 'completed';
@@ -32,26 +33,120 @@ export const ChatMode: React.FC<ChatModeProps> = ({
   onStartSurvey,
   onSkipToSurvey,
   showToast,
-  onShowSample
+  onShowSample,
+  onResetChat
 }) => {
-  const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>('age');
+  // 質問役モデル選択 ('dynamic/llm5' または 'dynamic/llm-qwen')
+  const [interviewerModel, setInterviewerModel] = useState<InterviewerModelType>(() => {
+    try {
+      const saved = localStorage.getItem('llm5_interviewer_model');
+      if (saved === 'dynamic/llm-qwen' || saved === 'dynamic/llm5') {
+        return saved as InterviewerModelType;
+      }
+    } catch (_) {}
+    return 'dynamic/llm5';
+  });
 
-  const [messages, setMessages] = useState<ChatMessage[]>(() => [
-    { role: 'assistant', content: INITIAL_GREETING }
-  ]);
+  // オンボーディング進行状況の復元
+  const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>(() => {
+    try {
+      const saved = localStorage.getItem('llm5_onboarding_step') as OnboardingStep;
+      if (saved && ['age', 'gender', 'completed'].includes(saved)) {
+        return saved;
+      }
+      const savedMessages = localStorage.getItem('llm5_chat_messages');
+      if (savedMessages) {
+        const parsed = JSON.parse(savedMessages);
+        if (Array.isArray(parsed)) {
+          if (parsed.length >= 4) return 'completed';
+          if (parsed.length >= 2) return 'gender';
+        }
+      }
+    } catch (_) {}
+    return 'age';
+  });
+
+  // 会話履歴の復元
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem('llm5_chat_messages');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (_) {}
+    return [{ role: 'assistant', content: INITIAL_GREETING }];
+  });
+
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [streamingText, setStreamingText] = useState('');
-  const [isReady, setIsReady] = useState(false);
+
+  // 分析可能フラグの復元
+  const [isReady, setIsReady] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('llm5_chat_is_ready') === 'true';
+    } catch (_) {}
+    return false;
+  });
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // 会話履歴の自動保存
+  useEffect(() => {
+    try {
+      localStorage.setItem('llm5_chat_messages', JSON.stringify(messages));
+    } catch (_) {}
+  }, [messages]);
+
+  // オンボーディング進行状況の自動保存
+  useEffect(() => {
+    try {
+      localStorage.setItem('llm5_onboarding_step', onboardingStep);
+    } catch (_) {}
+  }, [onboardingStep]);
+
+  // 診断準備完了フラグの自動保存
+  useEffect(() => {
+    try {
+      localStorage.setItem('llm5_chat_is_ready', String(isReady));
+    } catch (_) {}
+  }, [isReady]);
+
+  // 選択モデルの自動保存
+  useEffect(() => {
+    try {
+      localStorage.setItem('llm5_interviewer_model', interviewerModel);
+    } catch (_) {}
+  }, [interviewerModel]);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isLoading, streamingText]);
+
+  // 会話を最初からやり直す（リセット）
+  const handleResetChat = () => {
+    if (messages.length <= 1 || window.confirm('会話内容をリセットして最初からやり直しますか？')) {
+      const initialMsgs = [{ role: 'assistant' as const, content: INITIAL_GREETING }];
+      setMessages(initialMsgs);
+      setOnboardingStep('age');
+      setIsReady(false);
+      setInputText('');
+      setStreamingText('');
+      try {
+        localStorage.removeItem('llm5_chat_messages');
+        localStorage.removeItem('llm5_onboarding_step');
+        localStorage.removeItem('llm5_chat_is_ready');
+      } catch (_) {}
+      onResetChat?.();
+      showToast('会話をリセットしました');
+    }
+  };
 
   // 性別選択ボタン押下時
   const handleSelectGender = (genderLabel: string) => {
@@ -135,7 +230,8 @@ export const ChatMode: React.FC<ChatModeProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: messages,
-          user_input: text
+          user_input: text,
+          model: interviewerModel
         })
       });
 
@@ -233,7 +329,39 @@ export const ChatMode: React.FC<ChatModeProps> = ({
           <span className="chat-app-name">LLM5</span>
           <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500, marginLeft: '0.25rem' }}>AI性格対話診断</span>
         </div>
-        <div className="chat-header-actions" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+        <div className="chat-header-actions" style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* 質問役モデル切り替え */}
+          <div className="model-select-wrapper" title="質問役のAIモデルを切り替え">
+            <Bot size={13} style={{ color: '#6366f1', flexShrink: 0 }} />
+            <select
+              value={interviewerModel}
+              onChange={(e) => {
+                const nextModel = e.target.value as InterviewerModelType;
+                setInterviewerModel(nextModel);
+                showToast(`質問役を「${nextModel === 'dynamic/llm-qwen' ? 'Qwen (dynamic/llm-qwen)' : 'LLM5 (標準)'}」に切り替えました`);
+              }}
+              disabled={isLoading}
+              className="model-select-input"
+              aria-label="質問役AIモデルの選択"
+            >
+              <option value="dynamic/llm5">LLM5 (標準)</option>
+              <option value="dynamic/llm-qwen">Qwen (llm-qwen)</option>
+            </select>
+          </div>
+
+          {/* 会話リセットボタン */}
+          {messages.length > 1 && (
+            <button
+              type="button"
+              onClick={handleResetChat}
+              className="btn-reset-chat"
+              title="会話履歴をリセットして最初からやり直す"
+            >
+              <RotateCcw size={13} />
+              <span>やり直す</span>
+            </button>
+          )}
+
           {onSkipToSurvey && (
             <button 
               type="button" 
@@ -242,7 +370,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
               title="動作確認用: LLM性格検査をスキップして質問紙（アンケート）回答画面へ移動"
             >
               <ClipboardCheck size={14} />
-              <span>質問紙へスキップ</span>
+              <span>質問紙へ</span>
             </button>
           )}
           {onShowSample && (
@@ -253,7 +381,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
               title="分析結果のサンプルを表示"
             >
               <Eye size={14} />
-              <span>結果サンプル</span>
+              <span>サンプル</span>
             </button>
           )}
         </div>

@@ -417,12 +417,14 @@ export async function runInterviewerStream(
 export async function runInterviewer(
   env: Env, 
   messages: ChatMessage[], 
-  strategy: AnalystStrategy
+  strategy: AnalystStrategy,
+  modelName: string = 'dynamic/llm5'
 ): Promise<{ reply: string; isReady: boolean }> {
   const endpoint = getGatewayCompatUrl(env);
   const headers = getGatewayHeaders(env);
 
   const isReady = strategy.is_ready_for_final_analysis;
+  const targetModel = modelName || 'dynamic/llm5';
 
   const interviewerInstruction = `
 あなたはプロフェッショナルな性格分析インタビュアーです。
@@ -456,7 +458,7 @@ export async function runInterviewer(
       method: 'POST',
       headers,
       body: JSON.stringify({
-        model: 'dynamic/llm5',
+        model: targetModel,
         messages: [
           { role: 'system', content: interviewerInstruction },
           ...formattedMessages
@@ -472,7 +474,7 @@ export async function runInterviewer(
     } else {
       const errText = await res.text();
       console.error(`Interviewer Route error (${res.status}):`, errText);
-      throw new Error(`AI Gateway (dynamic/llm5) エラー [${res.status}]: ${errText || '詳細なし'}`);
+      throw new Error(`AI Gateway (${targetModel}) エラー [${res.status}]: ${errText || '詳細なし'}`);
     }
   } catch (err: any) {
     console.error('runInterviewer error:', err);

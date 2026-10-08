@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ScaleType, SurveyResult, UserProfile } from '../types';
 import { PERSONALITY_SCALES, calculateSurveyScores } from '../data/personalityScales';
 import { ClipboardCheck, Sparkles, Loader2, UserCheck, HelpCircle, ArrowLeft, ExternalLink, Beaker } from 'lucide-react';
@@ -22,8 +22,36 @@ export const SurveySection: React.FC<SurveySectionProps> = ({
   isSkippedMode,
   qualtricsUrl
 }) => {
-  const [selectedScale, setSelectedScale] = useState<ScaleType>('tipi-j');
-  const [answers, setAnswers] = useState<Record<number, number>>({});
+  // 質問紙尺度の復元
+  const [selectedScale, setSelectedScale] = useState<ScaleType>(() => {
+    try {
+      const saved = localStorage.getItem('llm5_survey_scale') as ScaleType;
+      if (saved && PERSONALITY_SCALES[saved]) return saved;
+    } catch (_) {}
+    return 'tipi-j';
+  });
+
+  // 回答途中データの復元
+  const [answers, setAnswers] = useState<Record<number, number>>(() => {
+    try {
+      const saved = localStorage.getItem('llm5_survey_answers');
+      if (saved) return JSON.parse(saved);
+    } catch (_) {}
+    return {};
+  });
+
+  // 自動保存
+  useEffect(() => {
+    try {
+      localStorage.setItem('llm5_survey_scale', selectedScale);
+    } catch (_) {}
+  }, [selectedScale]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('llm5_survey_answers', JSON.stringify(answers));
+    } catch (_) {}
+  }, [answers]);
 
   const scaleConfig = PERSONALITY_SCALES[selectedScale];
   const totalQuestions = scaleConfig.questions.length;
@@ -39,6 +67,9 @@ export const SurveySection: React.FC<SurveySectionProps> = ({
     }
     setSelectedScale(scale);
     setAnswers({});
+    try {
+      localStorage.removeItem('llm5_survey_answers');
+    } catch (_) {}
   };
 
   const handleAnswer = (questionId: number, value: number) => {
@@ -62,6 +93,10 @@ export const SurveySection: React.FC<SurveySectionProps> = ({
       scores: calculatedScores,
       completedAt: new Date().toISOString()
     };
+
+    try {
+      localStorage.removeItem('llm5_survey_answers');
+    } catch (_) {}
 
     onCompleteSurvey(resultData);
   };

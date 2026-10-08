@@ -38,6 +38,8 @@ export interface ChatMessage {
   content: string;
 }
 
+export type InterviewerModelType = 'dynamic/llm5' | 'dynamic/llm-qwen';
+
 export type GenderType = 'male' | 'female' | 'other' | 'prefer_not_to_say';
 
 export interface UserProfile {

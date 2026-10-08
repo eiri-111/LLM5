@@ -37,8 +37,28 @@ export const App: React.FC = () => {
     return null;
   });
 
-  const [sessionId, setSessionId] = useState<string>(generateSessionId);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [sessionId, setSessionId] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('llm5_current_session_id');
+      if (saved) return saved;
+    } catch (_) {}
+    const newId = generateSessionId();
+    try {
+      localStorage.setItem('llm5_current_session_id', newId);
+    } catch (_) {}
+    return newId;
+  });
+
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem('llm5_chat_messages');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (_) {}
+    return [];
+  });
 
   // 動作確認・スキップモード管理
   const [isSkippedMode, setIsSkippedMode] = useState<boolean>(() => {
@@ -55,6 +75,12 @@ export const App: React.FC = () => {
       const search = window.location.search;
       if (search.includes('sample')) return 'result';
       if (search.includes('survey') || search.includes('skip')) return 'survey';
+      try {
+        const saved = localStorage.getItem('llm5_current_phase') as AppPhase;
+        if (saved && ['chat', 'survey', 'result'].includes(saved)) {
+          return saved;
+        }
+      } catch (_) {}
     }
     return 'chat';
   });
@@ -66,10 +92,21 @@ export const App: React.FC = () => {
       if (search.includes('sample') || search.includes('survey') || search.includes('skip')) {
         return SAMPLE_ANALYSIS_RESULT;
       }
+      try {
+        const saved = localStorage.getItem('llm5_ai_result');
+        if (saved) return JSON.parse(saved);
+      } catch (_) {}
     }
     return null;
   });
-  const [surveyResult, setSurveyResult] = useState<SurveyResult | null>(null);
+
+  const [surveyResult, setSurveyResult] = useState<SurveyResult | null>(() => {
+    try {
+      const saved = localStorage.getItem('llm5_survey_result');
+      if (saved) return JSON.parse(saved);
+    } catch (_) {}
+    return null;
+  });
 
   // Qualtrics復帰時・結果取得中のローディング状態
   const [isLoadingSessionResult, setIsLoadingSessionResult] = useState<boolean>(false);
@@ -100,6 +137,41 @@ export const App: React.FC = () => {
     window.addEventListener('popstate', handleLocationChange);
     return () => window.removeEventListener('popstate', handleLocationChange);
   }, []);
+
+  // 画面フェーズ・セッション・結果の自動保存
+  useEffect(() => {
+    try {
+      localStorage.setItem('llm5_current_phase', phase);
+    } catch (_) {}
+  }, [phase]);
+
+  useEffect(() => {
+    try {
+      if (sessionId) {
+        localStorage.setItem('llm5_current_session_id', sessionId);
+      }
+    } catch (_) {}
+  }, [sessionId]);
+
+  useEffect(() => {
+    try {
+      if (aiAnalysisResult) {
+        localStorage.setItem('llm5_ai_result', JSON.stringify(aiAnalysisResult));
+      } else {
+        localStorage.removeItem('llm5_ai_result');
+      }
+    } catch (_) {}
+  }, [aiAnalysisResult]);
+
+  useEffect(() => {
+    try {
+      if (surveyResult) {
+        localStorage.setItem('llm5_survey_result', JSON.stringify(surveyResult));
+      } else {
+        localStorage.removeItem('llm5_survey_result');
+      }
+    } catch (_) {}
+  }, [surveyResult]);
 
   /**
    * Qualtricsからのリダイレクト戻り検知 & サーバーから分析結果を取得
@@ -327,15 +399,22 @@ export const App: React.FC = () => {
     setAiAnalysisResult(null);
     setSurveyResult(null);
     setChatMessages([]);
-    setSessionId(generateSessionId());
+    const newId = generateSessionId();
+    setSessionId(newId);
     setIsAiAnalyzing(false);
     setIsWaitingForAiToComplete(false);
     setIsPreparingQualtrics(false);
     aiAnalysisPromiseRef.current = null;
     try {
-      localStorage.removeItem('llm5_current_session_id');
+      localStorage.setItem('llm5_current_session_id', newId);
+      localStorage.setItem('llm5_current_phase', 'chat');
       localStorage.removeItem('llm5_ai_result');
+      localStorage.removeItem('llm5_survey_result');
       localStorage.removeItem('llm5_chat_messages');
+      localStorage.removeItem('llm5_onboarding_step');
+      localStorage.removeItem('llm5_chat_is_ready');
+      localStorage.removeItem('llm5_survey_answers');
+      localStorage.removeItem('llm5_survey_scale');
     } catch (_) {}
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -378,6 +457,7 @@ export const App: React.FC = () => {
             onSkipToSurvey={handleSkipToSurvey}
             showToast={showToast}
             onShowSample={handleShowSample}
+            onResetChat={handleRetake}
           />
         )}
 
