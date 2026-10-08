@@ -309,7 +309,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
             className="btn-analyze-ready"
           >
             <Sparkles size={18} />
-            <span>質問紙（アンケート）に回答して総合診断へ進む</span>
+            <span>質問紙（Qualtrics）に回答して総合診断へ進む</span>
           </button>
         )}
         {onboardingStep === 'gender' && (

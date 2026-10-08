@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { AnalysisResult, UserProfile, ChatMessage, SurveyResult } from './types';
 import { ChatMode } from './components/ChatMode';
 import { ResultReport } from './components/ResultReport';
-import { SurveySection } from './components/SurveySection';
 import { SAMPLE_ANALYSIS_RESULT } from './data/sampleResult';
 import { Loader2 } from 'lucide-react';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -14,7 +13,7 @@ function generateSessionId(): string {
   return `session_${Date.now()}_${rand}`;
 }
 
-type AppPhase = 'chat' | 'survey' | 'result';
+type AppPhase = 'chat' | 'result';
 
 export const App: React.FC = () => {
   // 管理画面モードフラグ (/admin, ?admin, #admin)
@@ -60,24 +59,14 @@ export const App: React.FC = () => {
     return [];
   });
 
-  // 動作確認・スキップモード管理
-  const [isSkippedMode, setIsSkippedMode] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      const search = window.location.search;
-      return search.includes('survey') || search.includes('skip');
-    }
-    return false;
-  });
-
-  // 画面フェーズ: 'chat' | 'survey' | 'result'
+  // 画面フェーズ: 'chat' | 'result'
   const [phase, setPhase] = useState<AppPhase>(() => {
     if (typeof window !== 'undefined') {
       const search = window.location.search;
       if (search.includes('sample')) return 'result';
-      if (search.includes('survey') || search.includes('skip')) return 'survey';
       try {
         const saved = localStorage.getItem('llm5_current_phase') as AppPhase;
-        if (saved && ['chat', 'survey', 'result'].includes(saved)) {
+        if (saved && ['chat', 'result'].includes(saved)) {
           return saved;
         }
       } catch (_) {}
@@ -89,7 +78,7 @@ export const App: React.FC = () => {
   const [aiAnalysisResult, setAiAnalysisResult] = useState<AnalysisResult | null>(() => {
     if (typeof window !== 'undefined') {
       const search = window.location.search;
-      if (search.includes('sample') || search.includes('survey') || search.includes('skip')) {
+      if (search.includes('sample')) {
         return SAMPLE_ANALYSIS_RESULT;
       }
       try {
@@ -111,11 +100,8 @@ export const App: React.FC = () => {
   // Qualtrics復帰時・結果取得中のローディング状態
   const [isLoadingSessionResult, setIsLoadingSessionResult] = useState<boolean>(false);
 
-  // 裏で実行中のAI分析タスク管理
-  const [isAiAnalyzing, setIsAiAnalyzing] = useState<boolean>(false);
-  const [isWaitingForAiToComplete, setIsWaitingForAiToComplete] = useState<boolean>(false);
+  // Qualtrics遷移準備中フラグ
   const [isPreparingQualtrics, setIsPreparingQualtrics] = useState<boolean>(false);
-  const aiAnalysisPromiseRef = useRef<Promise<AnalysisResult | null> | null>(null);
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -375,50 +361,6 @@ export const App: React.FC = () => {
     window.location.href = qualtricsUrl;
   };
 
-  /**
-   * 質問紙回答完了 ➔ AI分析結果と統合して最終照合レポートへ
-   */
-  const handleCompleteSurvey = async (surveyData: SurveyResult) => {
-    setSurveyResult(surveyData);
-
-    let finalAiResult = aiAnalysisResult;
-
-    // もしユーザーの質問紙回答が早すぎて裏のAI分析がまだ完了していなければ待機
-    if (!finalAiResult && aiAnalysisPromiseRef.current) {
-      setIsWaitingForAiToComplete(true);
-      finalAiResult = await aiAnalysisPromiseRef.current;
-      setIsWaitingForAiToComplete(false);
-    }
-
-    if (!finalAiResult) {
-      showToast('AI分析結果を取得できませんでした。もう一度お試しください。');
-      return;
-    }
-
-    // D1 / R2 へ保存
-    if (userProfile) {
-      try {
-        await fetch('/api/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            session_id: sessionId,
-            user_profile: userProfile,
-            messages: chatMessages,
-            ai_result: finalAiResult,
-            survey_result: surveyData
-          })
-        });
-      } catch (err) {
-        console.warn('Save on survey completion error:', err);
-      }
-    }
-
-    setPhase('result');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    showToast('AI分析と質問紙のスコアを照合しました！');
-  };
-
   const handleShowSample = () => {
     setAiAnalysisResult(SAMPLE_ANALYSIS_RESULT);
     setSurveyResult(null);
@@ -426,52 +368,14 @@ export const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  /**
-   * 動作確認用: LLMによる性格検査をスキップして質問紙（アンケート）回答画面へ直接移動
-   */
-  const handleSkipToSurvey = () => {
-    setIsSkippedMode(true);
-    // AI分析結果としてサンプルデータを適用（質問紙回答完了後のレーダーチャート照合用）
-    if (!aiAnalysisResult) {
-      setAiAnalysisResult(SAMPLE_ANALYSIS_RESULT);
-    }
-    if (!userProfile) {
-      const defaultProfile: UserProfile = {
-        age: 20,
-        gender: 'unspecified'
-      };
-      setUserProfile(defaultProfile);
-      try {
-        localStorage.setItem('llm5_user_profile', JSON.stringify(defaultProfile));
-      } catch (_) {}
-    }
-    setIsAiAnalyzing(false);
-    setIsPreparingQualtrics(false);
-    setPhase('survey');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    showToast('LLM性格検査をスキップし、質問紙の回答画面へ移動しました（動作確認モード）');
-  };
-
-  /**
-   * 質問紙画面からAI対話画面へ戻る
-   */
-  const handleBackToChat = () => {
-    setPhase('chat');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
   const handleRetake = () => {
     setPhase('chat');
-    setIsSkippedMode(false);
     setAiAnalysisResult(null);
     setSurveyResult(null);
     setChatMessages([]);
     const newId = generateSessionId();
     setSessionId(newId);
-    setIsAiAnalyzing(false);
-    setIsWaitingForAiToComplete(false);
     setIsPreparingQualtrics(false);
-    aiAnalysisPromiseRef.current = null;
     try {
       localStorage.setItem('llm5_current_session_id', newId);
       localStorage.setItem('llm5_current_phase', 'chat');
@@ -480,8 +384,6 @@ export const App: React.FC = () => {
       localStorage.removeItem('llm5_chat_messages');
       localStorage.removeItem('llm5_onboarding_step');
       localStorage.removeItem('llm5_chat_is_ready');
-      localStorage.removeItem('llm5_survey_answers');
-      localStorage.removeItem('llm5_survey_scale');
     } catch (_) {}
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -551,18 +453,6 @@ export const App: React.FC = () => {
           />
         )}
 
-        {phase === 'survey' && (
-          <SurveySection
-            userProfile={userProfile}
-            isAiAnalyzing={isAiAnalyzing}
-            onCompleteSurvey={handleCompleteSurvey}
-            showToast={showToast}
-            onBackToChat={handleBackToChat}
-            isSkippedMode={isSkippedMode}
-            qualtricsUrl={`${QUALTRICS_SURVEY_URL}?user_id=${encodeURIComponent(sessionId)}&session_id=${encodeURIComponent(sessionId)}`}
-          />
-        )}
-
         {phase === 'result' && aiAnalysisResult && (
           <ResultReport
             result={aiAnalysisResult}
@@ -604,21 +494,6 @@ export const App: React.FC = () => {
             <p className="text-slate-500 text-sm mt-2">
               アンケートへのご回答ありがとうございました！<br />
               並行して解析されたAIプロファイルを取得し、照合レポートを生成しています。
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* アプリ内蔵質問紙用：AI分析完了待ちモーダル */}
-      {isWaitingForAiToComplete && (
-        <div className="modal-backdrop">
-          <div className="profile-modal-card text-center" style={{ textAlign: 'center' }}>
-            <Loader2 size={36} className="spinner text-indigo-600" style={{ margin: '0 auto 1rem' }} />
-            <h3 className="font-bold text-slate-800 text-lg">
-              AI対話分析と質問紙スコアを照合中...
-            </h3>
-            <p className="text-slate-500 text-sm mt-2">
-              AI分析官による深層プロファイリングの仕上げを行っています。まもなくレポートが表示されます。
             </p>
           </div>
         </div>

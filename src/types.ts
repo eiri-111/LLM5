@@ -46,31 +46,9 @@ export interface UserProfile {
   gender?: GenderType | string; // 性別
 }
 
-export type ScaleType = 'tipi-j' | 'namikawa' | 'bfi-2-s' | 'qualtrics' | string;
+export type ScaleType = 'qualtrics' | string;
 
 export type DimensionKey = 'openness' | 'conscientiousness' | 'extraversion' | 'agreeableness' | 'neuroticism';
-
-export interface SurveyQuestion {
-  id: number;
-  text: string;
-  dimension: DimensionKey;
-  is_reverse: boolean;
-  facet?: string;
-}
-
-export interface SurveyScaleConfig {
-  id: string;
-  name: string;
-  shortName: string;
-  authorYear: string;
-  description: string;
-  questionCount: number;
-  estimatedMinutes: string;
-  likertPoints: number; // 5 or 7
-  scaleLabels: { value: number; label: string }[];
-  instruction: string;
-  questions: SurveyQuestion[];
-}
 
 export interface SurveyScoreDetail {
   rawMean: number;        // 尺度の元の平均点 (1〜5 or 1〜7)
