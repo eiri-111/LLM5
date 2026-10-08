@@ -93,3 +93,38 @@ export interface AssessmentSessionPayload {
   survey_result?: SurveyResult;
   qualtrics_id?: string;
 }
+
+export interface AdminSessionRecord {
+  id: string;
+  student_id: string;
+  age: number;
+  gender: string;
+  created_at: string;
+  dialogue_turns: number;
+  qualtrics_id?: string | null;
+  ai_personality_title?: string | null;
+  ai_personality_type?: string | null;
+  ai_summary?: string | null;
+  ai_openness?: number | null;
+  ai_conscientiousness?: number | null;
+  ai_extraversion?: number | null;
+  ai_agreeableness?: number | null;
+  ai_neuroticism?: number | null;
+  survey_scale_type?: string | null;
+  survey_scale_name?: string | null;
+  survey_openness?: number | null;
+  survey_conscientiousness?: number | null;
+  survey_extraversion?: number | null;
+  survey_agreeableness?: number | null;
+  survey_neuroticism?: number | null;
+  survey_completed_at?: string | null;
+  chat_messages?: string | null;
+  ai_full_result?: string | null;
+  survey_raw_answers?: string | null;
+  messages_count?: number;
+  has_ai_result?: boolean;
+  has_survey_completed?: boolean;
+  parsed_ai_result?: AnalysisResult | null;
+  parsed_messages?: ChatMessage[];
+  parsed_survey_answers?: Record<string | number, number> | null;
+}

@@ -1,6 +1,71 @@
 import { defineConfig, Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
+const devMockSessions: any[] = [
+  {
+    id: 'session_demo_001',
+    student_id: 'KGU-2024-001',
+    age: 21,
+    gender: 'female',
+    created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
+    dialogue_turns: 5,
+    qualtrics_id: 'R_1234567890abc',
+    survey_completed_at: new Date(Date.now() - 3600000 * 1.5).toISOString(),
+    ai_personality_title: '穏やかな探求者・共感型クリエイター',
+    ai_personality_type: '共感・探求タイプ',
+    ai_summary: '他者の感情に寄り添いながら、新しいアイデアや未知の体験への好奇心を発揮するバランスの良い性格です。',
+    ai_openness: 82.5,
+    ai_conscientiousness: 65.0,
+    ai_extraversion: 74.0,
+    ai_agreeableness: 88.0,
+    ai_neuroticism: 32.0,
+    survey_scale_type: 'tipi-j',
+    survey_scale_name: 'TIPI-J (日本語版十項目性格尺度)',
+    survey_openness: 80.0,
+    survey_conscientiousness: 60.0,
+    survey_extraversion: 70.0,
+    survey_agreeableness: 90.0,
+    survey_neuroticism: 35.0,
+    survey_raw_answers: JSON.stringify({ "1": 6, "2": 2, "3": 5, "4": 6, "5": 3, "6": 2, "7": 3, "8": 2, "9": 2, "10": 6 }),
+    chat_messages: JSON.stringify([
+      { role: 'assistant', content: 'こんにちは！Dr. OCEANです。普段の休日はどのように過ごすことが多いですか？' },
+      { role: 'user', content: '休日は友人とカフェ巡りをしたり、新しい美術館や展示を見に行くのが好きです。' },
+      { role: 'assistant', content: '素敵な過ごし方ですね！新しい刺激を楽しむのがお好きなんですね。グループで活動するときはどんな役割になることが多いですか？' },
+      { role: 'user', content: 'みんなの話をよく聞いて、意見が対立したときに間を取り持つことが多いです。' }
+    ])
+  },
+  {
+    id: 'session_demo_002',
+    student_id: 'KGU-2024-042',
+    age: 20,
+    gender: 'male',
+    created_at: new Date(Date.now() - 3600000 * 8).toISOString(),
+    dialogue_turns: 4,
+    qualtrics_id: null,
+    survey_completed_at: null,
+    ai_personality_title: '論理的ストラテジスト・堅実な実務家',
+    ai_personality_type: '分析・計画タイプ',
+    ai_summary: '物事を筋道立てて計画的に実行する高い誠実性と自己規律を持ち合わせています。',
+    ai_openness: 58.0,
+    ai_conscientiousness: 92.0,
+    ai_extraversion: 45.0,
+    ai_agreeableness: 62.0,
+    ai_neuroticism: 28.0,
+    survey_scale_type: 'bfi-2-s',
+    survey_scale_name: 'BFI-2-S (短縮版ビッグファイブ質問紙)',
+    survey_openness: null,
+    survey_conscientiousness: null,
+    survey_extraversion: null,
+    survey_agreeableness: null,
+    survey_neuroticism: null,
+    survey_raw_answers: null,
+    chat_messages: JSON.stringify([
+      { role: 'assistant', content: 'こんにちは！普段タスクや勉強を進めるとき、どのように管理していますか？' },
+      { role: 'user', content: '毎朝ToDoリストを作成して、優先度順にしっかり完了させてから帰るようにしています。' }
+    ])
+  }
+];
+
 const devApiPlugin = (): Plugin => ({
   name: 'dev-api-middleware',
   configureServer(server) {
@@ -46,12 +111,111 @@ const devApiPlugin = (): Plugin => ({
         return;
       }
 
+      const adminPassword = process.env.ADMIN_PASSWORD || 'llm5admin';
+      const parsedUrl = new URL(req.url, 'http://localhost');
+
+      const isAuthorized = () => {
+        const headerKey = req.headers['x-admin-password'];
+        const authHeader = req.headers['authorization'];
+        const bearer = (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) ? authHeader.slice(7).trim() : null;
+        const queryKey = parsedUrl.searchParams.get('key') || parsedUrl.searchParams.get('password');
+        return headerKey === adminPassword || bearer === adminPassword || queryKey === adminPassword;
+      };
+
+      // 管理者セッション一覧取得 (GET /api/admin/sessions)
+      if (req.method === 'GET' && parsedUrl.pathname === '/api/admin/sessions') {
+        if (!isAuthorized()) {
+          res.statusCode = 401;
+          res.end(JSON.stringify({ success: false, error: '認証エラー: 管理者パスワードが違います' }));
+          return;
+        }
+
+        res.end(JSON.stringify({
+          success: true,
+          is_db_connected: false,
+          total: devMockSessions.length,
+          sessions: devMockSessions
+        }));
+        return;
+      }
+
+      // 管理者データエクスポート (GET /api/admin/export)
+      if (req.method === 'GET' && parsedUrl.pathname === '/api/admin/export') {
+        if (!isAuthorized()) {
+          res.statusCode = 401;
+          res.end(JSON.stringify({ error: '認証エラー: 管理者パスワードが違います' }));
+          return;
+        }
+
+        const format = (parsedUrl.searchParams.get('format') || 'csv').toLowerCase();
+        const nowStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+
+        if (format === 'json') {
+          res.setHeader('Content-Disposition', `attachment; filename="llm5_dev_data_${nowStr}.json"`);
+          res.end(JSON.stringify(devMockSessions, null, 2));
+          return;
+        }
+
+        const headers = [
+          'id', 'student_id', 'age', 'gender', 'created_at', 'dialogue_turns',
+          'qualtrics_id', 'survey_completed_at',
+          'ai_personality_title', 'ai_personality_type', 'ai_summary',
+          'ai_openness', 'ai_conscientiousness', 'ai_extraversion', 'ai_agreeableness', 'ai_neuroticism',
+          'survey_scale_type', 'survey_scale_name',
+          'survey_openness', 'survey_conscientiousness', 'survey_extraversion', 'survey_agreeableness', 'survey_neuroticism',
+          'survey_raw_answers', 'chat_messages'
+        ];
+
+        const lines = [headers.join(',')];
+        for (const s of devMockSessions) {
+          const row = headers.map(h => {
+            const val = (s as any)[h];
+            if (val === null || val === undefined) return '""';
+            return `"${String(val).replace(/"/g, '""')}"`;
+          }).join(',');
+          lines.push(row);
+        }
+
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="llm5_dev_data_${nowStr}.csv"`);
+        res.end('\uFEFF' + lines.join('\r\n'));
+        return;
+      }
+
       // POST リクエストの読み取り
       let bodyText = '';
       for await (const chunk of req) {
         bodyText += chunk;
       }
       const body = bodyText ? JSON.parse(bodyText) : {};
+
+      // 管理者認証検証 (POST /api/admin/verify)
+      if (req.method === 'POST' && parsedUrl.pathname === '/api/admin/verify') {
+        const inputPw = body.password || '';
+        if (isAuthorized() || inputPw.trim() === adminPassword) {
+          res.end(JSON.stringify({ success: true, message: '認証に成功しました' }));
+        } else {
+          res.statusCode = 401;
+          res.end(JSON.stringify({ success: false, error: 'パスワードが正しくありません' }));
+        }
+        return;
+      }
+
+      // 管理者セッション削除 (DELETE /api/admin/sessions)
+      if (req.method === 'DELETE' && parsedUrl.pathname === '/api/admin/sessions') {
+        if (!isAuthorized()) {
+          res.statusCode = 401;
+          res.end(JSON.stringify({ success: false, error: '認証エラー' }));
+          return;
+        }
+        const delId = parsedUrl.searchParams.get('id') || body.id;
+        const index = devMockSessions.findIndex(s => s.id === delId);
+        if (index !== -1) {
+          devMockSessions.splice(index, 1);
+        }
+        res.end(JSON.stringify({ success: true, deleted_id: delId }));
+        return;
+      }
 
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {

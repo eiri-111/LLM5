@@ -1,7 +1,17 @@
-import { Env } from './_gateway';
+import { Env, verifyAdminPassword } from './_gateway';
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
+
+  if (!verifyAdminPassword(request, env)) {
+    return new Response(JSON.stringify({
+      error: '認証エラー: 正しい管理者パスワードを指定してください (?key=... または ヘッダー)'
+    }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
   const url = new URL(request.url);
   const format = url.searchParams.get('format') || 'json';
 

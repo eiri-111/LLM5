@@ -7,6 +7,7 @@ pages_build_output_dir = "./dist"
 [vars]
 CF_ACCOUNT_ID = "e809b1129ec4b6f69520858ac79b2095"
 CF_GATEWAY_ID = "llm5"
+ADMIN_PASSWORD = "llm5admin"
 # AI GatewayでToken認証を有効にしている場合は設定
 # CF_AIG_TOKEN = "your-api-gateway-token"
 # エンドポイントURLを丸ごと指定したい場合は設定

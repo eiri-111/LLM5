@@ -11,6 +11,7 @@ services:
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - CF_AI_GATEWAY_URL=${CF_AI_GATEWAY_URL:-}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-llm5admin}
       - NODE_ENV=development
     env_file:
       - .env

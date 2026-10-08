@@ -3,6 +3,7 @@ export interface Env {
   CF_GATEWAY_ID?: string;
   CF_AIG_TOKEN?: string;
   CF_AI_GATEWAY_URL?: string;
+  ADMIN_PASSWORD?: string;
   DB?: D1Database;
   BUCKET?: R2Bucket;
   R2?: R2Bucket;
@@ -239,12 +240,14 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
 export async function runInterviewerStream(
   env: Env,
   messages: ChatMessage[],
-  strategy: AnalystStrategy
+  strategy: AnalystStrategy,
+  modelName: string = 'dynamic/llm5'
 ): Promise<ReadableStream<Uint8Array>> {
   const endpoint = getGatewayCompatUrl(env);
   const headers = getGatewayHeaders(env);
 
   const isReady = strategy.is_ready_for_final_analysis;
+  const targetModel = modelName || 'dynamic/llm5';
 
   const interviewerInstruction = `
 あなたはプロフェッショナルな性格分析インタビュアーです。
@@ -589,4 +592,38 @@ export async function runFinalAnalysis(env: Env, messages: ChatMessage[]): Promi
   }
 
   return JSON.parse(jsonMatch[0]);
+}
+
+/**
+ * 管理者認証ヘルパー関数
+ * 環境変数 ADMIN_PASSWORD またはデフォルトパスワード 'llm5admin' で照合
+ */
+export function verifyAdminPassword(request: Request, env: Env): boolean {
+  const expectedPassword = env.ADMIN_PASSWORD || 'llm5admin';
+
+  // 1. x-admin-password ヘッダー
+  const headerKey = request.headers.get('x-admin-password');
+  if (headerKey && headerKey.trim() === expectedPassword) {
+    return true;
+  }
+
+  // 2. Authorization: Bearer <password>
+  const authHeader = request.headers.get('Authorization');
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const bearerToken = authHeader.substring(7).trim();
+    if (bearerToken === expectedPassword) {
+      return true;
+    }
+  }
+
+  // 3. URLクエリパラメータ (?key=... or ?password=...)
+  try {
+    const url = new URL(request.url);
+    const queryKey = url.searchParams.get('key') || url.searchParams.get('password') || url.searchParams.get('token');
+    if (queryKey && queryKey.trim() === expectedPassword) {
+      return true;
+    }
+  } catch (_) {}
+
+  return false;
 }

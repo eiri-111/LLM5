@@ -4,7 +4,8 @@ import { ChatMode } from './components/ChatMode';
 import { ResultReport } from './components/ResultReport';
 import { SurveySection } from './components/SurveySection';
 import { SAMPLE_ANALYSIS_RESULT } from './data/sampleResult';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ShieldCheck } from 'lucide-react';
+import { AdminDashboard } from './components/AdminDashboard';
 
 const QUALTRICS_SURVEY_URL = 'https://kobegakuinpsy.qualtrics.com/jfe/form/SV_eqUN3SQZ8LNdZ5Q';
 
@@ -16,6 +17,17 @@ function generateSessionId(): string {
 type AppPhase = 'chat' | 'survey' | 'result';
 
 export const App: React.FC = () => {
+  // 管理画面モードフラグ (/admin, ?admin, #admin)
+  const [isAdminView, setIsAdminView] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname;
+      const search = window.location.search;
+      const hash = window.location.hash;
+      return path === '/admin' || path.startsWith('/admin/') || search.includes('admin') || hash === '#admin';
+    }
+    return false;
+  });
+
   // ユーザープロファイル (必要に応じてチャットから抽出)
   const [userProfile, setUserProfile] = useState<UserProfile | null>(() => {
     try {
@@ -76,6 +88,18 @@ export const App: React.FC = () => {
       setToastMessage(null);
     }, 3500);
   };
+
+  // URL変更検知 (/admin へのルーティング対応)
+  useEffect(() => {
+    const handleLocationChange = () => {
+      const path = window.location.pathname;
+      const search = window.location.search;
+      const hash = window.location.hash;
+      setIsAdminView(path === '/admin' || path.startsWith('/admin/') || search.includes('admin') || hash === '#admin');
+    };
+    window.addEventListener('popstate', handleLocationChange);
+    return () => window.removeEventListener('popstate', handleLocationChange);
+  }, []);
 
   /**
    * Qualtricsからのリダイレクト戻り検知 & サーバーから分析結果を取得
@@ -326,6 +350,20 @@ export const App: React.FC = () => {
     });
   };
 
+  // 管理画面モード表示
+  if (isAdminView) {
+    return (
+      <AdminDashboard
+        onBackToApp={() => {
+          setIsAdminView(false);
+          if (window.history?.pushState) {
+            window.history.pushState(null, '', '/');
+          }
+        }}
+      />
+    );
+  }
+
   return (
     <div className={`app-container ${phase === 'chat' ? 'fullscreen-chat' : 'scrollable-view'}`}>
       <div className="ambient-glow-1"></div>
@@ -420,6 +458,27 @@ export const App: React.FC = () => {
           {toastMessage}
         </div>
       )}
+
+      {/* 研究者用管理画面リンク (URL直打ちまたはクリックでアクセス) */}
+      <footer className="w-full py-2.5 text-center text-xs text-slate-400 mt-auto border-t border-slate-800/10 z-10">
+        <div className="flex items-center justify-center gap-3">
+          <span>&copy; LLM5 Big Five Research</span>
+          <span>•</span>
+          <button
+            onClick={() => {
+              setIsAdminView(true);
+              if (window.history?.pushState) {
+                window.history.pushState(null, '', '/admin');
+              }
+            }}
+            className="text-slate-400 hover:text-slate-600 transition flex items-center gap-1 cursor-pointer bg-transparent border-0 text-xs"
+            title="研究者向け管理コンソール (/admin)"
+          >
+            <ShieldCheck size={13} />
+            <span>研究データ管理</span>
+          </button>
+        </div>
+      </footer>
     </div>
   );
 };
