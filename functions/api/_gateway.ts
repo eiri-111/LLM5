@@ -70,6 +70,16 @@ export function getGatewayCompatUrl(env: Env): string {
 }
 
 /**
+ * Cloudflare AI Gateway Workers AI ネイティブ呼び出しエンドポイントURLを取得
+ * 公式仕様: https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/workers-ai/{model_name}
+ */
+export function getGatewayWorkersAiUrl(env: Env, model: string = '@cf/cloudflare/clef-flash'): string {
+  const accountId = env.CF_ACCOUNT_ID || DEFAULT_ACCOUNT_ID;
+  const gatewayId = env.CF_GATEWAY_ID || DEFAULT_GATEWAY_ID;
+  return `https://gateway.ai.cloudflare.com/v1/${accountId}/${gatewayId}/workers-ai/${model}`;
+}
+
+/**
  * リクエストヘッダーを生成
  */
 export function getGatewayHeaders(env: Env): Record<string, string> {
@@ -117,9 +127,8 @@ function extractResponseText(data: any): string {
 }
 
 /**
- * ステップ1: 分析官AI (Route: dynamic/llm5-analyst)
- * AI GatewayのDynamic Route設定（Clef-flash）に対応
- * Clef-flashの必須プロパティ: { model, state, questions } を送信
+ * ステップ1: 分析官AI (AI Gateway経由で Workers AI @cf/cloudflare/clef-flash を呼び出し)
+ * Clef-flashの意思決定APIスキーマ: { state, questions } を送信
  */
 export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<AnalystStrategy> {
   const dialogueHistory = messages
@@ -127,7 +136,8 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
     .join('\n');
   const userCount = messages.filter(m => m.role === 'user').length;
 
-  const endpoint = getGatewayCompatUrl(env);
+  // AI Gateway の Workers AI ネイティブ直通エンドポイントを使用
+  const endpoint = getGatewayWorkersAiUrl(env, '@cf/cloudflare/clef-flash');
   const headers = getGatewayHeaders(env);
 
   // Clef-flash が要求する意思決定スキーマ (System One / Jev 互換)
@@ -166,7 +176,6 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
       method: 'POST',
       headers,
       body: JSON.stringify({
-        model: 'dynamic/llm5-analyst',
         state: clefState,
         questions: clefQuestions
       })
@@ -175,18 +184,18 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
     if (res.ok) {
       const data: any = await res.json();
 
-      // 1. Clef-flash 意思決定レスポンス (System One 互換: result配下またはルート配下の質問IDマップ) を解析
+      // 1. Clef-flash 意思決定レスポンス (System One / Workers AI 互換: result配下またはルート配下の質問IDマップ) を解析
       const resObj = data?.result || data?.answers || data;
-      if (resObj?.is_ready || resObj?.focus_dimension) {
+      if (resObj && (resObj.is_ready !== undefined || resObj.focus_dimension !== undefined)) {
         const isReadyItem = resObj.is_ready;
-        const isReadyAnswer = isReadyItem?.answer === 'yes';
+        const isReadyAnswer = isReadyItem?.answer === 'yes' || isReadyItem === 'yes' || isReadyItem === true;
         const isReadyProb = typeof isReadyItem?.probability === 'number'
           ? isReadyItem.probability
           : (typeof isReadyItem?.yes_probability === 'number' ? isReadyItem.yes_probability : 0);
         const isReady = (isReadyAnswer || isReadyProb >= 0.65) || userCount >= 4;
 
-        const focusDim = resObj.focus_dimension?.answer || resObj.focus_dimension?.choice || resObj.focus_dimension || '誠実性';
-        const strategyRaw = resObj.strategy_type?.answer || resObj.strategy_type?.choice || resObj.strategy_type || 'ハプニングへの対処';
+        const focusDim = resObj.focus_dimension?.answer || resObj.focus_dimension?.choice || (typeof resObj.focus_dimension === 'string' ? resObj.focus_dimension : null) || '誠実性';
+        const strategyRaw = resObj.strategy_type?.answer || resObj.strategy_type?.choice || (typeof resObj.strategy_type === 'string' ? resObj.strategy_type : null) || 'ハプニングへの対処';
 
         const strategyMap: Record<string, string> = {
           'ハプニングへの対処': '想定外のハプニングや予定の狂いへの対処エピソード',
@@ -205,7 +214,7 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
           focus_dimension: focusDim,
           target_question_strategy: targetStrategy,
           is_ready_for_final_analysis: isReady,
-          notes: `Clef-flash (via dynamic/llm5-analyst, ans: ${isReadyItem?.answer ?? (isReady ? 'yes' : 'no')}, prob: ${isReadyProb.toFixed(2)})`
+          notes: `Clef-flash (via workers-ai, ans: ${isReadyItem?.answer ?? (isReady ? 'yes' : 'no')}, prob: ${isReadyProb.toFixed(2)})`
         };
       }
 
@@ -213,7 +222,17 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
       const rawText = extractResponseText(data);
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
+        try {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (parsed && typeof parsed === 'object' && parsed.focus_dimension && parsed.target_question_strategy) {
+            return {
+              focus_dimension: String(parsed.focus_dimension),
+              target_question_strategy: String(parsed.target_question_strategy),
+              is_ready_for_final_analysis: !!parsed.is_ready_for_final_analysis,
+              notes: 'Parsed from JSON fallback'
+            };
+          }
+        } catch (_) {}
       }
     } else {
       const errText = await res.text();
@@ -223,14 +242,26 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
     console.error('Analyst Route fetch error:', err);
   }
 
-  // フォールバック（発話ターン数ベースのルール判定）
+  // フォールバック（発話ターン数に応じたルール判定）
   const isReady = userCount >= 4;
+  const fallbackDimensions = ['開放性', '誠実性', '外向性', '協調性', '情緒安定性'];
+  const focusDim = isReady ? '全体' : fallbackDimensions[userCount % fallbackDimensions.length];
+  const strategyDetails: Record<string, string> = {
+    '開放性': '新しく試みた工夫や好奇心・関心から始めた行動',
+    '誠実性': '想定外のハプニングや予定の狂いへの対処エピソード',
+    '外向性': '初対面や大人数の場、日常での対人関係のスタンス',
+    '協調性': '周囲と意見が分かれた場面や協力して進めたエピソード',
+    '情緒安定性': 'プレッシャーや感情の浮き沈みへのセルフコントロール'
+  };
+  const detail = strategyDetails[focusDim] || '具体的な行動エピソード';
+
   return {
-    focus_dimension: isReady ? '全体' : '行動特性',
+    focus_dimension: focusDim,
     target_question_strategy: isReady
-      ? '十分な情報が集まったので分析完了を案内'
-      : '休日の過ごし方や、プレッシャーを感じたときの対処について尋ねる',
-    is_ready_for_final_analysis: isReady
+      ? '十分な情報が集まったので、これまでの対話に共感しつつ性格分析レポートの生成を案内してください。'
+      : `${focusDim}の特性を客観的に測定するため、ユーザーの主要な活動の中で「${detail}」についての具体的な過去の体験・エピソードを尋ねてください。`,
+    is_ready_for_final_analysis: isReady,
+    notes: 'Rule-based fallback strategy'
   };
 }
 
@@ -249,12 +280,15 @@ export async function runInterviewerStream(
   const isReady = strategy.is_ready_for_final_analysis;
   const targetModel = modelName || 'dynamic/llm5';
 
+  const focusDimension = strategy.focus_dimension || '行動特性';
+  const targetStrategy = strategy.target_question_strategy || 'これまでの活動や具体的な行動エピソードについて尋ねる';
+
   const interviewerInstruction = `
 あなたはプロフェッショナルな性格分析インタビュアーです。
 裏方の分析官から以下の指示（戦略）が届いています:
 【分析官の指示】:
-- 狙う因子: ${strategy.focus_dimension}
-- 質問の方向性: ${strategy.target_question_strategy}
+- 狙う因子: ${focusDimension}
+- 質問の方向性: ${targetStrategy}
 
 【対話・質問の絶対ルール】
 1. 【直球のタイプ質問・二者択一は厳禁】:
@@ -426,12 +460,15 @@ export async function runInterviewer(
   const isReady = strategy.is_ready_for_final_analysis;
   const targetModel = modelName || 'dynamic/llm5';
 
+  const focusDimension = strategy.focus_dimension || '行動特性';
+  const targetStrategy = strategy.target_question_strategy || 'これまでの活動や具体的な行動エピソードについて尋ねる';
+
   const interviewerInstruction = `
 あなたはプロフェッショナルな性格分析インタビュアーです。
 裏方の分析官から以下の指示（戦略）が届いています:
 【分析官の指示】:
-- 狙う因子: ${strategy.focus_dimension}
-- 質問の方向性: ${strategy.target_question_strategy}
+- 狙う因子: ${focusDimension}
+- 質問の方向性: ${targetStrategy}
 
 【対話・質問の絶対ルール】
 1. 【直球のタイプ質問・二者択一は厳禁】:
