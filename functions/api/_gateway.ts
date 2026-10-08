@@ -280,7 +280,7 @@ export async function runInterviewerStream(
     method: 'POST',
     headers,
     body: JSON.stringify({
-      model: 'dynamic/llm5',
+      model: targetModel,
       messages: [
         { role: 'system', content: interviewerInstruction },
         ...formattedMessages
@@ -293,7 +293,7 @@ export async function runInterviewerStream(
   if (!res.ok) {
     const errText = await res.text();
     console.error(`Interviewer Stream error (${res.status}):`, errText);
-    throw new Error(`AI Gateway (dynamic/llm5) エラー [${res.status}]: ${errText || '詳細なし'}`);
+    throw new Error(`AI Gateway (${targetModel}) エラー [${res.status}]: ${errText || '詳細なし'}`);
   }
 
   const upstreamBody = res.body;
