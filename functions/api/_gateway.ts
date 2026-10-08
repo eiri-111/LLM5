@@ -60,6 +60,10 @@ export interface AnalysisResult {
 const DEFAULT_ACCOUNT_ID = 'e809b1129ec4b6f69520858ac79b2095';
 const DEFAULT_GATEWAY_ID = 'llm5';
 
+/** 対話ターン数（ユーザー発話回数）の制御基準 */
+export const MIN_USER_TURNS = 5; // 最低ターン数（早すぎる分析完了を防止）
+export const MAX_USER_TURNS = 8; // 安全上限ターン数（ユーザー離脱・コスト肥大化を防止）
+
 /**
  * Cloudflare AI Gateway Dynamic Routing (OpenAI互換 compat) エンドポイントURLを取得
  * 公式仕様: https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/compat/chat/completions
@@ -149,7 +153,9 @@ function parseClefFlashDecision(resObj: any, userCount: number): AnalystStrategy
       ? isReadyItem.probability
       : (typeof isReadyItem?.yes_probability === 'number' ? isReadyItem.yes_probability : 0));
   const isReadyAnswer = isReadyItem === 'yes' || isReadyItem === true || isReadyItem?.answer === 'yes';
-  const isReady = (isReadyAnswer || isReadyProb >= 0.65) || userCount >= 4;
+  const aiDeterminedReady = isReadyAnswer || isReadyProb >= 0.7;
+  // 最低ターン数（5往復）に達しており、かつAIが十分なエピソードが集まったと判定した場合、または安全上限ターン数（8往復）に達した場合に準備完了
+  const isReady = userCount >= MAX_USER_TURNS || (userCount >= MIN_USER_TURNS && aiDeterminedReady);
 
   const focusDim = target.focus_dimension?.chosen
     || target.focus_dimension?.answer
@@ -201,7 +207,7 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
   const clefQuestions: Record<string, any> = {
     is_ready: {
       type: "noul",
-      instructions: "これまでの対話から、ビッグファイブ性格診断を客観的・精密に行うのに十分な具体的行動エピソードが集まりましたか？（3〜4往復以上の具体的な対話実績がある場合にyes）"
+      instructions: "これまでの対話から、ビッグファイブ性格診断（開放性・誠実性・外向性・協調性・情緒安定性）を客観的・精密に評価するのに必要な、ユーザーの具体的な行動エピソード（困難やハプニングへの対処、他者との関わり、新しい試みなど）が複数十分に集まりましたか？単なる短い返答や挨拶ではなく、事実に基づく具体的な行動が十分に語られている場合にのみyesとしてください。"
     },
     focus_dimension: {
       type: "choice",
@@ -285,10 +291,12 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
         try {
           const jsonParsed = JSON.parse(jsonMatch[0]);
           if (jsonParsed && typeof jsonParsed === 'object' && jsonParsed.focus_dimension && jsonParsed.target_question_strategy) {
+            const aiReady = !!jsonParsed.is_ready_for_final_analysis;
+            const isReady = userCount >= MAX_USER_TURNS || (userCount >= MIN_USER_TURNS && aiReady);
             return {
               focus_dimension: String(jsonParsed.focus_dimension),
               target_question_strategy: String(jsonParsed.target_question_strategy),
-              is_ready_for_final_analysis: !!jsonParsed.is_ready_for_final_analysis,
+              is_ready_for_final_analysis: isReady,
               notes: 'Parsed from JSON fallback'
             };
           }
@@ -303,7 +311,7 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
   }
 
   // 3. ルールベースのフォールバック戦略（万一のAI障害・401エラー時でもユーザーの対話を絶対に止めない安全設計）
-  const isReady = userCount >= 4;
+  const isReady = userCount >= MAX_USER_TURNS;
   const fallbackDimensions = ['開放性', '誠実性', '外向性', '協調性', '情緒安定性'];
   const focusDim = isReady ? '全体' : fallbackDimensions[userCount % fallbackDimensions.length];
   const strategyDetails: Record<string, string> = {

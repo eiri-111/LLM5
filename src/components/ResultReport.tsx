@@ -412,7 +412,7 @@ export const ResultReport: React.FC<ResultReportProps> = ({
           className="btn-retake"
         >
           <RotateCcw size={16} />
-          もう一度対話診断する
+          診断を最初からやり直す
         </button>
       </div>
 

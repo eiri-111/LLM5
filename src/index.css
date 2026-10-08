@@ -77,6 +77,80 @@ body {
   z-index: 0;
 }
 
+/* App Header */
+.app-header {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-light);
+  padding: calc(var(--safe-top) + 0.6rem) 1rem 0.6rem;
+  flex-shrink: 0;
+  z-index: 20;
+}
+
+@media (min-width: 601px) {
+  .app-header {
+    border-left: 1px solid var(--border-light);
+    border-right: 1px solid var(--border-light);
+  }
+}
+
+.header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.header-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.brand-logo {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  line-height: 1;
+}
+
+.brand-tagline {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.btn-header-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-full);
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn-header-reset:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #dc2626;
+}
+
+.btn-header-reset:active {
+  transform: scale(0.96);
+}
+
 /* Layout Containers */
 .app-container {
   position: relative;
@@ -113,7 +187,7 @@ body {
 .app-container.scrollable-view .main-content {
   height: auto;
   overflow: visible;
-  padding: 1rem 1rem;
+  padding: calc(var(--safe-top) + 58px) 1rem 1rem;
 }
 
 /* Immersive Chat UI */
@@ -137,7 +211,7 @@ body {
   flex: 1;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: calc(var(--safe-top) + 1.25rem) 1rem 1.1rem;
+  padding: calc(var(--safe-top) + 58px) 1rem 1.1rem;
   display: flex;
   flex-direction: column;
   gap: 0.95rem;

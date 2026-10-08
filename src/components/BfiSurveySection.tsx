@@ -5,6 +5,8 @@ import { BFI_2_S_CONFIG, calculateBfiScores } from '../data/bfi2s';
 
 interface BfiSurveySectionProps {
   onCompleteSurvey: (result: SurveyResult) => void;
+  onSkipToResult?: () => void;
+  onBackToChat?: () => void;
   showToast: (msg: string) => void;
 }
 
@@ -12,6 +14,8 @@ const QUESTIONS_PER_PAGE = 5;
 
 export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
   onCompleteSurvey,
+  onSkipToResult,
+  onBackToChat,
   showToast
 }) => {
   const [answers, setAnswers] = useState<Record<number, number>>(() => {
@@ -112,6 +116,29 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
     showToast('すべての設問にサンプル回答を入力しました');
   };
 
+  // 動作確認用: 結果画面へ直接スキップ
+  const handleSkipDirectlyToResult = () => {
+    if (onSkipToResult) {
+      onSkipToResult();
+      return;
+    }
+    const sampleAnswers: Record<number, number> = {};
+    questions.forEach((q) => {
+      sampleAnswers[q.id] = Math.floor(Math.random() * 3) + 2;
+    });
+    setAnswers(sampleAnswers);
+    const scores = calculateBfiScores(sampleAnswers);
+    const surveyResult: SurveyResult = {
+      scaleType: 'bfi-2-s',
+      scaleName: BFI_2_S_CONFIG.name,
+      rawAnswers: sampleAnswers,
+      scores,
+      completedAt: new Date().toISOString(),
+      isQualtrics: false
+    };
+    onCompleteSurvey(surveyResult);
+  };
+
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto', padding: '0.5rem 0 2rem' }}>
       {/* 尺度ヘッダーカード */}
@@ -123,7 +150,7 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
         boxShadow: '0 4px 20px -2px rgba(0,0,0,0.05)',
         marginBottom: '1.25rem'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'between', marginBottom: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span style={{
               display: 'inline-flex',
@@ -148,26 +175,51 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
             </span>
           </div>
 
-          <button
-            type="button"
-            onClick={handleAutoFillSample}
-            title="テスト用自動入力"
-            style={{
-              marginLeft: 'auto',
-              background: 'none',
-              border: 'none',
-              color: '#94a3b8',
-              cursor: 'pointer',
-              padding: '4px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '0.7rem'
-            }}
-          >
-            <Wand2 size={13} />
-            <span style={{ fontSize: '0.68rem' }}>自動入力</span>
-          </button>
+          {/* 動作確認・テストボタン群 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}>
+            <button
+              type="button"
+              onClick={handleAutoFillSample}
+              title="テスト用自動入力"
+              style={{
+                backgroundColor: '#f1f5f9',
+                border: '1px solid #cbd5e1',
+                borderRadius: '8px',
+                color: '#475569',
+                cursor: 'pointer',
+                padding: '4px 8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '0.7rem',
+                fontWeight: 600
+              }}
+            >
+              <Wand2 size={12} />
+              <span>自動入力</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSkipDirectlyToResult}
+              title="結果画面へスキップ"
+              style={{
+                backgroundColor: '#f5f3ff',
+                border: '1px solid #ddd6fe',
+                borderRadius: '8px',
+                color: '#6d28d9',
+                cursor: 'pointer',
+                padding: '4px 8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '0.7rem',
+                fontWeight: 600
+              }}
+            >
+              <span>📊 結果へスキップ</span>
+            </button>
+          </div>
         </div>
 
         <h1 style={{
@@ -367,6 +419,27 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
           >
             <ChevronLeft size={16} />
             <span>前へ</span>
+          </button>
+        ) : onBackToChat ? (
+          <button
+            type="button"
+            onClick={onBackToChat}
+            style={{
+              padding: '8px 12px',
+              borderRadius: '12px',
+              border: '1px solid #cbd5e1',
+              backgroundColor: '#f8fafc',
+              color: '#475569',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            <ChevronLeft size={14} />
+            <span>対話へ</span>
           </button>
         ) : (
           <div style={{ width: '70px' }} />

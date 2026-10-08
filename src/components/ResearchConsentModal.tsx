@@ -5,11 +5,15 @@ import { UserProfile, GenderType } from '../types';
 interface ResearchConsentModalProps {
   initialProfile: UserProfile | null;
   onConsentAndSubmit: (profile: UserProfile) => void;
+  onSkipToSurvey?: () => void;
+  onSkipToResult?: () => void;
 }
 
 export const ResearchConsentModal: React.FC<ResearchConsentModalProps> = ({
   initialProfile,
-  onConsentAndSubmit
+  onConsentAndSubmit,
+  onSkipToSurvey,
+  onSkipToResult
 }) => {
   const [age, setAge] = useState<string>(
     initialProfile?.age ? String(initialProfile.age) : ''
@@ -363,6 +367,71 @@ export const ResearchConsentModal: React.FC<ResearchConsentModalProps> = ({
             <Check size={16} />
             <span>同意して対話診断をはじめる</span>
           </button>
+
+          {/* 動作確認用クイックスキップ */}
+          {(onSkipToSurvey || onSkipToResult) && (
+            <div style={{
+              marginTop: '1.25rem',
+              paddingTop: '1rem',
+              borderTop: '1px dashed #e2e8f0',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px'
+            }}>
+              <div style={{
+                fontSize: '0.72rem',
+                color: '#64748b',
+                fontWeight: 700,
+                textAlign: 'center',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '5px'
+              }}>
+                <span>🛠️ 動作確認用スキップ</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                {onSkipToSurvey && (
+                  <button
+                    type="button"
+                    onClick={onSkipToSurvey}
+                    style={{
+                      padding: '8px 10px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      color: '#1d4ed8',
+                      backgroundColor: '#eff6ff',
+                      border: '1px solid #bfdbfe',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.15s ease'
+                    }}
+                  >
+                    📋 質問紙へスキップ
+                  </button>
+                )}
+                {onSkipToResult && (
+                  <button
+                    type="button"
+                    onClick={onSkipToResult}
+                    style={{
+                      padding: '8px 10px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      color: '#6d28d9',
+                      backgroundColor: '#f5f3ff',
+                      border: '1px solid #ddd6fe',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      transition: 'background-color 0.15s ease'
+                    }}
+                  >
+                    📊 結果画面へスキップ
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </form>
       </div>
     </div>

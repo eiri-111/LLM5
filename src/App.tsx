@@ -1,10 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AnalysisResult, UserProfile, ChatMessage, SurveyResult } from './types';
+import { Header } from './components/Header';
 import { ChatMode } from './components/ChatMode';
 import { ResultReport } from './components/ResultReport';
 import { BfiSurveySection } from './components/BfiSurveySection';
 import { ResearchConsentModal } from './components/ResearchConsentModal';
-import { SAMPLE_ANALYSIS_RESULT } from './data/sampleResult';
+import { DevQuickBar } from './components/DevQuickBar';
+import { 
+  SAMPLE_ANALYSIS_RESULT, 
+  SAMPLE_SURVEY_RESULT, 
+  SAMPLE_CHAT_MESSAGES, 
+  DEFAULT_USER_PROFILE 
+} from './data/sampleResult';
 import { Loader2 } from 'lucide-react';
 import { AdminDashboard } from './components/AdminDashboard';
 
@@ -277,6 +284,9 @@ export const App: React.FC = () => {
     showToast('AI対話推定とBFI-2-Sのスコアを照合しました！');
   };
 
+  /**
+   * 診断を最初からやり直す（リセット）
+   */
   const handleRetake = () => {
     setPhase('chat');
     setAiAnalysisResult(null);
@@ -295,6 +305,21 @@ export const App: React.FC = () => {
       localStorage.removeItem('llm5_bfi_answers');
     } catch (_) {}
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    showToast('診断を最初からやり直します');
+  };
+
+  /**
+   * 確認ダイアログ付きで診断を最初からやり直す
+   */
+  const handleConfirmRetake = () => {
+    const isCompleted = phase === 'result';
+    const message = isCompleted
+      ? '診断を最初からやり直しますか？'
+      : '診断を最初からやり直しますか？\n現在の対話内容や回答データはリセットされます。';
+
+    if (window.confirm(message)) {
+      handleRetake();
+    }
   };
 
   const handleUpdateProfile = (partial: Partial<UserProfile>) => {
@@ -332,6 +357,95 @@ export const App: React.FC = () => {
     }
   };
 
+  /**
+   * 動作確認用: 質問紙画面へスキップ
+   */
+  const handleSkipToSurvey = () => {
+    if (!hasConsented || !userProfile) {
+      setUserProfile(DEFAULT_USER_PROFILE);
+      setHasConsented(true);
+      try {
+        localStorage.setItem('llm5_has_consented', 'true');
+        localStorage.setItem('llm5_user_profile', JSON.stringify(DEFAULT_USER_PROFILE));
+      } catch (_) {}
+    }
+    if (chatMessages.length === 0) {
+      setChatMessages(SAMPLE_CHAT_MESSAGES);
+      try {
+        localStorage.setItem('llm5_chat_messages', JSON.stringify(SAMPLE_CHAT_MESSAGES));
+      } catch (_) {}
+    }
+    setIsWaitingForAnalysis(false);
+    setPhase('survey');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    showToast('動作確認: 質問紙画面にスキップしました');
+  };
+
+  /**
+   * 動作確認用: 結果画面へスキップ
+   */
+  const handleSkipToResult = () => {
+    if (!hasConsented || !userProfile) {
+      setUserProfile(DEFAULT_USER_PROFILE);
+      setHasConsented(true);
+      try {
+        localStorage.setItem('llm5_has_consented', 'true');
+        localStorage.setItem('llm5_user_profile', JSON.stringify(DEFAULT_USER_PROFILE));
+      } catch (_) {}
+    }
+    if (chatMessages.length === 0) {
+      setChatMessages(SAMPLE_CHAT_MESSAGES);
+      try {
+        localStorage.setItem('llm5_chat_messages', JSON.stringify(SAMPLE_CHAT_MESSAGES));
+      } catch (_) {}
+    }
+    setAiAnalysisResult(SAMPLE_ANALYSIS_RESULT);
+    setSurveyResult(SAMPLE_SURVEY_RESULT);
+    setIsWaitingForAnalysis(false);
+    setPhase('result');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    showToast('動作確認: 結果画面にスキップしました');
+  };
+
+  /**
+   * 動作確認用: チャット画面へ移動
+   */
+  const handleSkipToChat = () => {
+    if (!hasConsented || !userProfile) {
+      setUserProfile(DEFAULT_USER_PROFILE);
+      setHasConsented(true);
+      try {
+        localStorage.setItem('llm5_has_consented', 'true');
+        localStorage.setItem('llm5_user_profile', JSON.stringify(DEFAULT_USER_PROFILE));
+      } catch (_) {}
+    }
+    setIsWaitingForAnalysis(false);
+    setPhase('chat');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    showToast('動作確認: チャット画面に移動しました');
+  };
+
+  /**
+   * 動作確認用: 初期状態に完全リセット
+   */
+  const handleResetAll = () => {
+    setHasConsented(false);
+    setUserProfile(null);
+    setAiAnalysisResult(null);
+    setSurveyResult(null);
+    setChatMessages([]);
+    setIsWaitingForAnalysis(false);
+    setPhase('chat');
+    const newId = generateSessionId();
+    setSessionId(newId);
+    try {
+      localStorage.clear();
+      localStorage.setItem('llm5_current_session_id', newId);
+    } catch (_) {}
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    showToast('初期状態にリセットしました');
+  };
+
   // 管理画面モード表示
   if (isAdminView) {
     return (
@@ -351,39 +465,62 @@ export const App: React.FC = () => {
       <div className="ambient-glow-1"></div>
       <div className="ambient-glow-2"></div>
 
+      {/* アプリ共通ヘッダー（診断を最初からに戻るボタン） */}
+      <Header
+        phase={phase}
+        onReset={handleConfirmRetake}
+      />
+
+      {/* 動作確認用クイックバー */}
+      <DevQuickBar
+        currentPhase={phase}
+        onSkipToChat={handleSkipToChat}
+        onSkipToSurvey={handleSkipToSurvey}
+        onSkipToResult={handleSkipToResult}
+        onReset={handleResetAll}
+      />
+
       {/* 研究倫理同意＆プロファイル入力モーダル（未同意の場合に表示） */}
       {(!hasConsented || !userProfile) && (
         <ResearchConsentModal
           initialProfile={userProfile}
           onConsentAndSubmit={handleConsentAndSubmit}
+          onSkipToSurvey={handleSkipToSurvey}
+          onSkipToResult={handleSkipToResult}
         />
       )}
 
       <main className="main-content">
         {phase === 'chat' && (
           <ChatMode
+            key={sessionId}
             userProfile={userProfile}
             onUpdateProfile={handleUpdateProfile}
             onStartSurvey={handleStartSurvey}
+            onSkipToSurvey={handleSkipToSurvey}
+            onSkipToResult={handleSkipToResult}
             showToast={showToast}
           />
         )}
 
         {phase === 'survey' && (
           <BfiSurveySection
+            key={sessionId}
             onCompleteSurvey={handleCompleteSurvey}
+            onSkipToResult={handleSkipToResult}
+            onBackToChat={handleSkipToChat}
             showToast={showToast}
           />
         )}
 
-        {phase === 'result' && aiAnalysisResult && (
+        {phase === 'result' && (
           <ResultReport
-            result={aiAnalysisResult}
-            surveyResult={surveyResult}
+            result={aiAnalysisResult || SAMPLE_ANALYSIS_RESULT}
+            surveyResult={surveyResult || SAMPLE_SURVEY_RESULT}
             userProfile={userProfile}
             messages={chatMessages}
             sessionId={sessionId}
-            onRetake={handleRetake}
+            onRetake={handleConfirmRetake}
             onUpdateSurveyResult={handleUpdateSurveyResult}
             showToast={showToast}
           />

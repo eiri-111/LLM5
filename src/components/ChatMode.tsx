@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles } from 'lucide-react';
+import { Send, Sparkles, FlaskConical } from 'lucide-react';
 import { ChatMessage, UserProfile } from '../types';
 
 interface ChatModeProps {
   userProfile: UserProfile | null;
   onUpdateProfile?: (profile: Partial<UserProfile>) => void;
   onStartSurvey: (messages: ChatMessage[]) => void;
+  onSkipToSurvey?: () => void;
+  onSkipToResult?: () => void;
   showToast: (msg: string) => void;
 }
 
@@ -25,6 +27,8 @@ function sanitizeMessage(text: string): string {
 export const ChatMode: React.FC<ChatModeProps> = ({
   userProfile,
   onStartSurvey,
+  onSkipToSurvey,
+  onSkipToResult,
   showToast,
 }) => {
   // 会話履歴の復元
@@ -206,6 +210,67 @@ export const ChatMode: React.FC<ChatModeProps> = ({
       </div>
 
       <div className="chat-input-bar">
+        {/* 動作確認用スキップバー */}
+        {(onSkipToSurvey || onSkipToResult) && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '2px 4px 6px',
+            gap: '8px'
+          }}>
+            <span style={{
+              fontSize: '0.68rem',
+              color: '#94a3b8',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontWeight: 600
+            }}>
+              <FlaskConical size={12} />
+              <span>動作確認</span>
+            </span>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {onSkipToSurvey && (
+                <button
+                  type="button"
+                  onClick={onSkipToSurvey}
+                  style={{
+                    backgroundColor: '#eff6ff',
+                    border: '1px solid #bfdbfe',
+                    color: '#1d4ed8',
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                    padding: '3px 8px',
+                    borderRadius: '6px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  📋 質問紙へスキップ
+                </button>
+              )}
+              {onSkipToResult && (
+                <button
+                  type="button"
+                  onClick={onSkipToResult}
+                  style={{
+                    backgroundColor: '#f5f3ff',
+                    border: '1px solid #ddd6fe',
+                    color: '#6d28d9',
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                    padding: '3px 8px',
+                    borderRadius: '6px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  📊 結果画面へスキップ
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {isReady && (
           <button 
             type="button"

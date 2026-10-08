@@ -1,4 +1,50 @@
-import { AnalysisResult } from '../types';
+import { AnalysisResult, SurveyResult, ChatMessage, UserProfile } from '../types';
+
+export const DEFAULT_USER_PROFILE: UserProfile = {
+  age: 22,
+  gender: 'male'
+};
+
+export const SAMPLE_CHAT_MESSAGES: ChatMessage[] = [
+  {
+    role: 'assistant',
+    content: "こんにちは！研究へのご参加ありがとうございます。\nAIとの自然な会話を通して、あなたのパーソナリティを精密に分析しますね。\n\nテストではないので、リラックスしてお話ししましょう！\nまずは普段、あなたが【一番時間やエネルギーを使っていること】（お仕事や学業、趣味など）を教えていただけますか？"
+  },
+  {
+    role: 'user',
+    content: "普段は大学で情報工学を専攻しながら、Webアプリケーションの開発に取り組んでいます。休日は散歩をしながら新しいカフェを探したり、技術書や小説を読んで過ごすことが多いです。"
+  },
+  {
+    role: 'assistant',
+    content: "Web開発の勉強に励みつつ、休日には読書やカフェ巡りでリフレッシュされているのですね！とても充実した時間の使い方です。\n\n普段の生活や作業の中で、何か予想外のトラブルや計画の変更が起きたとき、どのように受け止めて対応することが多いですか？"
+  },
+  {
+    role: 'user',
+    content: "焦ることもありますが、まずは深呼吸して『まあ何とかなる』と気持ちを切り替えます。原因を落ち着いて分析して、別のアプローチや代替案を柔軟に試すようにしています。"
+  }
+];
+
+export const SAMPLE_SURVEY_RESULT: SurveyResult = {
+  scaleType: 'bfi-2-s',
+  scaleName: 'BFI-2-S 日本語版 (Big Five Inventory-2 短縮版)',
+  rawAnswers: {
+    1: 2, 2: 5, 3: 2, 4: 2, 5: 1,
+    6: 4, 7: 2, 8: 2, 9: 2, 10: 1,
+    11: 4, 12: 5, 13: 4, 14: 4, 15: 5,
+    16: 4, 17: 1, 18: 4, 19: 4, 20: 5,
+    21: 3, 22: 1, 23: 2, 24: 2, 25: 4,
+    26: 2, 27: 1, 28: 4, 29: 2, 30: 1
+  },
+  scores: {
+    openness: { rawMean: 4.5, normalizedScore: 88 },
+    conscientiousness: { rawMean: 3.8, normalizedScore: 70 },
+    extraversion: { rawMean: 3.5, normalizedScore: 63 },
+    agreeableness: { rawMean: 4.5, normalizedScore: 88 },
+    neuroticism: { rawMean: 2.0, normalizedScore: 25 }
+  },
+  completedAt: new Date().toISOString(),
+  isQualtrics: false
+};
 
 export const SAMPLE_ANALYSIS_RESULT: AnalysisResult = {
   personality_title: "知的好奇心あふれる先駆的イノベーター",
