@@ -219,16 +219,19 @@ export const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+
   /**
    * BFI-2-S 質問紙回答完了 ➔ AI分析結果を取得・統合してD1/R2へ保存し、照合レポートへ
    */
   const handleCompleteSurvey = async (surveyData: SurveyResult) => {
     setSurveyResult(surveyData);
     setIsWaitingForAnalysis(true);
+    setAnalysisError(null);
     showToast('AI対話分析と質問紙スコアを照合しています...');
 
     let attempts = 0;
-    const maxAttempts = 15; // 2秒 x 15回 = 最大30秒
+    const maxAttempts = 8; // 2秒 x 8回 = 最大16秒ポーリング
     let finalAiResult: AnalysisResult | null = aiAnalysisResult;
 
     const fetchAiAnalysisResult = async (): Promise<AnalysisResult | null> => {
@@ -250,38 +253,70 @@ export const App: React.FC = () => {
       return null;
     };
 
+    // 1. まずバックグラウンド分析結果をポーリング
     if (!finalAiResult) {
       finalAiResult = await fetchAiAnalysisResult();
     }
 
-    // フォールバック
-    if (!finalAiResult) {
-      finalAiResult = SAMPLE_ANALYSIS_RESULT;
-    }
-
-    setAiAnalysisResult(finalAiResult);
-
-    // D1 & R2 へ保存
-    try {
-      await fetch('/api/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: sessionId,
-          user_profile: userProfile || undefined,
-          messages: chatMessages,
-          ai_result: finalAiResult,
-          survey_result: surveyData
-        })
-      });
-    } catch (saveErr) {
-      console.warn('Save on survey completion error:', saveErr);
+    // 2. バックグラウンド分析が未完了/失敗だった場合、直接分析API (/api/analyze) で対話ログから即時生成
+    if (!finalAiResult && chatMessages.length >= 2) {
+      showToast('AI分析を直接生成中...');
+      try {
+        const analyzeRes = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: sessionId,
+            user_profile: userProfile || undefined,
+            messages: chatMessages,
+            survey_result: surveyData
+          })
+        });
+        if (analyzeRes.ok) {
+          const directData: any = await analyzeRes.json();
+          if (directData && directData.scores) {
+            finalAiResult = directData as AnalysisResult;
+          }
+        } else {
+          const errJson = await analyzeRes.json().catch(() => ({}));
+          console.error('Direct analyze endpoint returned error:', errJson);
+        }
+      } catch (directErr: any) {
+        console.error('Direct analyze fetch error:', directErr);
+      }
     }
 
     setIsWaitingForAnalysis(false);
-    setPhase('result');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    showToast('AI対話推定とBFI-2-Sのスコアを照合しました！');
+
+    if (finalAiResult) {
+      setAiAnalysisResult(finalAiResult);
+
+      // D1 & R2 へ保存
+      try {
+        await fetch('/api/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: sessionId,
+            user_profile: userProfile || undefined,
+            messages: chatMessages,
+            ai_result: finalAiResult,
+            survey_result: surveyData
+          })
+        });
+      } catch (saveErr) {
+        console.warn('Save on survey completion error:', saveErr);
+      }
+
+      setPhase('result');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      showToast('AI対話推定とBFI-2-Sのスコアを照合しました！');
+    } else {
+      // 分析結果が生成できなかった場合は、ダミーにすり替えず明示的にエラーを表示
+      setAnalysisError('AI性格分析の生成・取得ができませんでした。AI Gatewayの接続状態をご確認のうえ、もう一度お試しください。');
+      setPhase('result');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   /**
@@ -291,6 +326,7 @@ export const App: React.FC = () => {
     setPhase('chat');
     setAiAnalysisResult(null);
     setSurveyResult(null);
+    setAnalysisError(null);
     setChatMessages([]);
     const newId = generateSessionId();
     setSessionId(newId);
@@ -514,16 +550,74 @@ export const App: React.FC = () => {
         )}
 
         {phase === 'result' && (
-          <ResultReport
-            result={aiAnalysisResult || SAMPLE_ANALYSIS_RESULT}
-            surveyResult={surveyResult || SAMPLE_SURVEY_RESULT}
-            userProfile={userProfile}
-            messages={chatMessages}
-            sessionId={sessionId}
-            onRetake={handleConfirmRetake}
-            onUpdateSurveyResult={handleUpdateSurveyResult}
-            showToast={showToast}
-          />
+          analysisError ? (
+            <div className="result-container" style={{ padding: '2.5rem 1rem' }}>
+              <div style={{
+                background: '#ffffff',
+                borderRadius: '1.25rem',
+                padding: '2.5rem 1.75rem',
+                border: '1px solid #fecaca',
+                maxWidth: '520px',
+                margin: '0 auto',
+                boxShadow: '0 8px 24px rgba(239, 68, 68, 0.08)',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '2.75rem', marginBottom: '1rem' }}>⚠️</div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#991b1b', marginBottom: '0.75rem' }}>
+                  AI分析結果の生成に失敗しました
+                </h3>
+                <p style={{ fontSize: '0.88rem', color: '#64748b', lineHeight: 1.6, marginBottom: '1.75rem' }}>
+                  {analysisError}
+                </p>
+                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => {
+                      if (surveyResult) handleCompleteSurvey(surveyResult);
+                      else handleConfirmRetake();
+                    }}
+                    style={{
+                      backgroundColor: '#2563eb',
+                      color: '#ffffff',
+                      padding: '0.65rem 1.25rem',
+                      borderRadius: '0.5rem',
+                      fontWeight: 600,
+                      fontSize: '0.88rem',
+                      border: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    AI分析を再試行する
+                  </button>
+                  <button
+                    onClick={handleConfirmRetake}
+                    style={{
+                      backgroundColor: '#f1f5f9',
+                      color: '#475569',
+                      padding: '0.65rem 1.25rem',
+                      borderRadius: '0.5rem',
+                      fontWeight: 600,
+                      fontSize: '0.88rem',
+                      border: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    最初からやり直す
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <ResultReport
+              result={aiAnalysisResult || SAMPLE_ANALYSIS_RESULT}
+              surveyResult={surveyResult || SAMPLE_SURVEY_RESULT}
+              userProfile={userProfile}
+              messages={chatMessages}
+              sessionId={sessionId}
+              onRetake={handleConfirmRetake}
+              onUpdateSurveyResult={handleUpdateSurveyResult}
+              showToast={showToast}
+            />
+          )
         )}
       </main>
 

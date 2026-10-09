@@ -597,7 +597,8 @@ export async function runFinalAnalysis(
     ? env.CF_AI_GATEWAY_ANALYST_URL.trim()
     : getGatewayCompatUrl(env);
   const headers = getGatewayHeaders(env);
-  const targetModel = modelName || 'dynamic/llm5-analyst';
+  const preferredModel = modelName || 'dynamic/llm5-analyst';
+  const fallbackModel = 'dynamic/llm5';
 
   const dialogueHistory = messages
     .map(m => `${m.role === 'user' ? 'ユーザー' : 'インタビュアー'}: ${m.content}`)
@@ -606,103 +607,148 @@ export async function runFinalAnalysis(
   const systemPrompt = `
 あなたは世界最高峰のパーソナリティ心理学者です。
 提供された対話履歴から、主要5因子（開放性, 誠実性, 外向性, 協調性, 情緒安定性）に基づいて精密な性格プロファイリングを行ってください。
-分析にあたっては、ユーザーの自己申告（「私は○○な性格」等）ではなく、対話内で語られた【具体的な過去のエピソード（行動事実・出来事・その時の対処法）】を唯一の根拠として客観的に評価してください。
-各因子のスコア(score)は0〜100の範囲で客観的に推定し、なぜその結果になったのかの具体的な対話上の根拠（発言やエピソード、回答傾向）を深く分析してください。
+分析にあたっては、ユーザーの自己申告（「私は○○な性格」等）ではなく、対話内で語られた【具体的な過去のエピソード（行動事実・出来事・その時の対処法・発言のトーン）】を唯一の根拠として客観的に評価してください。
+各因子のスコア(score)は0〜100の範囲で客観的に推定し、なぜその結果になったのかの具体的な対話上の根拠（実際の発言やエピソード、回答傾向）を深く分析してください。
+
+【厳格な禁止事項】
+- 「強み1」「強み2」「...」「要約テキスト」のようなプレースホルダー文字列は絶対に出力しないでください。
+- すべての項目に対話履歴から読み取った具体的で固有の心理的分析・エピソードを記載してください。
 
 必ず以下のJSON形式に厳密に従って出力してください（Markdown記法は含めず純粋なJSONのみ）:
 {
-  "personality_title": "性格を象徴するキャッチコピー (例: '知的好奇心あふれる先駆的イノベーター')",
-  "personality_type": "タイプ名 (例: '創造的探究型')",
-  "summary": "全体的な人物像と個性の統合的解説（250〜400文字程度）",
+  "personality_title": "対話の個性をもっとも象徴する独自のキャッチコピー",
+  "personality_type": "性格タイプ名（例: 探究的イノベーター型、協調的ファシリテーター型など）",
+  "summary": "対話全体から分析された全体的な人物像と個性の統合的解説（250〜400文字程度）",
   "scores": {
     "openness": {
       "score": 85,
-      "level": "非常に高い",
-      "title": "旺盛な知的好奇心と発想力",
-      "description": "新しい経験や創造的なアイデアに...",
+      "level": "高い",
+      "title": "知的好奇心と新しい視点",
+      "description": "知的好奇心、新しいアイデアや変化に対する受容度の特徴",
       "traits": ["独創的", "探究心", "柔軟"],
-      "analysis_reasoning": "なぜこのスコアと判定したか、対話中の発言・エピソードから読み取れる心理的根拠（100〜150文字程度）"
+      "analysis_reasoning": "対話中のどのエピソードや発言からこの開放性スコアと判定したかの具体的な心理的根拠（100〜150文字程度）"
     },
     "conscientiousness": {
       "score": 70,
       "level": "高い",
-      "title": "高い責任感と計画性",
-      "description": "...",
+      "title": "計画性と責任感",
+      "description": "目標達成に向けた自律性、計画性、細部への配慮の特徴",
       "traits": ["計画的", "着実", "自律"],
-      "analysis_reasoning": "対話のどの言動からこの計画性・責任感を読み取ったかの具体的根拠"
+      "analysis_reasoning": "対話中のどのエピソードや対処法からこの誠実性を読み取ったかの具体的根拠（100〜150文字程度）"
     },
     "extraversion": {
       "score": 55,
-      "level": "平均的",
-      "title": "状況に応じた柔軟な社交性",
-      "description": "...",
-      "traits": ["バランス型", "聞き上手"],
-      "analysis_reasoning": "対話のテンポや人との距離感の取り方から分析した社交性の根拠"
+      "level": "中庸",
+      "title": "対人エネルギーと社交性",
+      "description": "他者との関わり方、刺激への反応、エネルギーの充電方法の特徴",
+      "traits": ["バランス型", "聞き上手", "自然体"],
+      "analysis_reasoning": "対話のテンポや人との距離感の取り方から分析した社交性の根拠（100〜150文字程度）"
     },
     "agreeableness": {
       "score": 80,
       "level": "高い",
-      "title": "深い共感と思いやり",
-      "description": "...",
+      "title": "共感性と調和の姿勢",
+      "description": "他者への思いやり、信頼、チームや周囲との協調姿勢の特徴",
       "traits": ["協調性", "親身", "信頼"],
-      "analysis_reasoning": "言葉の端々や相手への気遣い、対立への姿勢から分析した根拠"
+      "analysis_reasoning": "言葉の端々や相手への配慮、対立への姿勢から分析した根拠（100〜150文字程度）"
     },
     "neuroticism": {
       "score": 40,
-      "level": "控えめ",
-      "title": "落ち着いた情緒安定性",
-      "description": "...",
-      "traits": ["冷静", "切り替えが早い"],
-      "analysis_reasoning": "トラブルや気分への対処法から分析した感情の安定度の根拠"
+      "level": "低い",
+      "title": "感情のコントロールと安定性",
+      "description": "ストレス耐性、困難や想定外の出来事に対する心のしなやかさの特徴",
+      "traits": ["冷静", "切り替えの早さ", "安定"],
+      "analysis_reasoning": "トラブルや気分への対処法から分析した感情の安定度の根拠（100〜150文字程度）"
     }
   },
   "demographics": {
-    "age": 20,
-    "gender": "男性"
+    "age": null,
+    "gender": null
   },
-  "strengths": ["強み1", "強み2", "強み3"],
-  "growth_areas": ["成長のヒント1", "成長のヒント2"],
-  "career_recommendations": ["適した環境1", "適した環境2", "適した環境3"],
-  "relationship_style": "対人関係やコミュニケーションの特徴とアドバイス",
-  "stress_management": "ストレスを感じやすい要因と効果的なリフレッシュ法",
+  "strengths": [
+    "対話から見出された最大の強み1（具体的な行動様式を明記）",
+    "対話から見出された最大の強み2（対人関係や判断の特徴を明記）",
+    "対話から見出された最大の強み3（状況対応の長所を明記）"
+  ],
+  "growth_areas": [
+    "さらなる向上のためのアドバイス1",
+    "ストレスや過負荷を避けるための注意点2"
+  ],
+  "career_recommendations": [
+    "強みが最大限発揮される環境・職務スタイル1",
+    "強みが最大限発揮される環境・職務スタイル2",
+    "望ましい組織文化や役割3"
+  ],
+  "relationship_style": "対人関係やコミュニケーションにおける固有の特徴とアドバイス（150文字程度）",
+  "stress_management": "ストレスを感じやすいシチュエーションと、この人に最適なリフレッシュ法（150文字程度）",
   "llm_analysis_rationale": "対話全体からAIが読み解いた深層心理・思考プロセスの総括（対話の言葉選び、トーン、質問へのリアクションからどのように人物像を特定したかの専門的解説。200〜300文字程度）",
   "dialogue_evidence": [
-    "対話から読み取れた特徴的な発言・行動エピソード1",
-    "対話から読み取れた特徴的な発言・行動エピソード2",
-    "対話から読み取れた特徴的な発言・行動エピソード3"
+    "ユーザーが対話内で語った特徴的な具体的エピソードや発言の抜粋1（該当因子と関連づけて記述）",
+    "ユーザーが対話内で語った特徴的な具体的エピソードや発言の抜粋2（該当因子と関連づけて記述）",
+    "ユーザーが対話内で語った特徴的な具体的エピソードや発言の抜粋3（該当因子と関連づけて記述）"
   ]
 }
-※ユーザーが対話内で言及した年齢（数値または20代等の年代）と性別（男性/女性/その他）を抽出し、demographicsに格納してください（未言及の場合はnull）。
+※ユーザーが対話内で言及した年齢（数値または年代）と性別を抽出し、demographicsに格納してください（未言及の場合はnull）。
 `;
 
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model: targetModel,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `【対話履歴】\n${dialogueHistory}\n\n上記対話からビッグファイブ性格プロファイルをJSONで生成してください。` }
-      ],
-      temperature: 0.0
-    })
-  });
+  // モデル呼び出し実行（第一候補が失敗した場合はチャット稼働モデルへ自動フォールバック）
+  const tryGenerateAnalysis = async (model: string): Promise<string> => {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `【対話履歴】\n${dialogueHistory}\n\n上記対話からビッグファイブ性格プロファイルをJSONで生成してください。` }
+        ],
+        temperature: 0.2
+      })
+    });
 
-  if (!res.ok) {
-    const errText = await res.text();
-    console.error(`Final analysis fetch error (${res.status}):`, errText);
-    throw new Error(`AI Gateway (${targetModel}) 分析エラー [${res.status}]: ${errText || '詳細なし'}`);
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`AI Gateway (${model}) 分析エラー [${res.status}]: ${errText || '詳細なし'}`);
+    }
+
+    const data: any = await res.json();
+    return extractResponseText(data);
+  };
+
+  let rawText = '';
+  try {
+    rawText = await tryGenerateAnalysis(preferredModel);
+  } catch (preferredErr: any) {
+    console.warn(`[runFinalAnalysis] Preferred model (${preferredModel}) failed:`, preferredErr.message);
+    if (preferredModel !== fallbackModel) {
+      console.log(`[runFinalAnalysis] Retrying with fallback model (${fallbackModel})...`);
+      rawText = await tryGenerateAnalysis(fallbackModel);
+    } else {
+      throw preferredErr;
+    }
   }
 
-  const data: any = await res.json();
-  const rawText = extractResponseText(data);
+  // Markdownコードブロック除去とJSON抽出
+  let cleaned = rawText
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
 
-  const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+    console.error('Invalid raw output for final analysis:', rawText);
     throw new Error('AI Gatewayから有効なJSON応答が得られませんでした');
   }
 
-  return JSON.parse(jsonMatch[0]);
+  const jsonStr = cleaned.slice(firstBrace, lastBrace + 1);
+  try {
+    return JSON.parse(jsonStr);
+  } catch (parseErr: any) {
+    console.error('JSON parse error in runFinalAnalysis:', parseErr, jsonStr);
+    throw new Error(`分析結果JSONの構文解析に失敗しました: ${parseErr.message}`);
+  }
 }
 
 /**
