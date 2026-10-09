@@ -113,9 +113,16 @@ export function calculateBfiScores(
       const mean = sum / values.length;
       // 0〜100に正規化: (mean - 1) / (5 - 1) * 100
       const normalized = Math.round(((mean - 1) / (maxPoints - 1)) * 100);
+
+      // 【情緒安定性 (Emotional Stability) の整合化】:
+      // BFI-2の素点項目は「神経症傾向（高いほど不安や動揺が強い）」を測定するため、
+      // レーダーチャートおよびAI推定スコアの「情緒安定性（高いほど冷静で安定）」と方向性を揃えるため反転する
+      const effectiveNormalized = dim === 'neuroticism' ? (100 - normalized) : normalized;
+      const effectiveMean = dim === 'neuroticism' ? Math.round(((maxPoints + 1) - mean) * 100) / 100 : Math.round(mean * 100) / 100;
+
       result[dim] = {
-        rawMean: Math.round(mean * 100) / 100,
-        normalizedScore: Math.min(100, Math.max(0, normalized))
+        rawMean: effectiveMean,
+        normalizedScore: Math.min(100, Math.max(0, effectiveNormalized))
       };
     }
   });

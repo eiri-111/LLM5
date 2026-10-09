@@ -30,7 +30,7 @@ const DIMENSION_CONFIG: { key: DimensionKey; label: string; enName: string }[] =
   { key: 'conscientiousness', label: '誠実性', enName: 'Conscientiousness' },
   { key: 'extraversion', label: '外向性', enName: 'Extraversion' },
   { key: 'agreeableness', label: '協調性', enName: 'Agreeableness' },
-  { key: 'neuroticism', label: '情緒安定性/神経症', enName: 'Emotional Stability' }
+  { key: 'neuroticism', label: '情緒安定性', enName: 'Emotional Stability' }
 ];
 
 export const ComparisonChart: React.FC<ComparisonChartProps> = ({ aiScores, surveyResult }) => {

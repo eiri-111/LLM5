@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Share2, ImageDown, RotateCcw, Award, Lightbulb, Briefcase, HeartHandshake, ShieldAlert, Sparkles, Search, UserCheck, SlidersHorizontal, X, Check } from 'lucide-react';
+import { Share2, ImageDown, RotateCcw, Award, Lightbulb, Briefcase, HeartHandshake, ShieldAlert, Sparkles, Search, UserCheck } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { AnalysisResult, UserProfile, ChatMessage, SurveyResult } from '../types';
 import { RadarChart } from './RadarChart';
@@ -23,33 +23,10 @@ export const ResultReport: React.FC<ResultReportProps> = ({
   messages,
   sessionId,
   onRetake,
-  onUpdateSurveyResult,
   showToast
 }) => {
   const [isSavingImage, setIsSavingImage] = useState(false);
-  const [isQualtricsModalOpen, setIsQualtricsModalOpen] = useState(false);
-
-  // Qualtrics 入力モーダル用のフォームステート
-  const [qualtricsIdInput, setQualtricsIdInput] = useState(surveyResult?.qualtrics_id || '');
-  const [scoreOpenness, setScoreOpenness] = useState<number>(surveyResult?.scores?.openness?.normalizedScore ?? Math.min(100, Math.max(0, result.scores.openness.score - 5)));
-  const [scoreConscientiousness, setScoreConscientiousness] = useState<number>(surveyResult?.scores?.conscientiousness?.normalizedScore ?? Math.min(100, Math.max(0, result.scores.conscientiousness.score + 5)));
-  const [scoreExtraversion, setScoreExtraversion] = useState<number>(surveyResult?.scores?.extraversion?.normalizedScore ?? Math.min(100, Math.max(0, result.scores.extraversion.score - 10)));
-  const [scoreAgreeableness, setScoreAgreeableness] = useState<number>(surveyResult?.scores?.agreeableness?.normalizedScore ?? Math.min(100, Math.max(0, result.scores.agreeableness.score + 8)));
-  const [scoreNeuroticism, setScoreNeuroticism] = useState<number>(surveyResult?.scores?.neuroticism?.normalizedScore ?? Math.min(100, Math.max(0, result.scores.neuroticism.score - 4)));
-
   const reportRef = useRef<HTMLDivElement>(null);
-
-  // surveyResult が外部から変わったときにフォーム初期値を同期
-  useEffect(() => {
-    if (surveyResult) {
-      if (surveyResult.qualtrics_id) setQualtricsIdInput(surveyResult.qualtrics_id);
-      if (surveyResult.scores?.openness) setScoreOpenness(surveyResult.scores.openness.normalizedScore);
-      if (surveyResult.scores?.conscientiousness) setScoreConscientiousness(surveyResult.scores.conscientiousness.normalizedScore);
-      if (surveyResult.scores?.extraversion) setScoreExtraversion(surveyResult.scores.extraversion.normalizedScore);
-      if (surveyResult.scores?.agreeableness) setScoreAgreeableness(surveyResult.scores.agreeableness.normalizedScore);
-      if (surveyResult.scores?.neuroticism) setScoreNeuroticism(surveyResult.scores.neuroticism.normalizedScore);
-    }
-  }, [surveyResult]);
 
   // 照合レポート表示時にD1/R2へ自動保存
   useEffect(() => {
@@ -68,38 +45,6 @@ export const ResultReport: React.FC<ResultReportProps> = ({
       }).catch(err => console.warn('Auto-save result error:', err));
     }
   }, [sessionId, userProfile, result, messages, surveyResult]);
-
-  const handleApplyQualtricsScores = () => {
-    const newSurvey: SurveyResult = {
-      scaleType: surveyResult?.scaleType || 'bfi-2-s',
-      scaleName: surveyResult?.scaleName || 'BFI-2-S (Big Five Inventory-2 短縮版)',
-      scores: {
-        openness: { rawMean: scoreOpenness, normalizedScore: scoreOpenness },
-        conscientiousness: { rawMean: scoreConscientiousness, normalizedScore: scoreConscientiousness },
-        extraversion: { rawMean: scoreExtraversion, normalizedScore: scoreExtraversion },
-        agreeableness: { rawMean: scoreAgreeableness, normalizedScore: scoreAgreeableness },
-        neuroticism: { rawMean: scoreNeuroticism, normalizedScore: scoreNeuroticism }
-      },
-      completedAt: new Date().toISOString(),
-      qualtrics_id: qualtricsIdInput || undefined,
-      isQualtrics: surveyResult?.isQualtrics || false
-    };
-
-    if (onUpdateSurveyResult) {
-      onUpdateSurveyResult(newSurvey);
-    }
-    setIsQualtricsModalOpen(false);
-    showToast('質問紙スコアを反映し、D1/R2へ保存しました！');
-  };
-
-  const handleApplySampleQualtricsScores = () => {
-    setScoreOpenness(Math.min(100, Math.max(0, result.scores.openness.score + 6)));
-    setScoreConscientiousness(Math.min(100, Math.max(0, result.scores.conscientiousness.score - 8)));
-    setScoreExtraversion(Math.min(100, Math.max(0, result.scores.extraversion.score + 12)));
-    setScoreAgreeableness(Math.min(100, Math.max(0, result.scores.agreeableness.score - 5)));
-    setScoreNeuroticism(Math.min(100, Math.max(0, result.scores.neuroticism.score + 4)));
-    showToast('サンプルの質問紙回答値をセットしました');
-  };
 
   const shareText = encodeURIComponent(
     `【LLM5 性格診断結果】\n私の性格タイプは「${result.personality_title}」でした！\n\n#LLM5 #性格診断`
@@ -184,14 +129,6 @@ export const ResultReport: React.FC<ResultReportProps> = ({
               <h3 className="card-section-title" style={{ margin: 0 }}>
                 <span>📊 AI対話推定 × 質問紙測定（{surveyResult.scaleName}）の照合分析</span>
               </h3>
-              <button
-                type="button"
-                onClick={() => setIsQualtricsModalOpen(true)}
-                className="text-xs font-semibold text-sky-600 hover:text-sky-800 bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-lg border border-sky-200 transition-colors flex items-center gap-1.5"
-              >
-                <SlidersHorizontal size={14} />
-                <span>質問紙スコアを調整</span>
-              </button>
             </div>
             <ComparisonChart aiScores={result.scores} surveyResult={surveyResult} />
           </>
@@ -201,32 +138,8 @@ export const ResultReport: React.FC<ResultReportProps> = ({
               <h3 className="card-section-title" style={{ margin: 0 }}>
                 📊 5因子レーダーチャート (AI推定)
               </h3>
-              <button
-                type="button"
-                onClick={() => setIsQualtricsModalOpen(true)}
-                className="text-xs font-semibold text-sky-600 hover:text-sky-800 bg-sky-50 hover:bg-sky-100 px-3 py-1.5 rounded-lg border border-sky-200 transition-colors flex items-center gap-1.5"
-              >
-                <SlidersHorizontal size={14} />
-                <span>質問紙スコアを照合</span>
-              </button>
             </div>
             <RadarChart scores={result.scores} />
-
-            {/* 質問紙照合への案内バナー */}
-            <div className="mt-4 p-3 bg-sky-50/70 border border-sky-200 rounded-xl flex items-center justify-between flex-wrap gap-3">
-              <div className="text-xs text-sky-900">
-                <div className="font-bold">📝 BFI-2-S 質問紙スコアとの照合</div>
-                <div className="text-sky-700">数値を照合すると、AI対話推定と重ね合わせた比較チャートを表示し、D1/R2へ自動保存します。</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsQualtricsModalOpen(true)}
-                className="bg-sky-600 hover:bg-sky-700 text-white font-semibold text-xs px-3.5 py-2 rounded-lg shadow-sm transition-all flex items-center gap-1.5"
-              >
-                <SlidersHorizontal size={14} />
-                <span>質問紙スコアを入力して比較</span>
-              </button>
-            </div>
           </>
         )}
       </div>
@@ -415,165 +328,6 @@ export const ResultReport: React.FC<ResultReportProps> = ({
           診断を最初からやり直す
         </button>
       </div>
-
-      {/* Qualtrics スコア手動入力・照合モーダル */}
-      {isQualtricsModalOpen && (
-        <div className="modal-backdrop">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-sm">
-                  📊
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-base">
-                    BFI-2-S 質問紙スコアの確認・調整
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    BFI-2-S尺度スコアを調整し、LLM対話推定結果と照合比較します
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsQualtricsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="mt-4 space-y-4 text-sm">
-              {/* 回答ID (任意) */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  回答・被験者ID (任意)
-                </label>
-                <input
-                  type="text"
-                  value={qualtricsIdInput}
-                  onChange={(e) => setQualtricsIdInput(e.target.value)}
-                  placeholder="例: BFI_user_001"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
-                />
-              </div>
-
-              {/* 5因子のスコアスライダー */}
-              <div className="space-y-3 pt-2">
-                <div className="flex items-center justify-between text-xs text-slate-500 font-semibold mb-1">
-                  <span>ビッグファイブ各因子スコア (0〜100点)</span>
-                  <button
-                    type="button"
-                    onClick={handleApplySampleQualtricsScores}
-                    className="text-sky-600 hover:text-sky-800 underline font-normal"
-                  >
-                    サンプル値を入力
-                  </button>
-                </div>
-
-                {/* 開放性 */}
-                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-semibold text-slate-800 text-xs">💡 開放性 (Openness)</span>
-                    <span className="font-bold text-sky-600 text-xs">{scoreOpenness}点</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={scoreOpenness}
-                    onChange={(e) => setScoreOpenness(Number(e.target.value))}
-                    className="w-full accent-sky-600 cursor-pointer"
-                  />
-                </div>
-
-                {/* 誠実性 */}
-                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-semibold text-slate-800 text-xs">🎯 誠実性 (Conscientiousness)</span>
-                    <span className="font-bold text-sky-600 text-xs">{scoreConscientiousness}点</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={scoreConscientiousness}
-                    onChange={(e) => setScoreConscientiousness(Number(e.target.value))}
-                    className="w-full accent-sky-600 cursor-pointer"
-                  />
-                </div>
-
-                {/* 外向性 */}
-                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-semibold text-slate-800 text-xs">⚡ 外向性 (Extraversion)</span>
-                    <span className="font-bold text-sky-600 text-xs">{scoreExtraversion}点</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={scoreExtraversion}
-                    onChange={(e) => setScoreExtraversion(Number(e.target.value))}
-                    className="w-full accent-sky-600 cursor-pointer"
-                  />
-                </div>
-
-                {/* 協調性 */}
-                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-semibold text-slate-800 text-xs">🤝 協調性 (Agreeableness)</span>
-                    <span className="font-bold text-sky-600 text-xs">{scoreAgreeableness}点</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={scoreAgreeableness}
-                    onChange={(e) => setScoreAgreeableness(Number(e.target.value))}
-                    className="w-full accent-sky-600 cursor-pointer"
-                  />
-                </div>
-
-                {/* 情緒安定性 */}
-                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-semibold text-slate-800 text-xs">🛡️ 情緒安定性 (Emotional Stability)</span>
-                    <span className="font-bold text-sky-600 text-xs">{scoreNeuroticism}点</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={scoreNeuroticism}
-                    onChange={(e) => setScoreNeuroticism(Number(e.target.value))}
-                    className="w-full accent-sky-600 cursor-pointer"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* モーダルフッター */}
-            <div className="mt-6 flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setIsQualtricsModalOpen(false)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
-              >
-                キャンセル
-              </button>
-              <button
-                type="button"
-                onClick={handleApplyQualtricsScores}
-                className="px-4 py-2 rounded-xl text-xs font-semibold bg-sky-600 hover:bg-sky-700 text-white shadow-sm flex items-center gap-1.5 transition-all"
-              >
-                <Check size={14} />
-                <span>保存して照合レポートに反映 (D1/R2へ保存)</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

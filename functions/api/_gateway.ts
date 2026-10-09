@@ -135,9 +135,57 @@ function extractResponseText(data: any): string {
 }
 
 /**
+ * 対話履歴から各ビッグファイブ因子の言及・質問進捗を解析
+ */
+export function analyzeDimensionCoverage(messages: ChatMessage[]): {
+  covered: Record<string, boolean>;
+  uncovered: string[];
+  lastAssignedDim: string | null;
+} {
+  const assistantTexts = messages
+    .filter(m => m.role === 'assistant')
+    .map(m => m.content)
+    .join('\n');
+  const allTexts = messages.map(m => m.content).join('\n');
+
+  // 各因子の特徴的なキーワード判定
+  const covered: Record<string, boolean> = {
+    '開放性': /(工夫|アイデア|新しい|興味|知見|試み|発想|好奇心|始めたきっかけ)/.test(allTexts),
+    '誠実性': /(計画|目標|スケジュール|習慣|継続|責任|段取り|着実|ハプニング|予定の狂い)/.test(allTexts),
+    '外向性': /(人|友人|仲間|チーム|周囲|社交|コミュニケーション|初対面|会話|関わる|人付き合い|自己主張)/.test(allTexts),
+    '協調性': /(協力|相談|意見の相違|譲る|共感|相手の立場|対立|サポート|調和|チームワーク)/.test(allTexts),
+    '情緒安定性': /(ストレス|プレッシャー|ピンチ|感情|落ち込|焦り|冷静|不安|リラックス|気分|立て直)/.test(allTexts)
+  };
+
+  const allDimensions = ['開放性', '誠実性', '外向性', '協調性', '情緒安定性'];
+  const uncovered = allDimensions.filter(d => !covered[d]);
+
+  // 直前のアシスタント発話から直前に対象としていた因子を推定
+  let lastAssignedDim: string | null = null;
+  const lastAssistant = messages.filter(m => m.role === 'assistant').pop()?.content || '';
+  if (/(ストレス|プレッシャー|ピンチ|感情|冷静|不安|リラックス)/.test(lastAssistant)) {
+    lastAssignedDim = '情緒安定性';
+  } else if (/(友人|仲間|チーム|周囲|社交|コミュニケーション|初対面|人付き合い)/.test(lastAssistant)) {
+    lastAssignedDim = '外向性';
+  } else if (/(協力|意見の相違|譲る|調和|相手の立場)/.test(lastAssistant)) {
+    lastAssignedDim = '協調性';
+  } else if (/(計画|目標|スケジュール|習慣|ハプニング)/.test(lastAssistant)) {
+    lastAssignedDim = '誠実性';
+  } else if (/(工夫|アイデア|新しい|好奇心|試み)/.test(lastAssistant)) {
+    lastAssignedDim = '開放性';
+  }
+
+  return { covered, uncovered, lastAssignedDim };
+}
+
+/**
  * Clef-flashの意思決定レスポンスを解析してAnalystStrategyを生成
  */
-function parseClefFlashDecision(resObj: any, userCount: number): AnalystStrategy | null {
+function parseClefFlashDecision(
+  resObj: any,
+  userCount: number,
+  coverage?: { covered: Record<string, boolean>; uncovered: string[]; lastAssignedDim: string | null }
+): AnalystStrategy | null {
   if (!resObj) return null;
 
   // resObjが { answers: { ... } } や { result: { ... } } の入れ子になっている場合を考慮
@@ -147,27 +195,48 @@ function parseClefFlashDecision(resObj: any, userCount: number): AnalystStrategy
   }
 
   const isReadyItem = target.is_ready;
+  // Clef-flashの type: "noul" の場合、isReadyItem.noul に確率 (0.0〜1.0) が格納される
   const isReadyProb = typeof isReadyItem === 'number'
     ? isReadyItem
-    : (typeof isReadyItem?.probability === 'number'
-      ? isReadyItem.probability
-      : (typeof isReadyItem?.yes_probability === 'number' ? isReadyItem.yes_probability : 0));
+    : (typeof isReadyItem?.noul === 'number'
+      ? isReadyItem.noul
+      : (typeof isReadyItem?.probability === 'number'
+        ? isReadyItem.probability
+        : (typeof isReadyItem?.yes_probability === 'number' ? isReadyItem.yes_probability : 0)));
   const isReadyAnswer = isReadyItem === 'yes' || isReadyItem === true || isReadyItem?.answer === 'yes';
   const aiDeterminedReady = isReadyAnswer || isReadyProb >= 0.7;
-  // 最低ターン数（5往復）に達しており、かつAIが十分なエピソードが集まったと判定した場合、または安全上限ターン数（8往復）に達した場合に準備完了
-  const isReady = userCount >= MAX_USER_TURNS || (userCount >= MIN_USER_TURNS && aiDeterminedReady);
 
-  const focusDim = target.focus_dimension?.chosen
+  // 未測定の最重要因子（外向性・情緒安定性等）が残っている場合は、早期終了を防止
+  const hasCrucialUncovered = coverage && (coverage.uncovered.includes('外向性') || coverage.uncovered.includes('情緒安定性'));
+  const isReady = userCount >= MAX_USER_TURNS || (userCount >= MIN_USER_TURNS && aiDeterminedReady && !hasCrucialUncovered);
+
+  let rawFocusDim = target.focus_dimension?.chosen
     || target.focus_dimension?.answer
     || target.focus_dimension?.choice
     || (typeof target.focus_dimension === 'string' ? target.focus_dimension : null)
-    || '誠実性';
+    || '外向性';
+
+  // 【重要: 因子固執防止 & 5因子均等カバレッジのスマートバランサー】
+  // Clef-flashが直前と同じ因子を連続して選んだり、未測定の最重要因子がある場合はダイナミックに誘導
+  let focusDim = rawFocusDim;
+  if (coverage && coverage.uncovered.length > 0) {
+    if (focusDim === coverage.lastAssignedDim || !coverage.uncovered.includes(focusDim)) {
+      // 外向性と情緒安定性が未測定なら最優先でアサイン
+      if (coverage.uncovered.includes('外向性')) {
+        focusDim = '外向性';
+      } else if (coverage.uncovered.includes('情緒安定性')) {
+        focusDim = '情緒安定性';
+      } else {
+        focusDim = coverage.uncovered[0];
+      }
+    }
+  }
 
   const strategyRaw = target.strategy_type?.chosen
     || target.strategy_type?.answer
     || target.strategy_type?.choice
     || (typeof target.strategy_type === 'string' ? target.strategy_type : null)
-    || 'ハプニングへの対処';
+    || '対人関係のスタンス';
 
   const strategyMap: Record<string, string> = {
     'ハプニングへの対処': '想定外のハプニングや予定の狂いへの対処エピソード',
@@ -176,7 +245,19 @@ function parseClefFlashDecision(resObj: any, userCount: number): AnalystStrategy
     '対人関係のスタンス': '初対面や大人数の場、日常での対人関係のスタンス',
     '感情のコントロール': 'プレッシャーや感情の浮き沈みへのセルフコントロール'
   };
-  const strategyChoice = strategyMap[strategyRaw] || strategyRaw;
+
+  // 因子に適合した戦略のデフォルトマッピング（不一致を補正）
+  const dimensionDefaultStrategies: Record<string, string> = {
+    '開放性': '新しく試みた工夫や好奇心・関心から始めた行動',
+    '誠実性': '想定外のハプニングや予定の狂いへの対処エピソード',
+    '外向性': '初対面や大人数の場、日常での対人関係のスタンス',
+    '協調性': '周囲と意見が分かれた場面や協力して進めたエピソード',
+    '情緒安定性': 'プレッシャーや感情の浮き沈みへのセルフコントロール'
+  };
+
+  const strategyChoice = (focusDim !== rawFocusDim && dimensionDefaultStrategies[focusDim])
+    ? dimensionDefaultStrategies[focusDim]
+    : (strategyMap[strategyRaw] || dimensionDefaultStrategies[focusDim] || strategyRaw);
 
   const targetStrategy = isReady
     ? '十分な情報が集まったので、これまでの対話に共感しつつ性格分析レポートの生成を案内してください。'
@@ -202,33 +283,45 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
     .join('\n');
   const userCount = messages.filter(m => m.role === 'user').length;
 
+  // 5因子のカバレッジを事前解析
+  const coverage = analyzeDimensionCoverage(messages);
+
   // Clef-flash が要求する意思決定スキーマ (System One / Jev 互換)
-  const clefState = `【対話履歴】\n${dialogueHistory}\n\nユーザー発話回数: ${userCount}回`;
+  const coverageStatusText = [
+    `【各因子の測定状況】`,
+    `- 開放性: ${coverage.covered['開放性'] ? '測定済み（エピソードあり）' : '【未測定】'}`,
+    `- 誠実性: ${coverage.covered['誠実性'] ? '測定済み（エピソードあり）' : '【未測定】'}`,
+    `- 外向性: ${coverage.covered['外向性'] ? '測定済み（エピソードあり）' : '【未測定・重要】(人との関わりや日常の社交スタンス)'}`,
+    `- 協調性: ${coverage.covered['協調性'] ? '測定済み（エピソードあり）' : '【未測定】'}`,
+    `- 情緒安定性: ${coverage.covered['情緒安定性'] ? '測定済み（エピソードあり）' : '【未測定・重要】(トラブルやプレッシャー、感情コントロール)'}`
+  ].join('\n');
+
+  const clefState = `【対話履歴】\n${dialogueHistory}\n\nユーザー発話回数: ${userCount}回\n\n${coverageStatusText}`;
   const clefQuestions: Record<string, any> = {
     is_ready: {
       type: "noul",
-      instructions: "これまでの対話から、ビッグファイブ性格診断（開放性・誠実性・外向性・協調性・情緒安定性）を客観的・精密に評価するのに必要な、ユーザーの具体的な行動エピソード（困難やハプニングへの対処、他者との関わり、新しい試みなど）が複数十分に集まりましたか？単なる短い返答や挨拶ではなく、事実に基づく具体的な行動が十分に語られている場合にのみyesとしてください。"
+      instructions: "これまでの対話から、ビッグファイブ性格診断（開放性・誠実性・外向性・協調性・情緒安定性）を客観的・精密に評価するのに必要な、ユーザーの具体的な行動エピソード（困難やハプニングへの対処、他者との関わり、新しい試みなど）が複数十分に集まりましたか？特に外向性や情緒安定性などの重要エピソードも含めて十分に語られている場合にのみyesとしてください。"
     },
     focus_dimension: {
       type: "choice",
-      instructions: "次の質問で深掘りすべき、情報が最も不足しているビッグファイブ性格因子はどれですか？",
+      instructions: "次の質問で深掘りすべき、情報が最も不足しているビッグファイブ性格因子はどれですか？【重要】すでに過去の質問で取り上げた因子に固執せず、まだ具体的なエピソードが得られていない未測定の因子（特に『外向性』や『情緒安定性』）を最優先で選択してください。",
       criteria: {
-        "開放性": "知的好奇心、新しい体験への興味、独創性",
-        "誠実性": "責任感、計画性、ハプニングへの対処、着実さ",
-        "外向性": "社交性、活力、自己主張、人との関わり",
-        "協調性": "他者への共感、思いやり、協力、調和",
-        "情緒安定性": "ストレス耐性、冷静さ、セルフコントロール"
+        "外向性": "人との関わり、社交性、活力、チームでのスタンス、自己主張",
+        "情緒安定性": "プレッシャーへの対処、ストレス耐性、冷静さ、感情のコントロール",
+        "協調性": "他者への共感、思いやり、協力、意見の相違への対処",
+        "開放性": "知的好奇心、新しい体験への興味、独自の工夫",
+        "誠実性": "計画性、責任感、ハプニングへの着実な対処"
       }
     },
     strategy_type: {
       type: "choice",
       instructions: "その因子を測定するために尋ねるべき、最も適切な行動エピソードのシチュエーションはどれですか？",
       criteria: {
-        "ハプニングへの対処": "想定外のハプニングや予定の狂いへの対処エピソード",
+        "対人関係のスタンス": "初対面や大人数の場、チームでの役割や日常での対人関係のスタンス",
+        "感情のコントロール": "プレッシャーや感情の浮き沈み、トラブルへのセルフコントロール",
         "他者との協力や意見の相違": "周囲と意見が分かれた場面や協力して進めたエピソード",
-        "新しい工夫や試み": "新しく試みた工夫や好奇心・関心から始めた行動",
-        "対人関係のスタンス": "初対面や大人数の場、日常での対人関係のスタンス",
-        "感情のコントロール": "プレッシャーや感情の浮き沈みへのセルフコントロール"
+        "ハプニングへの対処": "想定外のハプニングや予定の狂いへの対処エピソード",
+        "新しい工夫や試み": "新しく試みた工夫や好奇心・関心から始めた行動"
       }
     }
   };
@@ -250,7 +343,7 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
           }
         }
       );
-      const parsed = parseClefFlashDecision(aiRes, userCount);
+      const parsed = parseClefFlashDecision(aiRes, userCount, coverage);
       if (parsed) {
         parsed.notes = `${parsed.notes} [via env.AI binding]`;
         return parsed;
@@ -278,7 +371,7 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
 
     if (res.ok) {
       const data: any = await res.json();
-      const parsed = parseClefFlashDecision(data, userCount);
+      const parsed = parseClefFlashDecision(data, userCount, coverage);
       if (parsed) {
         parsed.notes = `${parsed.notes} [via HTTP Gateway]`;
         return parsed;
@@ -292,9 +385,14 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
           const jsonParsed = JSON.parse(jsonMatch[0]);
           if (jsonParsed && typeof jsonParsed === 'object' && jsonParsed.focus_dimension && jsonParsed.target_question_strategy) {
             const aiReady = !!jsonParsed.is_ready_for_final_analysis;
-            const isReady = userCount >= MAX_USER_TURNS || (userCount >= MIN_USER_TURNS && aiReady);
+            const hasCrucialUncovered = coverage.uncovered.includes('外向性') || coverage.uncovered.includes('情緒安定性');
+            const isReady = userCount >= MAX_USER_TURNS || (userCount >= MIN_USER_TURNS && aiReady && !hasCrucialUncovered);
+            let focusDim = String(jsonParsed.focus_dimension);
+            if (focusDim === coverage.lastAssignedDim && coverage.uncovered.length > 0) {
+              focusDim = coverage.uncovered.includes('外向性') ? '外向性' : (coverage.uncovered.includes('情緒安定性') ? '情緒安定性' : coverage.uncovered[0]);
+            }
             return {
-              focus_dimension: String(jsonParsed.focus_dimension),
+              focus_dimension: focusDim,
               target_question_strategy: String(jsonParsed.target_question_strategy),
               is_ready_for_final_analysis: isReady,
               notes: 'Parsed from JSON fallback'
@@ -310,10 +408,21 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
     console.error('Analyst Route fetch error:', err);
   }
 
-  // 3. ルールベースのフォールバック戦略（万一のAI障害・401エラー時でもユーザーの対話を絶対に止めない安全設計）
-  const isReady = userCount >= MAX_USER_TURNS;
-  const fallbackDimensions = ['開放性', '誠実性', '外向性', '協調性', '情緒安定性'];
-  const focusDim = isReady ? '全体' : fallbackDimensions[userCount % fallbackDimensions.length];
+  // 3. ルールベースのフォールバック戦略（万一のAI障害時でも、全5因子をバランスよく順次質問）
+  // ローテーション順: 開放性 ➔ 誠実性 ➔ 外向性 ➔ 情緒安定性 ➔ 協調性
+  const orderedDimensions = ['開放性', '誠実性', '外向性', '情緒安定性', '協調性'];
+  const hasCrucialUncovered = coverage.uncovered.includes('外向性') || coverage.uncovered.includes('情緒安定性');
+  const isReady = userCount >= MAX_USER_TURNS || (userCount >= MIN_USER_TURNS && !hasCrucialUncovered);
+
+  let focusDim = '外向性';
+  if (coverage.uncovered.length > 0) {
+    focusDim = coverage.uncovered.includes('外向性')
+      ? '外向性'
+      : (coverage.uncovered.includes('情緒安定性') ? '情緒安定性' : coverage.uncovered[0]);
+  } else {
+    focusDim = orderedDimensions[userCount % orderedDimensions.length];
+  }
+
   const strategyDetails: Record<string, string> = {
     '開放性': '新しく試みた工夫や好奇心・関心から始めた行動',
     '誠実性': '想定外のハプニングや予定の狂いへの対処エピソード',
@@ -358,16 +467,24 @@ export async function runInterviewerStream(
 - 質問の方向性: ${targetStrategy}
 
 【対話・質問の絶対ルール】
-1. 【直球のタイプ質問・二者択一は厳禁】:
+1. 【同じ話題や類似質問の蒸し返しは絶対禁止】:
+   - 直前や過去にすでに質問した内容（似たような工夫や試みを再度深掘りすること）は厳禁です。同じような質問を繰り返すとユーザーが退屈してしまいます。
+   - ユーザーの直前の発言に対して温かく共感・要約（1〜2文）した上で、分析官から指示された【新しい角度のシチュエーション】へとスムーズに話題を展開してください。
+   - 展開の例（自然なブリッジ）:
+     - 外向性へ展開: 「〜という工夫、とても興味深いです！そうした活動を進める中で、周囲の仲間やチームの人たちと関わる時は、普段どのようなスタンスでコミュニケーションを取られることが多いですか？」
+     - 情緒安定性へ展開: 「そこまで情熱を持って取り組まれているのですね！ちなみに、予期せぬトラブルやプレッシャーを感じた時は、普段どのように気持ちを整えたり対処されたりしていますか？」
+     - 協調性へ展開: 「なるほど！周りの方と意見が分かれたり、方針の違いがあった場面では、どのように対応された経験がありますか？」
+2. 【直球のタイプ質問・二者択一は厳禁】:
    - 「あなたは〜なタイプですか？」「○○派ですか、それとも××派ですか？」といった性格の自己申告を求める質問や二択の選択肢提示は絶対に禁止です。
-2. 【具体的な過去のエピソード（事実）を聞き出す】:
-   - 分析官の指示に沿って、「最近、実際に〜だった場面やエピソードはありましたか？その時どう対応されましたか？」「これまでに特に印象に残っている〜な出来事はありますか？」のように、ユーザーが自分の体験した【1つの具体的な出来事・行動】を思い出して話したくなる形で尋ねてください。
-3. 【共感と簡潔さ】:
-   - ユーザーの直前の発言に対して温かく共感・受容した上で、次の問いを1つだけ投げかけてください。
+3. 【具体的な過去のエピソード（事実）を1つだけ聞き出す】:
+   - 分析官の指示に沿って、「最近、実際に〜だった具体的な場面やエピソードはありましたか？その時どう対応されましたか？」のように、ユーザーが自分の体験した【1つの具体的な出来事・行動事実】を思い出して話したくなる形で尋ねてください。
+4. 【共感と簡潔さ】:
    - 年齢や性別は開始時に入力済みのため、対話内で年齢や性別を尋ねる必要はありません。日常の活動や具体的なエピソードに集中して対話を深めてください。
    - 1回の返答は2〜3文（120〜160文字程度）で簡潔に。スマホで読みやすくフランクな言葉遣いにしてください。
-4. 【分析完了時】:
-   - もし分析官が「分析完了」と判断している場合は、共感した上で「ここまでのお話であなたのパーソナリティを深く分析する準備が整いました。画面の『性格分析レポートを生成する』ボタンを押してください」と案内してください。
+5. 【分析完了時】:
+   - もし分析官が「分析完了」と判断している場合は、これまでの対話に深く共感・感謝した上で「ここまでのお話であなたのパーソナリティを深く分析する準備が整いました！画面の『性格分析レポートを生成する』ボタンを押してください」と案内してください。
+6. 【思考タグの出力禁止】:
+   - 内部推論タグ（<thought>や<think>など）は一切出力に含めず、ユーザーへの発話文のみを直接出力してください。
 `;
 
   const formattedMessages = messages.map(m => ({
@@ -536,19 +653,24 @@ export async function runInterviewer(
 - 質問の方向性: ${targetStrategy}
 
 【対話・質問の絶対ルール】
-1. 【直球のタイプ質問・二者択一は厳禁】:
+1. 【同じ話題や類似質問の蒸し返しは絶対禁止】:
+   - 直前や過去にすでに質問した内容（似たような工夫や試みを再度深掘りすること）は厳禁です。同じような質問を繰り返すとユーザーが退屈してしまいます。
+   - ユーザーの直前の発言に対して温かく共感・要約（1〜2文）した上で、分析官から指示された【新しい角度のシチュエーション】へとスムーズに話題を展開してください。
+   - 展開の例（自然なブリッジ）:
+     - 外向性へ展開: 「〜という工夫、とても興味深いです！そうした活動を進める中で、周囲の仲間やチームの人たちと関わる時は、普段どのようなスタンスでコミュニケーションを取られることが多いですか？」
+     - 情緒安定性へ展開: 「そこまで情熱を持って取り組まれているのですね！ちなみに、予期せぬトラブルやプレッシャーを感じた時は、普段どのように気持ちを整えたり対処されたりしていますか？」
+     - 協調性へ展開: 「なるほど！周りの方と意見が分かれたり、方針の違いがあった場面では、どのように対応された経験がありますか？」
+2. 【直球のタイプ質問・二者択一は厳禁】:
    - 「あなたは〜なタイプですか？」「○○派ですか、それとも××派ですか？」といった性格の自己申告を求める質問や二択の選択肢提示は絶対に禁止です。
-2. 【具体的な過去のエピソード（事実）を聞き出す】:
-   - 分析官の指示に沿って、「最近、実際に〜だった場面やエピソードはありましたか？その時どう対応されましたか？」「これまでに特に印象に残っている〜な出来事はありますか？」のように、ユーザーが自分の体験した【1つの具体的な出来事・行動】を思い出して話したくなる形で尋ねてください。
-3. 【共感と簡潔さ】:
-   - ユーザーの直前の発言に対して温かく共感・受容した上で、次の問いを1つだけ投げかけてください。
+3. 【具体的な過去のエピソード（事実）を1つだけ聞き出す】:
+   - 分析官の指示に沿って、「最近、実際に〜だった具体的な場面やエピソードはありましたか？その時どう対応されましたか？」のように、ユーザーが自分の体験した【1つの具体的な出来事・行動事実】を思い出して話したくなる形で尋ねてください。
+4. 【共感と簡潔さ】:
    - 年齢や性別は開始時に入力済みのため、対話内で年齢や性別を尋ねる必要はありません。日常の活動や具体的なエピソードに集中して対話を深めてください。
    - 1回の返答は2〜3文（120〜160文字程度）で簡潔に。スマホで読みやすくフランクな言葉遣いにしてください。
-4. 【分析完了時】:
-   - もし分析官が「分析完了」と判断している場合は、共感した上で「ここまでのお話であなたのパーソナリティを深く分析する準備が整いました！画面の『性格分析レポートを生成する』ボタンを押してください」と案内してください。
-5. 【思考タグの禁止】:
+5. 【分析完了時】:
+   - もし分析官が「分析完了」と判断している場合は、これまでの対話に深く共感・感謝した上で「ここまでのお話であなたのパーソナリティを深く分析する準備が整いました！画面の『性格分析レポートを生成する』ボタンを押してください」と案内してください。
+6. 【思考タグの禁止】:
    - 思考プロセスや内部推論（<thought>や<think>タグなど）は絶対に一切出力に含めず、ユーザーへの発話文のみを直接出力してください。
-
 `;
   const formattedMessages = messages.map(m => ({
     role: m.role === 'assistant' ? 'assistant' : 'user',
@@ -605,10 +727,35 @@ export async function runFinalAnalysis(
     .join('\n');
 
   const systemPrompt = `
-あなたは世界最高峰のパーソナリティ心理学者です。
-提供された対話履歴から、主要5因子（開放性, 誠実性, 外向性, 協調性, 情緒安定性）に基づいて精密な性格プロファイリングを行ってください。
-分析にあたっては、ユーザーの自己申告（「私は○○な性格」等）ではなく、対話内で語られた【具体的な過去のエピソード（行動事実・出来事・その時の対処法・発言のトーン）】を唯一の根拠として客観的に評価してください。
-各因子のスコア(score)は0〜100の範囲で客観的に推定し、なぜその結果になったのかの具体的な対話上の根拠（実際の発言やエピソード、回答傾向）を深く分析してください。
+あなたは世界最高峰のパーソナリティ心理測定（Psychometrics）専門家です。
+提供された対話履歴から、ビッグファイブ主要5因子（開放性, 誠実性, 外向性, 協調性, 情緒安定性）に基づいて、心理尺度（BFI-2等）と高度に整合する精密な性格プロファイリングを行ってください。
+
+【評価の絶対原則】
+1. ユーザーの自己申告（「私は○○な性格です」等）ではなく、対話内で語られた【具体的な過去のエピソード（行動事実・出来事・周囲との関わり方・ピンチへの対処・発言のトーンや言葉数）】を唯一の根拠として客観的に評価してください。
+2. 各因子のスコア(score)は0〜100（一般人口の平均50、標準偏差約15）の標準化スケールで厳密に採点してください。中庸に逃げず、対話内の具体的行動事実に基づいて大胆かつ精確にスコアリングしてください。
+
+【各因子の客観的判定基準（BFI-2準拠）】
+- openness (開放性):
+  - 75〜100: 独自の強い知的好奇心、型破りな工夫、新奇な体験や未知の領域への自発的挑戦のエピソードがある。
+  - 45〜74: 興味を持ったことには取り組むが、突飛なアイデアより現実的・着実な工夫を好む。
+  - 0〜44: 新しいことへの挑戦を好まず、実績のある確実な手法や慣習を重視する。
+- conscientiousness (誠実性):
+  - 75〜100: 高い自律性、計画的な進行、ハプニングへの冷静かつ着実なリカバリーのエピソードがある。
+  - 45〜74: やるべきことは着実にこなすが、状況に応じた臨機応変さや柔軟さを重視する。
+  - 0〜44: 計画に縛られるのを嫌い、直感や気分で動くことが多い、衝動的。
+- extraversion (外向性):
+  - 75〜100: 人を巻き込むのが好き、初対面でも積極的に話しかける、他者との交流でエネルギーを得る、積極的で自己主張が明確。
+  - 45〜74: 状況に応じて人と関わるが、1人の時間も同等に大切にする、聞き役に回ることも多い。
+  - 0〜44: 少人数の深い関係や単独での活動を好み、大人数や過度な社交はエネルギーを消耗する、控えめで無口な傾向。
+- agreeableness (協調性):
+  - 75〜100: 周囲の意見に深く耳を傾ける、対立を避けて調和を最優先にする、他者への自然な配慮と支援。
+  - 45〜74: 礼儀正しく協力するが、必要な時は自分の意見やこだわりを譲らない。
+  - 0〜44: 調和よりも論理や成果を優先し、他者の感情に忖度しない、競争的。
+- neuroticism (情緒安定性 / Emotional Stability):
+  ※当アプリでは「高いほど情緒が安定・冷静でストレスに強い」という正の指標として0〜100で評価します。
+  - 75〜100: トラブルや想定外の事態でもパニックにならず冷静、プレッシャーに強い、気持ちの切り替えが早く安定している。
+  - 45〜74: 一時的な焦りや不安は感じるが、自分で気持ちを立て直すことができる。
+  - 0〜44: プレッシャーやハプニングに強い不安・動揺・ストレスを感じやすい、気分の浮き沈みや悩みが多い。
 
 【厳格な禁止事項】
 - 「強み1」「強み2」「...」「要約テキスト」のようなプレースホルダー文字列は絶対に出力しないでください。
@@ -653,8 +800,8 @@ export async function runFinalAnalysis(
       "analysis_reasoning": "言葉の端々や相手への配慮、対立への姿勢から分析した根拠（100〜150文字程度）"
     },
     "neuroticism": {
-      "score": 40,
-      "level": "低い",
+      "score": 75,
+      "level": "高い",
       "title": "感情のコントロールと安定性",
       "description": "ストレス耐性、困難や想定外の出来事に対する心のしなやかさの特徴",
       "traits": ["冷静", "切り替えの早さ", "安定"],
