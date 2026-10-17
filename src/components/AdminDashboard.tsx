@@ -229,7 +229,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToApp }) =
         return (
           s.id.toLowerCase().includes(q) ||
           (s.student_id && s.student_id.toLowerCase().includes(q)) ||
-          (s.qualtrics_id && s.qualtrics_id.toLowerCase().includes(q)) ||
           (s.ai_personality_title && s.ai_personality_title.toLowerCase().includes(q)) ||
           (s.ai_personality_type && s.ai_personality_type.toLowerCase().includes(q))
         );
@@ -238,11 +237,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToApp }) =
 
     // ステータスフィルタ
     if (statusFilter === 'survey_done') {
-      result = result.filter(s => s.has_survey_completed || s.qualtrics_id || s.survey_completed_at);
+      result = result.filter(s => s.has_survey_completed || s.survey_completed_at);
     } else if (statusFilter === 'ai_done') {
       result = result.filter(s => s.has_ai_result || s.ai_personality_title);
     } else if (statusFilter === 'survey_pending') {
-      result = result.filter(s => !(s.has_survey_completed || s.qualtrics_id || s.survey_completed_at));
+      result = result.filter(s => !(s.has_survey_completed || s.survey_completed_at));
     }
 
     // ソート
@@ -264,7 +263,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToApp }) =
   const stats = useMemo(() => {
     const total = sessions.length;
     const aiCompleted = sessions.filter(s => s.has_ai_result || s.ai_personality_title).length;
-    const surveyCompleted = sessions.filter(s => s.has_survey_completed || s.qualtrics_id || s.survey_completed_at).length;
+    const surveyCompleted = sessions.filter(s => s.has_survey_completed || s.survey_completed_at).length;
     const totalTurns = sessions.reduce((acc, s) => acc + (s.dialogue_turns || 0), 0);
     const avgTurns = total > 0 ? (totalTurns / total).toFixed(1) : '0';
 
@@ -592,7 +591,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToApp }) =
                   </tr>
                 ) : (
                   filteredSessions.map(session => {
-                    const hasSurvey = Boolean(session.has_survey_completed || session.qualtrics_id || session.survey_completed_at);
+                    const hasSurvey = Boolean(session.has_survey_completed || session.survey_completed_at);
                     const hasAi = Boolean(session.has_ai_result || session.ai_personality_title);
 
                     return (

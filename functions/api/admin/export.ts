@@ -28,7 +28,6 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     const { results } = await env.DB.prepare(`
       SELECT 
         id, student_id, age, gender, created_at, dialogue_turns,
-        qualtrics_id,
         ai_personality_title, ai_personality_type, ai_summary,
         ai_openness, ai_conscientiousness, ai_extraversion, ai_agreeableness, ai_neuroticism,
         survey_scale_type, survey_scale_name,
@@ -79,7 +78,6 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       'gender',
       'created_at',
       'dialogue_turns',
-      'qualtrics_id',
       'survey_completed_at',
       'ai_personality_title',
       'ai_personality_type',

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, FlaskConical } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { ChatMessage, UserProfile } from '../types';
 
 interface ChatModeProps {
@@ -12,7 +12,7 @@ interface ChatModeProps {
 }
 
 const INITIAL_GREETING =
-  "こんにちは！研究へのご参加ありがとうございます。\nAIとの自然な会話を通して、あなたのパーソナリティを精密に分析しますね。\n\nテストではないので、リラックスしてお話ししましょう！\nまずは普段、あなたが【一番時間やエネルギーを使っていること】（お仕事や学業、趣味など）を教えていただけますか？";
+  "本調査へのご協力ありがとうございます。\nこれより、AIインタビュアーとの短い対話を通して、あなたの普段の行動スタイルや考え方について伺います。\n\n正誤を問うテストではありませんので、普段通りの言葉でお気軽にお答えください。\nはじめに、あなたが現在【最も時間やエネルギーを注いでいる活動】（学業、仕事、趣味、サークルなど）について教えていただけますか？";
 
 function sanitizeMessage(text: string): string {
   if (!text) return '';
@@ -31,7 +31,6 @@ export const ChatMode: React.FC<ChatModeProps> = ({
   onSkipToResult,
   showToast,
 }) => {
-  // 会話履歴の復元
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     try {
       const saved = localStorage.getItem('llm5_chat_messages');
@@ -49,7 +48,6 @@ export const ChatMode: React.FC<ChatModeProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [streamingText, setStreamingText] = useState('');
 
-  // 分析可能フラグの復元
   const [isReady, setIsReady] = useState<boolean>(() => {
     try {
       return localStorage.getItem('llm5_chat_is_ready') === 'true';
@@ -60,14 +58,12 @@ export const ChatMode: React.FC<ChatModeProps> = ({
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // 会話履歴の自動保存
   useEffect(() => {
     try {
       localStorage.setItem('llm5_chat_messages', JSON.stringify(messages));
     } catch (_) {}
   }, [messages]);
 
-  // 診断準備完了フラグの自動保存
   useEffect(() => {
     try {
       localStorage.setItem('llm5_chat_is_ready', String(isReady));
@@ -79,6 +75,12 @@ export const ChatMode: React.FC<ChatModeProps> = ({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isLoading, streamingText]);
+
+  const userTurns = messages.filter(m => m.role === 'user').length;
+  // セクション1(対話)は全体進捗の10%〜50%として表示
+  const progressPercent = isReady
+    ? 50
+    : Math.min(48, 10 + Math.round((userTurns / 6) * 38));
 
   const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -113,7 +115,6 @@ export const ChatMode: React.FC<ChatModeProps> = ({
 
       const contentType = res.headers.get('content-type') || '';
 
-      // SSEストリーミング対応
       if (contentType.includes('text/event-stream') && res.body) {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
@@ -155,11 +156,10 @@ export const ChatMode: React.FC<ChatModeProps> = ({
           }
         }
 
-        const finalReply = sanitizeMessage(accumulatedText) || 'お答えいただきありがとうございます！';
+        const finalReply = sanitizeMessage(accumulatedText) || 'ご回答ありがとうございます。';
         setMessages([...newMessages, { role: 'assistant', content: finalReply }]);
         setStreamingText('');
       } else {
-        // フォールバック（JSONレスポンス）
         const data: any = await res.json();
         const cleanReply = sanitizeMessage(data.response);
         setMessages([...newMessages, { role: 'assistant', content: cleanReply }]);
@@ -190,63 +190,41 @@ export const ChatMode: React.FC<ChatModeProps> = ({
 
   return (
     <div className="chat-wrapper">
-      <div className="chat-scroll-area" ref={scrollRef}>
-        {messages.map((m, idx) => (
-          <div key={idx} className={`chat-bubble ${m.role === 'user' ? 'user' : 'assistant'}`}>
-            {sanitizeMessage(m.content)}
+      {/* Qualtrics Top Progress Bar */}
+      <div className="qualtrics-progress-bar-wrap">
+        <div className="qualtrics-progress-row">
+          <span className="qualtrics-progress-pct">0%</span>
+          <div className="qualtrics-progress-track">
+            <div className="qualtrics-progress-fill" style={{ width: `${progressPercent}%` }} />
           </div>
-        ))}
-        {streamingText && (
-          <div className="chat-bubble assistant">
-            {sanitizeMessage(streamingText)}
-            <span className="typing-cursor"></span>
-          </div>
-        )}
-        {isLoading && !streamingText && (
-          <div className="chat-bubble assistant" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontSize: '0.85rem', color: '#64748b' }}>考え中...</span>
-          </div>
-        )}
+          <span className="qualtrics-progress-pct">100%</span>
+        </div>
       </div>
 
-      <div className="chat-input-bar">
-        {/* 動作確認用スキップバー */}
-        {(onSkipToSurvey || onSkipToResult) && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '2px 4px 6px',
-            gap: '8px'
-          }}>
-            <span style={{
-              fontSize: '0.68rem',
-              color: '#94a3b8',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontWeight: 600
-            }}>
-              <FlaskConical size={12} />
-              <span>動作確認</span>
-            </span>
+      {/* Qualtrics Instruction Header */}
+      <div className="chat-instruction-banner">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+          <span>
+            <strong>設問ブロック 1:</strong> AIインタビュアーの質問に対して、あなたの具体的な経験やエピソードをご記入ください。（約5〜8往復）
+          </span>
+          {(onSkipToSurvey || onSkipToResult) && (
             <div style={{ display: 'flex', gap: '6px' }}>
               {onSkipToSurvey && (
                 <button
                   type="button"
                   onClick={onSkipToSurvey}
                   style={{
-                    backgroundColor: '#eff6ff',
-                    border: '1px solid #bfdbfe',
-                    color: '#1d4ed8',
+                    backgroundColor: '#ffffff',
+                    border: '1px solid #b8c2cc',
+                    color: '#333e4f',
                     fontSize: '0.7rem',
-                    fontWeight: 600,
-                    padding: '3px 8px',
-                    borderRadius: '6px',
+                    fontWeight: 500,
+                    padding: '2px 8px',
+                    borderRadius: '3px',
                     cursor: 'pointer'
                   }}
                 >
-                  📋 質問紙へスキップ
+                  質問紙へスキップ
                 </button>
               )}
               {onSkipToResult && (
@@ -254,52 +232,89 @@ export const ChatMode: React.FC<ChatModeProps> = ({
                   type="button"
                   onClick={onSkipToResult}
                   style={{
-                    backgroundColor: '#f5f3ff',
-                    border: '1px solid #ddd6fe',
-                    color: '#6d28d9',
+                    backgroundColor: '#ffffff',
+                    border: '1px solid #b8c2cc',
+                    color: '#333e4f',
                     fontSize: '0.7rem',
-                    fontWeight: 600,
-                    padding: '3px 8px',
-                    borderRadius: '6px',
+                    fontWeight: 500,
+                    padding: '2px 8px',
+                    borderRadius: '3px',
                     cursor: 'pointer'
                   }}
                 >
-                  📊 結果画面へスキップ
+                  結果へスキップ
                 </button>
               )}
             </div>
+          )}
+        </div>
+      </div>
+
+      <div className="chat-scroll-area" ref={scrollRef}>
+        {messages.map((m, idx) => (
+          <div key={idx} className={`chat-bubble ${m.role === 'user' ? 'user' : 'assistant'}`}>
+            <div style={{
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              color: m.role === 'user' ? '#005e94' : '#5c6878',
+              marginBottom: '4px'
+            }}>
+              {m.role === 'user' ? 'あなたの回答' : 'インタビュアー'}
+            </div>
+            <div style={{ whiteSpace: 'pre-wrap' }}>{sanitizeMessage(m.content)}</div>
+          </div>
+        ))}
+        {streamingText && (
+          <div className="chat-bubble assistant">
+            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#5c6878', marginBottom: '4px' }}>
+              インタビュアー
+            </div>
+            <div style={{ whiteSpace: 'pre-wrap' }}>
+              {sanitizeMessage(streamingText)}
+              <span className="typing-cursor"></span>
+            </div>
           </div>
         )}
+        {isLoading && !streamingText && (
+          <div className="chat-bubble assistant">
+            <span style={{ fontSize: '0.84rem', color: '#5c6878' }}>次の質問を準備しています...</span>
+          </div>
+        )}
+      </div>
 
+      <div className="chat-input-bar">
         {isReady && (
-          <button 
+          <button
             type="button"
-            onClick={handleProceedToSurvey} 
+            onClick={handleProceedToSurvey}
             className="btn-analyze-ready"
           >
-            <Sparkles size={18} />
-            <span>BFI-2-S 心理測定アンケートへ進む</span>
+            <span>対話セッションが完了しました。次の質問紙（BFI-2-S）へ進んでください</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 700, whiteSpace: 'nowrap' }}>
+              次へ <ArrowRight size={17} />
+            </span>
           </button>
         )}
 
-        <form onSubmit={handleSend} style={{ display: 'flex', gap: 8 }}>
+        <form onSubmit={handleSend} style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
           <textarea
             ref={inputRef}
             className="chat-input-textarea"
-            rows={1}
+            rows={2}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="メッセージを入力..."
+            placeholder="こちらに回答を入力してください（Enterで送信 / Shift+Enterで改行）..."
             disabled={isLoading}
           />
-          <button 
-            type="submit" 
-            className="chat-send-btn" 
+          <button
+            type="submit"
+            className="chat-send-btn"
             disabled={isLoading || !inputText.trim()}
-            aria-label="送信"
+            aria-label="回答を送信"
           >
-            <Send size={18} />
+            <span>送信</span>
+            <ArrowRight size={15} />
           </button>
         </form>
       </div>

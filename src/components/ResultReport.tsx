@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Share2, ImageDown, RotateCcw, Award, Lightbulb, Briefcase, HeartHandshake, ShieldAlert, Sparkles, Search, UserCheck } from 'lucide-react';
+import { ImageDown, RotateCcw, UserCheck } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { AnalysisResult, UserProfile, ChatMessage, SurveyResult } from '../types';
 import { RadarChart } from './RadarChart';
@@ -28,7 +28,6 @@ export const ResultReport: React.FC<ResultReportProps> = ({
   const [isSavingImage, setIsSavingImage] = useState(false);
   const reportRef = useRef<HTMLDivElement>(null);
 
-  // 照合レポート表示時にD1/R2へ自動保存
   useEffect(() => {
     if (userProfile && sessionId && result) {
       fetch('/api/save', {
@@ -39,22 +38,21 @@ export const ResultReport: React.FC<ResultReportProps> = ({
           user_profile: userProfile,
           messages,
           ai_result: result,
-          survey_result: surveyResult || undefined,
-          qualtrics_id: surveyResult?.qualtrics_id
+          survey_result: surveyResult || undefined
         })
       }).catch(err => console.warn('Auto-save result error:', err));
     }
   }, [sessionId, userProfile, result, messages, surveyResult]);
 
   const shareText = encodeURIComponent(
-    `【LLM5 性格診断結果】\n私の性格タイプは「${result.personality_title}」でした！\n\n#LLM5 #性格診断`
+    `【パーソナリティ評価調査レポート】\n評価タイプ: 「${result.personality_title}」 (${result.personality_type})`
   );
   const shareUrl = encodeURIComponent(window.location.origin);
 
   const handleSaveAsImage = async () => {
     if (!reportRef.current || isSavingImage) return;
     setIsSavingImage(true);
-    showToast('診断結果の画像を生成しています...');
+    showToast('レポート画像を生成しています...');
 
     try {
       await new Promise(resolve => setTimeout(resolve, 150));
@@ -62,7 +60,7 @@ export const ResultReport: React.FC<ResultReportProps> = ({
       const dataUrl = await toPng(reportRef.current, {
         quality: 0.98,
         pixelRatio: 2,
-        backgroundColor: '#f8fafc',
+        backgroundColor: '#ffffff',
         filter: (node: HTMLElement) => {
           if (node?.classList?.contains('actions-section') || node?.classList?.contains('modal-backdrop')) {
             return false;
@@ -72,10 +70,10 @@ export const ResultReport: React.FC<ResultReportProps> = ({
       });
 
       const link = document.createElement('a');
-      link.download = `LLM5_性格診断_${result.personality_type}_${new Date().toISOString().slice(0, 10)}.png`;
+      link.download = `LLM5_Assessment_Report_${new Date().toISOString().slice(0, 10)}.png`;
       link.href = dataUrl;
       link.click();
-      showToast('診断結果の画像を保存しました！');
+      showToast('レポート画像を保存しました');
     } catch (err: any) {
       console.error('画像生成エラー:', err);
       showToast('画像の生成に失敗しました。もう一度お試しください。');
@@ -85,39 +83,56 @@ export const ResultReport: React.FC<ResultReportProps> = ({
   };
 
   const dimensions = [
-    { key: 'openness', name: '開放性 (Openness)', badge: 'O', color: '#7c3aed' },
-    { key: 'conscientiousness', name: '誠実性 (Conscientiousness)', badge: 'C', color: '#0891b2' },
-    { key: 'extraversion', name: '外向性 (Extraversion)', badge: 'E', color: '#d97706' },
-    { key: 'agreeableness', name: '協調性 (Agreeableness)', badge: 'A', color: '#059669' },
-    { key: 'neuroticism', name: '情緒安定性 (Emotional Stability)', badge: 'N', color: '#e11d48' }
+    { key: 'openness', name: '開放性 (Openness)', badge: 'O', color: '#007ac0' },
+    { key: 'conscientiousness', name: '誠実性 (Conscientiousness)', badge: 'C', color: '#1b365d' },
+    { key: 'extraversion', name: '外向性 (Extraversion)', badge: 'E', color: '#008080' },
+    { key: 'agreeableness', name: '協調性 (Agreeableness)', badge: 'A', color: '#1e7e5a' },
+    { key: 'neuroticism', name: '情緒安定性 (Emotional Stability)', badge: 'N', color: '#4a5568' }
   ] as const;
-
-  const isQualtricsMode = Boolean(
-    surveyResult?.isQualtrics || 
-    surveyResult?.qualtrics_id || 
-    surveyResult?.scaleType === 'qualtrics'
-  );
 
   return (
     <div className="result-container" ref={reportRef}>
+      {/* Qualtrics 100% Completion Progress Bar */}
+      <div style={{ marginBottom: '0.25rem' }}>
+        <div className="qualtrics-progress-row">
+          <span className="qualtrics-progress-pct">0%</span>
+          <div className="qualtrics-progress-track">
+            <div className="qualtrics-progress-fill" style={{ width: '100%' }} />
+          </div>
+          <span className="qualtrics-progress-pct">100%</span>
+        </div>
+        <div style={{ textAlign: 'center', fontSize: '0.72rem', color: '#5c6878', marginTop: '4px' }}>
+          調査完了 — ご回答ありがとうございました。以下はあなたの分析結果レポートです。
+        </div>
+      </div>
+
       {/* Hero Header */}
       <div className="result-hero-box">
         <div className="result-hero-meta-row">
-          <span className="result-badge-top">LLM5 PERSONALITY PROFILE</span>
-          {(result.demographics?.age || result.demographics?.gender) && (
+          <span className="result-badge-top">ASSESSMENT REPORT</span>
+          {(result.demographics?.age || result.demographics?.gender || userProfile?.age) && (
             <span className="result-user-badge">
               <UserCheck size={13} />
               <span>
                 {[
-                  result.demographics.age ? (typeof result.demographics.age === 'number' ? `${result.demographics.age}歳` : result.demographics.age) : null,
-                  result.demographics.gender
+                  (result.demographics?.age || userProfile?.age)
+                    ? `${result.demographics?.age || userProfile?.age}歳`
+                    : null,
+                  result.demographics?.gender ||
+                    (userProfile?.gender === 'male'
+                      ? '男性'
+                      : userProfile?.gender === 'female'
+                      ? '女性'
+                      : userProfile?.gender === 'other'
+                      ? 'その他'
+                      : null)
                 ].filter(Boolean).join(' / ')}
               </span>
             </span>
           )}
         </div>
         <h2 className="result-hero-title">{result.personality_title}</h2>
-        <span className="result-type-tag">{result.personality_type}</span>
+        <span className="result-type-tag">分類タイプ: {result.personality_type}</span>
         <p className="result-hero-summary">{result.summary}</p>
       </div>
 
@@ -125,20 +140,16 @@ export const ResultReport: React.FC<ResultReportProps> = ({
       <div className="radar-chart-card">
         {surveyResult ? (
           <>
-            <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
-              <h3 className="card-section-title" style={{ margin: 0 }}>
-                <span>📊 AI対話推定 × 質問紙測定（{surveyResult.scaleName}）の照合分析</span>
-              </h3>
-            </div>
+            <h3 className="card-section-title">
+              1. AI対話推定値 × 標準心理尺度（{surveyResult.scaleName}）の照合結果
+            </h3>
             <ComparisonChart aiScores={result.scores} surveyResult={surveyResult} />
           </>
         ) : (
           <>
-            <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
-              <h3 className="card-section-title" style={{ margin: 0 }}>
-                📊 5因子レーダーチャート (AI推定)
-              </h3>
-            </div>
+            <h3 className="card-section-title">
+              1. ビッグファイブ 5因子プロファイル (AI対話推定)
+            </h3>
             <RadarChart scores={result.scores} />
           </>
         )}
@@ -148,13 +159,12 @@ export const ResultReport: React.FC<ResultReportProps> = ({
       {(result.llm_analysis_rationale || (result.dialogue_evidence && result.dialogue_evidence.length > 0)) && (
         <div className="rationale-card">
           <div className="rationale-card-header">
-            <Sparkles size={20} className="rationale-header-icon" />
             <div>
               <h3 className="rationale-card-title">
-                AI分析官による深層プロファイリング根拠
+                2. 対話内容に基づく評価根拠（プロファイリング所見）
               </h3>
               <p className="rationale-card-subtitle">
-                対話の言葉選びやエピソードからAIが読み解いた根拠
+                対話内で語られた行動エピソードおよび応答傾向に基づく分析
               </p>
             </div>
           </div>
@@ -168,7 +178,7 @@ export const ResultReport: React.FC<ResultReportProps> = ({
           {result.dialogue_evidence && result.dialogue_evidence.length > 0 && (
             <div className="dialogue-evidence-box">
               <span className="evidence-box-title">
-                💡 対話から検出された特徴的な言動・エピソード
+                抽出された主な行動エピソード・発言傾向
               </span>
               <ul className="evidence-list">
                 {result.dialogue_evidence.map((ev, idx) => (
@@ -183,7 +193,7 @@ export const ResultReport: React.FC<ResultReportProps> = ({
       {/* Dimension Breakdown */}
       <div className="dimensions-section">
         <h3 className="card-section-title">
-          🎯 5因子の詳細スコア分析
+          3. 主要5因子（Big Five）別の詳細スコアと解説
         </h3>
         {dimensions.map(d => {
           const dimData = result.scores[d.key];
@@ -193,21 +203,21 @@ export const ResultReport: React.FC<ResultReportProps> = ({
               <div className="dim-header-row">
                 <div className="dim-name-group">
                   <span className="dim-avatar" style={{ backgroundColor: d.color }}>{d.badge}</span>
-                  <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e293b' }}>{d.name}</span>
+                  <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1b2432' }}>{d.name}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
                   <span className="dim-score-badge" style={{ color: d.color }}>{dimData.score}</span>
-                  <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>点 ({dimData.level})</span>
+                  <span style={{ fontSize: '0.75rem', color: '#5c6878', fontWeight: 600 }}>/ 100 ({dimData.level})</span>
                 </div>
               </div>
               <div className="progress-rail">
-                <div 
-                  className="progress-fill" 
-                  style={{ width: `${dimData.score}%`, backgroundColor: d.color }} 
+                <div
+                  className="progress-fill"
+                  style={{ width: `${dimData.score}%`, backgroundColor: d.color }}
                 />
               </div>
               <p className="dim-description">
-                <strong>{dimData.title}</strong>: {dimData.description}
+                <strong>{dimData.title}</strong> — {dimData.description}
               </p>
               <div className="dim-tags-row">
                 {(dimData.traits || []).map((t, idx) => (
@@ -215,11 +225,10 @@ export const ResultReport: React.FC<ResultReportProps> = ({
                 ))}
               </div>
 
-              {/* 因子の判定根拠 */}
               {dimData.analysis_reasoning && (
                 <div className="dim-reasoning-box">
                   <span className="dim-reasoning-title">
-                    <Search size={13} /> このスコアの対話根拠
+                    判定根拠
                   </span>
                   <p className="dim-reasoning-text">{dimData.analysis_reasoning}</p>
                 </div>
@@ -230,9 +239,9 @@ export const ResultReport: React.FC<ResultReportProps> = ({
       </div>
 
       {/* Strengths */}
-      <div className="insight-block" style={{ borderLeft: '4px solid #059669' }}>
-        <h3 className="card-section-title" style={{ color: '#059669' }}>
-          <Award size={18} /> あなたの強み・ポテンシャル
+      <div className="insight-block" style={{ borderLeft: '4px solid #007ac0' }}>
+        <h3 className="card-section-title">
+          4. 行動特性上の強み・ポテンシャル
         </h3>
         <ul className="insight-item-list">
           {result.strengths.map((s, idx) => (
@@ -242,9 +251,9 @@ export const ResultReport: React.FC<ResultReportProps> = ({
       </div>
 
       {/* Growth Areas */}
-      <div className="insight-block" style={{ borderLeft: '4px solid #d97706' }}>
-        <h3 className="card-section-title" style={{ color: '#d97706' }}>
-          <Lightbulb size={18} /> 注意点・成長へのヒント
+      <div className="insight-block" style={{ borderLeft: '4px solid #1b365d' }}>
+        <h3 className="card-section-title">
+          5. 留意点・今後の成長に向けた示唆
         </h3>
         <ul className="insight-item-list">
           {result.growth_areas.map((g, idx) => (
@@ -254,9 +263,9 @@ export const ResultReport: React.FC<ResultReportProps> = ({
       </div>
 
       {/* Career */}
-      <div className="insight-block" style={{ borderLeft: '4px solid #0891b2' }}>
-        <h3 className="card-section-title" style={{ color: '#0891b2' }}>
-          <Briefcase size={18} /> 適した環境・ワークスタイル
+      <div className="insight-block" style={{ borderLeft: '4px solid #008080' }}>
+        <h3 className="card-section-title">
+          6. 適した環境・ワークスタイル
         </h3>
         <ul className="insight-item-list">
           {result.career_recommendations.map((c, idx) => (
@@ -266,49 +275,48 @@ export const ResultReport: React.FC<ResultReportProps> = ({
       </div>
 
       {/* Relationships */}
-      <div className="insight-block" style={{ borderLeft: '4px solid #7c3aed' }}>
-        <h3 className="card-section-title" style={{ color: '#7c3aed' }}>
-          <HeartHandshake size={18} /> 対人関係・コミュニケーション
+      <div className="insight-block" style={{ borderLeft: '4px solid #1e7e5a' }}>
+        <h3 className="card-section-title">
+          7. 対人関係・コミュニケーションの特徴
         </h3>
-        <p style={{ fontSize: '0.9rem', color: '#334155', lineHeight: 1.7 }}>
+        <p style={{ fontSize: '0.88rem', color: '#333e4f', lineHeight: 1.7 }}>
           {result.relationship_style}
         </p>
       </div>
 
       {/* Stress */}
-      <div className="insight-block" style={{ borderLeft: '4px solid #e11d48' }}>
-        <h3 className="card-section-title" style={{ color: '#e11d48' }}>
-          <ShieldAlert size={18} /> ストレス傾向とリフレッシュ法
+      <div className="insight-block" style={{ borderLeft: '4px solid #4a5568' }}>
+        <h3 className="card-section-title">
+          8. ストレス対処とセルフマネジメント
         </h3>
-        <p style={{ fontSize: '0.9rem', color: '#334155', lineHeight: 1.7 }}>
+        <p style={{ fontSize: '0.88rem', color: '#333e4f', lineHeight: 1.7 }}>
           {result.stress_management}
         </p>
       </div>
 
       {/* Share & Actions */}
       <div className="actions-section">
-        <h3 className="card-section-title" style={{ fontSize: '0.98rem' }}>
-          <Share2 size={16} /> 結果をシェア・画像保存
+        <h3 className="card-section-title" style={{ fontSize: '0.92rem' }}>
+          レポートの保存・共有
         </h3>
-        
-        {/* 画像保存ボタン */}
-        <button 
-          onClick={handleSaveAsImage} 
-          disabled={isSavingImage} 
+
+        <button
+          onClick={handleSaveAsImage}
+          disabled={isSavingImage}
           className="btn-save-image"
         >
-          <ImageDown size={18} />
-          <span>{isSavingImage ? '診断結果の画像を生成中...' : '診断結果を画像（PNG）で保存'}</span>
+          <ImageDown size={17} />
+          <span>{isSavingImage ? 'レポート画像を生成中...' : '結果レポートを画像（PNG）として保存'}</span>
         </button>
 
-        <div className="share-action-grid" style={{ marginTop: '0.75rem' }}>
-          <a 
+        <div className="share-action-grid" style={{ marginTop: '0.65rem' }}>
+          <a
             href={`https://twitter.com/intent/tweet?text=${shareText}&url=${shareUrl}`}
             target="_blank"
             rel="noopener noreferrer"
             className="btn-share-x"
           >
-            𝕏 でポスト
+            X (Twitter) で共有
           </a>
           <a
             href={`https://social-plugins.line.me/lineit/share?url=${shareUrl}&text=${shareText}`}
@@ -316,16 +324,16 @@ export const ResultReport: React.FC<ResultReportProps> = ({
             rel="noopener noreferrer"
             className="btn-share-line"
           >
-            LINE で送る
+            LINE で共有
           </a>
         </div>
 
-        <button 
+        <button
           onClick={onRetake}
           className="btn-retake"
         >
-          <RotateCcw size={16} />
-          診断を最初からやり直す
+          <RotateCcw size={15} />
+          調査を最初からやり直す
         </button>
       </div>
     </div>

@@ -46,12 +46,12 @@ export interface UserProfile {
   gender?: GenderType | string; // 性別
 }
 
-export type ScaleType = 'qualtrics' | string;
+export type ScaleType = 'bfi-2-s' | string;
 
 export type DimensionKey = 'openness' | 'conscientiousness' | 'extraversion' | 'agreeableness' | 'neuroticism';
 
 export interface SurveyScoreDetail {
-  rawMean: number;        // 尺度の元の平均点 (1〜5 or 1〜7)
+  rawMean: number;        // 尺度の元の平均点 (1〜5)
   normalizedScore: number;// 0〜100に正規化したスコア
 }
 
@@ -61,8 +61,6 @@ export interface SurveyResult {
   rawAnswers?: Record<string | number, number>; // { [questionId]: answerValue }
   scores: Record<DimensionKey, SurveyScoreDetail>;
   completedAt: string;
-  qualtrics_id?: string;
-  isQualtrics?: boolean;
 }
 
 export interface AssessmentSessionPayload {
@@ -71,7 +69,6 @@ export interface AssessmentSessionPayload {
   messages: ChatMessage[];
   ai_result?: AnalysisResult;
   survey_result?: SurveyResult;
-  qualtrics_id?: string;
 }
 
 export interface AdminSessionRecord {
@@ -81,7 +78,6 @@ export interface AdminSessionRecord {
   gender: string;
   created_at: string;
   dialogue_turns: number;
-  qualtrics_id?: string | null;
   ai_personality_title?: string | null;
   ai_personality_type?: string | null;
   ai_summary?: string | null;

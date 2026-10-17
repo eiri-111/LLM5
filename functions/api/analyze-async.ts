@@ -58,7 +58,6 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             ai_agreeableness REAL,
             ai_neuroticism REAL,
             ai_full_result TEXT,
-            qualtrics_id TEXT,
             survey_scale_type TEXT,
             survey_scale_name TEXT,
             survey_raw_answers TEXT,
@@ -70,10 +69,6 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             survey_completed_at TEXT
           )
         `).run();
-
-        try {
-          await env.DB.prepare('ALTER TABLE assessment_sessions ADD COLUMN qualtrics_id TEXT').run();
-        } catch (_) {}
 
         await env.DB.prepare(`
           INSERT INTO assessment_sessions (
@@ -175,7 +170,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       }
     })());
 
-    // 3. クライアントには待たせずに即座にレスポンスを返す（ユーザーは即座にQualtricsへ遷移可能）
+    // 3. クライアントには待たせずに即座にレスポンスを返す（ユーザーは即座にBFI-2-Sアンケート画面へ遷移可能）
     return new Response(JSON.stringify({
       success: true,
       session_id,

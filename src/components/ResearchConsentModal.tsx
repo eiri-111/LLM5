@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShieldCheck, ChevronDown, ChevronUp, User, Sparkles, Check, AlertCircle, Lock, GraduationCap, Clock } from 'lucide-react';
+import { AlertCircle, ArrowRight } from 'lucide-react';
 import { UserProfile, GenderType } from '../types';
 
 interface ResearchConsentModalProps {
@@ -22,19 +22,18 @@ export const ResearchConsentModal: React.FC<ResearchConsentModalProps> = ({
     (initialProfile?.gender as GenderType) || 'male'
   );
   const [hasAgreed, setHasAgreed] = useState<boolean>(false);
-  const [isDetailOpen, setIsDetailOpen] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!hasAgreed) {
-      setErrorMessage('研究参加への同意チェックを入れてください。');
+      setErrorMessage('研究参加への同意項目を選択してください。');
       return;
     }
 
     const parsedAge = parseInt(age, 10);
     if (!age || isNaN(parsedAge) || parsedAge < 10 || parsedAge > 120) {
-      setErrorMessage('正しい年齢（半角数字）を入力してください。');
+      setErrorMessage('正しい年齢（半角数字 10〜120）を入力してください。');
       return;
     }
 
@@ -56,358 +55,272 @@ export const ResearchConsentModal: React.FC<ResearchConsentModalProps> = ({
 
   return (
     <div className="modal-backdrop">
-      <div className="profile-modal-card" style={{ maxWidth: '520px', padding: '2rem 1.8rem', maxHeight: '92vh', overflowY: 'auto' }}>
-        {/* Brand Header */}
-        <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '4px 12px',
-            borderRadius: '9999px',
-            backgroundColor: 'rgba(59, 130, 246, 0.08)',
-            border: '1px solid rgba(59, 130, 246, 0.2)',
-            color: '#2563eb',
-            fontSize: '0.75rem',
-            fontWeight: 700,
-            letterSpacing: '0.05em',
-            marginBottom: '0.5rem'
-          }}>
-            <Sparkles size={13} />
-            <span>LLM5 RESEARCH PROJECT</span>
+      <div className="profile-modal-card">
+        {/* Qualtrics Top Progress Bar */}
+        <div style={{ marginBottom: '1.5rem' }}>
+          <div className="qualtrics-progress-row">
+            <span className="qualtrics-progress-pct">0%</span>
+            <div className="qualtrics-progress-track">
+              <div className="qualtrics-progress-fill" style={{ width: '5%' }} />
+            </div>
+            <span className="qualtrics-progress-pct">100%</span>
           </div>
+          <div style={{ textAlign: 'center', fontSize: '0.72rem', color: '#5c6878', marginTop: '4px' }}>
+            調査の進捗状況
+          </div>
+        </div>
+
+        {/* Survey Title & Instructions */}
+        <div style={{
+          borderBottom: '1px solid #d8dde6',
+          paddingBottom: '1.1rem',
+          marginBottom: '1.5rem'
+        }}>
           <h2 style={{
-            fontSize: '1.35rem',
-            fontWeight: 800,
-            color: '#0f172a',
-            letterSpacing: '-0.02em',
-            lineHeight: 1.3
+            fontSize: '1.25rem',
+            fontWeight: 700,
+            color: '#1b2432',
+            lineHeight: 1.4
           }}>
-            対話型パーソナリティ診断
+            対話型パーソナリティ評価に関する調査研究
           </h2>
           <p style={{
-            fontSize: '0.82rem',
-            color: '#64748b',
-            marginTop: '0.25rem'
+            fontSize: '0.86rem',
+            color: '#333e4f',
+            marginTop: '0.5rem',
+            lineHeight: 1.65
           }}>
-            生成AIと標準心理測定尺度を用いた共同研究のご案内
+            本調査へのご協力ありがとうございます。回答を開始する前に、以下の研究概要およびデータの取り扱いについてご確認のうえ、基本属性と同意項目にご回答ください。
           </p>
         </div>
 
-        {/* 3つの要点バッジ */}
+        {/* Research Information Block (Qualtrics Descriptive Text Block) */}
         <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: '8px',
-          marginBottom: '1rem'
+          marginBottom: '1.75rem',
+          backgroundColor: '#f7f9fa',
+          border: '1px solid #d8dde6',
+          borderLeft: '4px solid #007ac0',
+          borderRadius: '4px',
+          padding: '1rem 1.15rem',
+          fontSize: '0.83rem',
+          color: '#333e4f',
+          lineHeight: 1.65
         }}>
-          <div style={{
-            padding: '10px 8px',
-            backgroundColor: '#f8fafc',
-            border: '1px solid #e2e8f0',
-            borderRadius: '12px',
-            textAlign: 'center'
-          }}>
-            <Lock size={16} style={{ margin: '0 auto 4px', color: '#3b82f6' }} />
-            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e293b' }}>安全な暗号化</div>
-            <div style={{ fontSize: '0.65rem', color: '#64748b' }}>個人情報非収集</div>
+          <div style={{ marginBottom: '0.65rem' }}>
+            <strong style={{ color: '#1b2432' }}>1. 研究目的</strong><br />
+            本調査は、AIとの自然言語対話から推定されるビッグファイブ性格特性と、標準心理測定尺度（BFI-2-S）の測定値を比較・検証することを目的としています。
           </div>
-          <div style={{
-            padding: '10px 8px',
-            backgroundColor: '#f8fafc',
-            border: '1px solid #e2e8f0',
-            borderRadius: '12px',
-            textAlign: 'center'
-          }}>
-            <Clock size={16} style={{ margin: '0 auto 4px', color: '#10b981' }} />
-            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e293b' }}>中断自由</div>
-            <div style={{ fontSize: '0.65rem', color: '#64748b' }}>いつでも終了可</div>
+          <div style={{ marginBottom: '0.65rem' }}>
+            <strong style={{ color: '#1b2432' }}>2. データの管理と匿名性</strong><br />
+            回答データおよび対話記録は統計的に処理され、学術研究目的にのみ使用されます。氏名・連絡先等の個人を特定できる情報は収集いたしません。
           </div>
-          <div style={{
-            padding: '10px 8px',
-            backgroundColor: '#f8fafc',
-            border: '1px solid #e2e8f0',
-            borderRadius: '12px',
-            textAlign: 'center'
-          }}>
-            <GraduationCap size={16} style={{ margin: '0 auto 4px', color: '#8b5cf6' }} />
-            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1e293b' }}>学術研究</div>
-            <div style={{ fontSize: '0.65rem', color: '#64748b' }}>心理尺度検証</div>
+          <div>
+            <strong style={{ color: '#1b2432' }}>3. 参加の任意性と中断の権利</strong><br />
+            本調査への参加は任意であり、回答の途中であってもブラウザを閉じることでいつでも中断することができます。中断による不利益は一切生じません。
           </div>
         </div>
 
-        {/* 研究目的・プライバシー説明 */}
-        <div style={{
-          marginBottom: '1.25rem',
-          border: '1px solid #e2e8f0',
-          borderRadius: '14px',
-          overflow: 'hidden'
-        }}>
-          <button
-            type="button"
-            onClick={() => setIsDetailOpen(!isDetailOpen)}
-            style={{
-              width: '100%',
-              padding: '10px 14px',
-              backgroundColor: '#f8fafc',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '0.78rem',
-              fontWeight: 600,
-              color: '#475569'
-            }}
-          >
-            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <ShieldCheck size={14} color="#3b82f6" />
-              研究目的・データの取り扱いについて
-            </span>
-            {isDetailOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </button>
-          {isDetailOpen && (
-            <div style={{
-              padding: '12px 14px',
-              fontSize: '0.75rem',
-              color: '#475569',
-              lineHeight: 1.6,
-              backgroundColor: '#ffffff',
-              borderTop: '1px solid #e2e8f0'
-            }}>
-              <p style={{ marginBottom: '8px' }}>
-                <strong>【研究目的】</strong><br />
-                本研究は、AIとの自由対話から推定されるビッグファイブ性格因子と、標準心理測定尺度（BFI-2-S）のスコアを比較し、より妥当性の高い対話型特性理解の確立を目指すものです。
-              </p>
-              <p style={{ marginBottom: '8px' }}>
-                <strong>【データの取り扱い】</strong><br />
-                対話ログおよびアンケート回答は暗号化し、安全なデータベースに保存され、学術研究（論文・統計分析）にのみ利用されます。氏名やメールアドレス等の直接的な個人情報は収集しません。
-              </p>
-              <p>
-                <strong>【中断の権利】</strong><br />
-                診断の途中いつでもブラウザを閉じて中断でき、不利益を被ることは一切ありません。
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* 属性入力フォーム */}
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
+          {/* Question 1: Age */}
           <div style={{
-            padding: '14px',
-            backgroundColor: '#ffffff',
-            border: '1px solid #e2e8f0',
-            borderRadius: '16px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+            paddingBottom: '1.5rem',
+            borderBottom: '1px solid #e5e8ec'
           }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontSize: '0.8rem',
-              fontWeight: 700,
-              color: '#1e293b',
-              marginBottom: '10px'
-            }}>
-              <User size={15} color="#3b82f6" />
-              <span>被験者属性（対話分析の基準値）</span>
-            </div>
-
-            {/* 年齢入力 */}
-            <div style={{ marginBottom: '10px' }}>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
-                年齢 <span style={{ color: '#ef4444' }}>*</span>
-              </label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  type="number"
-                  min="10"
-                  max="120"
-                  placeholder="例: 21"
-                  value={age}
-                  onChange={(e) => setAge(e.target.value)}
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '8px 36px 8px 12px',
-                    borderRadius: '10px',
-                    border: '1px solid #cbd5e1',
-                    fontSize: '0.9rem',
-                    color: '#0f172a',
-                    outline: 'none',
-                    transition: 'border-color 0.15s ease'
-                  }}
-                />
-                <span style={{
-                  position: 'absolute',
-                  right: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  fontSize: '0.8rem',
-                  color: '#94a3b8'
-                }}>
-                  歳
-                </span>
-              </div>
-            </div>
-
-            {/* 性別選択 (ピル型ボタン) */}
-            <div>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#475569', marginBottom: '6px' }}>
-                性別 <span style={{ color: '#ef4444' }}>*</span>
-              </label>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(4, 1fr)',
-                gap: '6px'
-              }}>
-                {genderOptions.map((g) => {
-                  const isSelected = gender === g.key;
-                  return (
-                    <button
-                      key={g.key}
-                      type="button"
-                      onClick={() => setGender(g.key)}
-                      style={{
-                        padding: '8px 4px',
-                        borderRadius: '10px',
-                        border: isSelected ? '1.5px solid #3b82f6' : '1px solid #e2e8f0',
-                        backgroundColor: isSelected ? '#eff6ff' : '#f8fafc',
-                        color: isSelected ? '#1d4ed8' : '#475569',
-                        fontSize: '0.78rem',
-                        fontWeight: isSelected ? 700 : 500,
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease'
-                      }}
-                    >
-                      {g.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          {/* 同意チェック */}
-          <div style={{
-            padding: '12px 14px',
-            borderRadius: '14px',
-            backgroundColor: hasAgreed ? '#eff6ff' : '#f8fafc',
-            border: hasAgreed ? '1.5px solid #93c5fd' : '1px solid #e2e8f0',
-            transition: 'all 0.15s ease'
-          }}>
-            <label style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              cursor: 'pointer',
-              userSelect: 'none'
-            }}>
-              <input
-                type="checkbox"
-                checked={hasAgreed}
-                onChange={(e) => setHasAgreed(e.target.checked)}
-                style={{
-                  width: '18px',
-                  height: '18px',
-                  accentColor: '#3b82f6',
-                  cursor: 'pointer'
-                }}
-              />
-              <span style={{
-                fontSize: '0.78rem',
+            <label
+              htmlFor="consent-age-input"
+              style={{
+                display: 'block',
+                fontSize: '0.94rem',
                 fontWeight: 600,
-                color: hasAgreed ? '#1e40af' : '#334155',
-                lineHeight: 1.4
-              }}>
-                上記の研究目的・データ管理に同意して参加します
-              </span>
+                color: '#1b2432',
+                marginBottom: '0.6rem'
+              }}
+            >
+              Q1. あなたの現在の年齢を半角数字で入力してください。 <span style={{ color: '#d93025' }}>*</span>
             </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', maxWidth: '200px' }}>
+              <input
+                id="consent-age-input"
+                type="number"
+                min="10"
+                max="120"
+                placeholder="例: 21"
+                value={age}
+                onChange={(e) => setAge(e.target.value)}
+                required
+                className="form-input"
+              />
+              <span style={{ fontSize: '0.88rem', color: '#333e4f', whiteSpace: 'nowrap' }}>歳</span>
+            </div>
+          </div>
+
+          {/* Question 2: Gender (Qualtrics Single-Select Radio List) */}
+          <div style={{
+            paddingBottom: '1.5rem',
+            borderBottom: '1px solid #e5e8ec'
+          }}>
+            <div style={{
+              fontSize: '0.94rem',
+              fontWeight: 600,
+              color: '#1b2432',
+              marginBottom: '0.65rem'
+            }}>
+              Q2. あなたの性別を選択してください。 <span style={{ color: '#d93025' }}>*</span>
+            </div>
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px'
+            }}>
+              {genderOptions.map((g) => {
+                const isSelected = gender === g.key;
+                return (
+                  <button
+                    key={g.key}
+                    type="button"
+                    onClick={() => setGender(g.key)}
+                    style={{
+                      width: '100%',
+                      padding: '0.7rem 0.9rem',
+                      borderRadius: '4px',
+                      border: isSelected ? '1px solid #007ac0' : '1px solid #d8dde6',
+                      backgroundColor: isSelected ? '#e8f3fa' : '#f7f9fa',
+                      color: '#1b2432',
+                      fontSize: '0.88rem',
+                      fontWeight: isSelected ? 600 : 400,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      textAlign: 'left',
+                      transition: 'background-color 0.12s ease, border-color 0.12s ease'
+                    }}
+                  >
+                    <span style={{
+                      width: '18px',
+                      height: '18px',
+                      borderRadius: '50%',
+                      border: isSelected ? '5px solid #007ac0' : '1.5px solid #8c98a8',
+                      backgroundColor: '#ffffff',
+                      flexShrink: 0,
+                      boxSizing: 'border-box'
+                    }} />
+                    <span>{g.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Question 3: Informed Consent */}
+          <div style={{
+            paddingBottom: '1.25rem',
+            borderBottom: '1px solid #e5e8ec'
+          }}>
+            <div style={{
+              fontSize: '0.94rem',
+              fontWeight: 600,
+              color: '#1b2432',
+              marginBottom: '0.65rem'
+            }}>
+              Q3. 研究参加への同意確認 <span style={{ color: '#d93025' }}>*</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setHasAgreed(!hasAgreed)}
+              style={{
+                width: '100%',
+                padding: '0.8rem 0.95rem',
+                borderRadius: '4px',
+                border: hasAgreed ? '1px solid #007ac0' : '1px solid #d8dde6',
+                backgroundColor: hasAgreed ? '#e8f3fa' : '#f7f9fa',
+                color: '#1b2432',
+                fontSize: '0.88rem',
+                fontWeight: hasAgreed ? 600 : 400,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                textAlign: 'left',
+                transition: 'background-color 0.12s ease, border-color 0.12s ease'
+              }}
+            >
+              <span style={{
+                width: '18px',
+                height: '18px',
+                borderRadius: '3px',
+                border: hasAgreed ? '1.5px solid #007ac0' : '1.5px solid #8c98a8',
+                backgroundColor: hasAgreed ? '#007ac0' : '#ffffff',
+                color: '#ffffff',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                flexShrink: 0
+              }}>
+                {hasAgreed ? '✓' : ''}
+              </span>
+              <span>上記の研究目的・データの取り扱いを理解し、調査への参加に同意します。</span>
+            </button>
           </div>
 
           {errorMessage && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 12px',
-              backgroundColor: '#fef2f2',
-              border: '1px solid #fecaca',
-              color: '#b91c1c',
-              fontSize: '0.78rem',
-              borderRadius: '10px'
-            }}>
-              <AlertCircle size={14} style={{ flexShrink: 0 }} />
+            <div className="profile-form-error">
+              <AlertCircle size={16} style={{ flexShrink: 0 }} />
               <span>{errorMessage}</span>
             </div>
           )}
 
-          {/* 開始ボタン */}
-          <button
-            type="submit"
-            disabled={!hasAgreed || !age}
-            style={{
-              width: '100%',
-              padding: '12px 18px',
-              borderRadius: '14px',
-              border: 'none',
-              background: hasAgreed && age ? 'linear-gradient(135deg, #3b82f6 0%, #6366f1 100%)' : '#e2e8f0',
-              color: hasAgreed && age ? '#ffffff' : '#94a3b8',
-              fontSize: '0.9rem',
-              fontWeight: 700,
-              cursor: hasAgreed && age ? 'pointer' : 'not-allowed',
-              boxShadow: hasAgreed && age ? '0 4px 14px rgba(59, 130, 246, 0.35)' : 'none',
-              transition: 'all 0.2s ease',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '6px'
-            }}
-          >
-            <Check size={16} />
-            <span>同意して対話診断をはじめる</span>
-          </button>
+          {/* Qualtrics Next Button Bar */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            paddingTop: '0.25rem'
+          }}>
+            <button
+              type="submit"
+              disabled={!hasAgreed || !age}
+              className="qualtrics-nav-btn"
+              title="次へ進む"
+            >
+              <span>次へ</span>
+              <ArrowRight size={17} />
+            </button>
+          </div>
 
-          {/* 動作確認用クイックスキップ */}
+          {/* 動作確認用スキップ */}
           {(onSkipToSurvey || onSkipToResult) && (
             <div style={{
-              marginTop: '1.25rem',
+              marginTop: '1rem',
               paddingTop: '1rem',
-              borderTop: '1px dashed #e2e8f0',
+              borderTop: '1px dashed #d8dde6',
               display: 'flex',
-              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
               gap: '8px'
             }}>
-              <div style={{
-                fontSize: '0.72rem',
-                color: '#64748b',
-                fontWeight: 700,
-                textAlign: 'center',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '5px'
-              }}>
-                <span>🛠️ 動作確認用スキップ</span>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <span style={{ fontSize: '0.74rem', color: '#5c6878', fontWeight: 600 }}>
+                管理者・動作確認用ショートカット:
+              </span>
+              <div style={{ display: 'flex', gap: '8px' }}>
                 {onSkipToSurvey && (
                   <button
                     type="button"
                     onClick={onSkipToSurvey}
                     style={{
-                      padding: '8px 10px',
+                      padding: '5px 10px',
                       fontSize: '0.75rem',
-                      fontWeight: 600,
-                      color: '#1d4ed8',
-                      backgroundColor: '#eff6ff',
-                      border: '1px solid #bfdbfe',
-                      borderRadius: '10px',
-                      cursor: 'pointer',
-                      transition: 'background-color 0.15s ease'
+                      fontWeight: 500,
+                      color: '#007ac0',
+                      backgroundColor: '#ffffff',
+                      border: '1px solid #b6d8f2',
+                      borderRadius: '4px',
+                      cursor: 'pointer'
                     }}
                   >
-                    📋 質問紙へスキップ
+                    質問紙(BFI-2-S)へスキップ
                   </button>
                 )}
                 {onSkipToResult && (
@@ -415,18 +328,17 @@ export const ResearchConsentModal: React.FC<ResearchConsentModalProps> = ({
                     type="button"
                     onClick={onSkipToResult}
                     style={{
-                      padding: '8px 10px',
+                      padding: '5px 10px',
                       fontSize: '0.75rem',
-                      fontWeight: 600,
-                      color: '#6d28d9',
-                      backgroundColor: '#f5f3ff',
-                      border: '1px solid #ddd6fe',
-                      borderRadius: '10px',
-                      cursor: 'pointer',
-                      transition: 'background-color 0.15s ease'
+                      fontWeight: 500,
+                      color: '#1b365d',
+                      backgroundColor: '#ffffff',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '4px',
+                      cursor: 'pointer'
                     }}
                   >
-                    📊 結果画面へスキップ
+                    結果レポートへスキップ
                   </button>
                 )}
               </div>

@@ -19,11 +19,11 @@ interface RadarChartProps {
 
 export const RadarChart: React.FC<RadarChartProps> = ({ scores }) => {
   const labels = [
-    '開放性\n(好奇心・創造性)',
-    '誠実性\n(自制心・計画性)',
-    '外向性\n(社交・活発さ)',
-    '協調性\n(共感・利他性)',
-    '情緒安定性\n(ストレス耐性)'
+    '開放性 (Openness)',
+    '誠実性 (Conscientiousness)',
+    '外向性 (Extraversion)',
+    '協調性 (Agreeableness)',
+    '情緒安定性 (Stability)'
   ];
 
   const dataValues = [
@@ -40,14 +40,14 @@ export const RadarChart: React.FC<RadarChartProps> = ({ scores }) => {
       {
         label: 'パーソナリティスコア',
         data: dataValues,
-        backgroundColor: 'rgba(59, 130, 246, 0.22)',
-        borderColor: '#3b82f6',
-        borderWidth: 2.5,
-        pointBackgroundColor: '#2563eb',
+        backgroundColor: 'rgba(0, 122, 192, 0.2)',
+        borderColor: '#007ac0',
+        borderWidth: 2,
+        pointBackgroundColor: '#007ac0',
         pointBorderColor: '#ffffff',
-        pointBorderWidth: 2,
-        pointRadius: 4.5,
-        pointHoverRadius: 6.5
+        pointBorderWidth: 1.5,
+        pointRadius: 4,
+        pointHoverRadius: 6
       }
     ]
   };
@@ -58,13 +58,13 @@ export const RadarChart: React.FC<RadarChartProps> = ({ scores }) => {
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: '#0f172a',
+        backgroundColor: '#1b2432',
         titleColor: '#ffffff',
         bodyColor: '#e2e8f0',
         padding: 10,
-        cornerRadius: 8,
+        cornerRadius: 4,
         callbacks: {
-          label: (context: any) => ` スコア: ${context.raw}点`
+          label: (context: any) => ` スコア: ${context.raw} / 100`
         }
       }
     },
@@ -74,22 +74,21 @@ export const RadarChart: React.FC<RadarChartProps> = ({ scores }) => {
         max: 100,
         ticks: {
           stepSize: 20,
-          color: '#94a3b8',
+          color: '#7c8798',
           backdropColor: 'transparent',
-          font: { size: 9, family: 'Plus Jakarta Sans' }
+          font: { size: 9 }
         },
         grid: {
-          color: 'rgba(0, 0, 0, 0.08)'
+          color: '#d8dde6'
         },
         angleLines: {
-          color: 'rgba(0, 0, 0, 0.1)'
+          color: '#d8dde6'
         },
         pointLabels: {
-          color: '#1e293b',
+          color: '#1b2432',
           font: {
             size: 11,
-            weight: '700',
-            family: 'Plus Jakarta Sans, Noto Sans JP'
+            weight: '600'
           }
         }
       }

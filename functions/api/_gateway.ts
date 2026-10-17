@@ -353,11 +353,9 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
     }
   }
 
-  // 2. HTTP fetch (AI Gateway または Workers AI Direct REST) による呼び出し
+  // 2. HTTP fetch (AI Gateway Workers AI エンドポイント経由で @cf/cloudflare/clef-flash を直接呼び出し)
   try {
-    const endpoint = env.CF_AI_GATEWAY_ANALYST_URL && env.CF_AI_GATEWAY_ANALYST_URL.trim() !== ''
-      ? env.CF_AI_GATEWAY_ANALYST_URL.trim()
-      : getGatewayWorkersAiUrl(env, '@cf/cloudflare/clef-flash');
+    const endpoint = getGatewayWorkersAiUrl(env, '@cf/cloudflare/clef-flash');
     const headers = getGatewayHeaders(env);
 
     const res = await fetch(endpoint, {
@@ -376,36 +374,12 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
         parsed.notes = `${parsed.notes} [via HTTP Gateway]`;
         return parsed;
       }
-
-      // 通常のチャットLLM形式（JSON出力）への互換フォールバック対応
-      const rawText = extractResponseText(data);
-      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        try {
-          const jsonParsed = JSON.parse(jsonMatch[0]);
-          if (jsonParsed && typeof jsonParsed === 'object' && jsonParsed.focus_dimension && jsonParsed.target_question_strategy) {
-            const aiReady = !!jsonParsed.is_ready_for_final_analysis;
-            const hasCrucialUncovered = coverage.uncovered.includes('外向性') || coverage.uncovered.includes('情緒安定性');
-            const isReady = userCount >= MAX_USER_TURNS || (userCount >= MIN_USER_TURNS && aiReady && !hasCrucialUncovered);
-            let focusDim = String(jsonParsed.focus_dimension);
-            if (focusDim === coverage.lastAssignedDim && coverage.uncovered.length > 0) {
-              focusDim = coverage.uncovered.includes('外向性') ? '外向性' : (coverage.uncovered.includes('情緒安定性') ? '情緒安定性' : coverage.uncovered[0]);
-            }
-            return {
-              focus_dimension: focusDim,
-              target_question_strategy: String(jsonParsed.target_question_strategy),
-              is_ready_for_final_analysis: isReady,
-              notes: 'Parsed from JSON fallback'
-            };
-          }
-        } catch (_) {}
-      }
     } else {
       const errText = await res.text();
-      console.warn(`Analyst route returned status ${res.status}:`, errText);
+      console.warn(`Clef-flash HTTP route returned status ${res.status}:`, errText);
     }
   } catch (err) {
-    console.error('Analyst Route fetch error:', err);
+    console.error('Clef-flash HTTP fetch error:', err);
   }
 
   // 3. ルールベースのフォールバック戦略（万一のAI障害時でも、全5因子をバランスよく順次質問）

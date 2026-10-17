@@ -42,8 +42,7 @@ export const SAMPLE_SURVEY_RESULT: SurveyResult = {
     agreeableness: { rawMean: 4.5, normalizedScore: 88 },
     neuroticism: { rawMean: 2.0, normalizedScore: 25 }
   },
-  completedAt: new Date().toISOString(),
-  isQualtrics: false
+  completedAt: new Date().toISOString()
 };
 
 export const SAMPLE_ANALYSIS_RESULT: AnalysisResult = {

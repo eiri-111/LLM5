@@ -134,11 +134,18 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('popstate', handleLocationChange);
   }, []);
 
-  // 画面フェーズ・セッション・結果の自動保存
+  // 画面フェーズ・セッション・結果の自動保存 & フェーズ遷移時のスクロールトップ
   useEffect(() => {
     try {
       localStorage.setItem('llm5_current_phase', phase);
     } catch (_) {}
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    const appContainer = document.querySelector('.app-container');
+    if (appContainer) {
+      appContainer.scrollTop = 0;
+    }
   }, [phase]);
 
   useEffect(() => {
@@ -551,57 +558,38 @@ export const App: React.FC = () => {
 
         {phase === 'result' && (
           analysisError ? (
-            <div className="result-container" style={{ padding: '2.5rem 1rem' }}>
+            <div className="result-container" style={{ padding: '2.5rem 1.25rem' }}>
               <div style={{
                 background: '#ffffff',
-                borderRadius: '1.25rem',
-                padding: '2.5rem 1.75rem',
-                border: '1px solid #fecaca',
+                borderRadius: '4px',
+                padding: '2rem 1.5rem',
+                border: '1px solid #f5c6cb',
+                borderTop: '4px solid #d93025',
                 maxWidth: '520px',
                 margin: '0 auto',
-                boxShadow: '0 8px 24px rgba(239, 68, 68, 0.08)',
-                textAlign: 'center'
+                textAlign: 'left'
               }}>
-                <div style={{ fontSize: '2.75rem', marginBottom: '1rem' }}>⚠️</div>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#991b1b', marginBottom: '0.75rem' }}>
-                  AI分析結果の生成に失敗しました
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#a91e22', marginBottom: '0.6rem' }}>
+                  分析レポートの生成中にエラーが発生しました
                 </h3>
-                <p style={{ fontSize: '0.88rem', color: '#64748b', lineHeight: 1.6, marginBottom: '1.75rem' }}>
+                <p style={{ fontSize: '0.88rem', color: '#333e4f', lineHeight: 1.6, marginBottom: '1.5rem' }}>
                   {analysisError}
                 </p>
-                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={handleConfirmRetake}
+                    className="qualtrics-nav-btn secondary"
+                  >
+                    最初からやり直す
+                  </button>
                   <button
                     onClick={() => {
                       if (surveyResult) handleCompleteSurvey(surveyResult);
                       else handleConfirmRetake();
                     }}
-                    style={{
-                      backgroundColor: '#2563eb',
-                      color: '#ffffff',
-                      padding: '0.65rem 1.25rem',
-                      borderRadius: '0.5rem',
-                      fontWeight: 600,
-                      fontSize: '0.88rem',
-                      border: 'none',
-                      cursor: 'pointer'
-                    }}
+                    className="qualtrics-nav-btn"
                   >
-                    AI分析を再試行する
-                  </button>
-                  <button
-                    onClick={handleConfirmRetake}
-                    style={{
-                      backgroundColor: '#f1f5f9',
-                      color: '#475569',
-                      padding: '0.65rem 1.25rem',
-                      borderRadius: '0.5rem',
-                      fontWeight: 600,
-                      fontSize: '0.88rem',
-                      border: 'none',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    最初からやり直す
+                    再試行する
                   </button>
                 </div>
               </div>
@@ -623,27 +611,28 @@ export const App: React.FC = () => {
 
       {/* 分析結果集計待ちモーダル */}
       {isWaitingForAnalysis && (
-        <div className="modal-backdrop">
-          <div className="profile-modal-card" style={{ maxWidth: '440px', textAlign: 'center', padding: '2.5rem 1.8rem' }}>
+        <div className="modal-backdrop" style={{ alignItems: 'center' }}>
+          <div className="profile-modal-card" style={{ maxWidth: '480px', minHeight: 'auto', textAlign: 'center', padding: '2.25rem 1.75rem' }}>
             <div style={{
-              width: '56px',
-              height: '56px',
-              borderRadius: '20px',
-              background: 'rgba(59, 130, 246, 0.08)',
+              width: '44px',
+              height: '44px',
+              borderRadius: '4px',
+              background: '#e8f3fa',
+              border: '1px solid #b6d8f2',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              margin: '0 auto 1.25rem',
-              color: '#2563eb'
+              margin: '0 auto 1rem',
+              color: '#007ac0'
             }}>
-              <Loader2 size={28} className="spinner" />
+              <Loader2 size={24} className="spinner" />
             </div>
-            <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', marginBottom: '0.5rem' }}>
-              AI対話分析と質問紙スコアを照合中...
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#1b2432', marginBottom: '0.5rem' }}>
+              回答データを集計・照合しています...
             </h3>
-            <p style={{ fontSize: '0.82rem', color: '#64748b', lineHeight: 1.6 }}>
-              アンケートへのご回答ありがとうございました！<br />
-              AI分析官による深層プロファイリングとBFI-2-S測定値を統合し、照合レポートを生成しています。
+            <p style={{ fontSize: '0.84rem', color: '#5c6878', lineHeight: 1.65 }}>
+              調査へのご回答ありがとうございました。<br />
+              AI対話記録とBFI-2-S質問紙の測定値を統合し、評価レポートを作成しています。画面を閉じずにそのままお待ちください。
             </p>
           </div>
         </div>
