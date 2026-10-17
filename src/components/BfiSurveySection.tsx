@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowRight, ArrowLeft } from 'lucide-react';
 import { SurveyResult } from '../types';
 import { BFI_2_S_CONFIG, calculateBfiScores } from '../data/bfi2s';
@@ -10,7 +10,7 @@ interface BfiSurveySectionProps {
   showToast: (msg: string) => void;
 }
 
-const QUESTIONS_PER_PAGE = 5;
+const QUESTIONS_PER_PAGE = 8;
 
 export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
   onCompleteSurvey,
@@ -43,6 +43,33 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
   const isCurrentPageComplete = currentQuestions.every(q => typeof answers[q.id] === 'number');
   const isAllAnswered = answeredCount === totalQuestions;
 
+  // ページ切り替え時に確実に画面最上部へスクロール
+  useEffect(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    const scrollToTop = () => {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      const appContainer = document.querySelector('.app-container');
+      if (appContainer) {
+        appContainer.scrollTop = 0;
+      }
+      const mainContent = document.querySelector('.main-content');
+      if (mainContent) {
+        mainContent.scrollTop = 0;
+      }
+    };
+    scrollToTop();
+    const rafId = requestAnimationFrame(scrollToTop);
+    const timerId = window.setTimeout(scrollToTop, 50);
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(timerId);
+    };
+  }, [currentPage]);
+
   const handleSelectAnswer = (questionId: number, value: number) => {
     setAnswers((prev) => {
       const updated = { ...prev, [questionId]: value };
@@ -56,14 +83,12 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
   const handleNextPage = () => {
     if (currentPage < totalPages - 1) {
       setCurrentPage(prev => prev + 1);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
   const handlePrevPage = () => {
     if (currentPage > 0) {
       setCurrentPage(prev => prev - 1);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
