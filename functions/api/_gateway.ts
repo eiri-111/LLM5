@@ -22,6 +22,9 @@ export interface AnalystStrategy {
   focus_dimension: string;
   target_question_strategy: string;
   is_ready_for_final_analysis: boolean;
+  action_mode?: 'deepen_episode' | 'new_situation' | 'complete';
+  target_facets?: string[];
+  evidenced_facets_count?: number;
   notes?: string;
 }
 
@@ -78,8 +81,12 @@ export interface AnalysisResult {
 const DEFAULT_ACCOUNT_ID = 'e809b1129ec4b6f69520858ac79b2095';
 const DEFAULT_GATEWAY_ID = 'llm5';
 
-/** 対話ターン数（ユーザー発話回数）の制御基準（上限ターン制限なし・分析官AIの完了判定に委ねる） */
-export const MIN_USER_TURNS = 6; // 最低ターン数（導入1ターン＋ビッグファイブ5因子＝最低6ターン）
+/** 対話ターン数（ユーザー発話回数）の制御基準 */
+export const MIN_USER_TURNS = 6; // 最低ターン数（2〜3個のエピソードを深掘りして最低6ターン）
+/** Clef-flash noul確率で「具体的な行動エビデンスが十分に得られた」と判定する閾値（0.60だと曖昧な応答でも超えるため0.70に設定） */
+export const FACET_EVIDENCE_THRESHOLD = 0.70;
+/** 「話題には触れたが、まだ具体的な発言・行動の深掘りが足りない（深掘りチャンス）」と判定する中間閾値 */
+export const FACET_PARTIAL_THRESHOLD = 0.50;
 
 /**
  * Cloudflare AI Gateway Dynamic Routing (OpenAI互換 compat) エンドポイントURLを取得
@@ -151,67 +158,267 @@ function extractResponseText(data: any): string {
   return cleanModelOutput(text);
 }
 
-/**
- * アシスタントの質問文から、そのターンで尋ねたビッグファイブ因子を特定
- * （前半の共感文のキーワード誤爆を防ぐため、後半の疑問文・質問パートを優先判定）
- */
-function detectQuestionDimension(
-  assistantText: string,
-  alreadyCovered?: Record<string, boolean>
-): string | null {
-  if (!assistantText) return null;
+export type FactorNameJP = '開放性' | '誠実性' | '外向性' | '協調性' | '情緒安定性';
 
-  // 句点や改行で分割し、疑問符（？/?）を含む文または最後の文を「質問本体」として抽出
-  const sentences = assistantText
-    .split(/(?<=[。！？!?\n])/)
-    .map(s => s.trim())
-    .filter(Boolean);
-  const questionSentences = sentences.filter(s => /[？?]/.test(s));
-  const primaryQuestionText = questionSentences.length > 0
-    ? questionSentences.join(' ')
-    : (sentences[sentences.length - 1] || assistantText);
-
-  const dimPatterns: Array<{ dim: string; regex: RegExp }> = [
-    { dim: '情緒安定性', regex: /(ストレス|プレッシャー|ピンチ|感情|落ち込|焦り|冷静|不安|リラックス|気分|立て直|悩み|浮き沈み|緊張|動じ|トラブル.*気持ち|気持ち.*切り替え|気持ち.*整)/ },
-    { dim: '外向性', regex: /(友人|仲間|チーム|周囲の人|社交|コミュニケーション|初対面|会話|関わる|人付き合い|自己主張|リード|引っ張|活発|エネルギー|大人数|スタンスで.*関わ)/ },
-    { dim: '協調性', regex: /(協力|相談|意見の相違|意見が分かれ|方針の違い|譲る|共感|相手の立場|対立|サポート|調和|チームワーク|思いやり|気配り|敬意|礼儀|信頼|任せる)/ },
-    { dim: '誠実性', regex: /(計画|目標|スケジュール|習慣|継続|責任|段取り|着実|整理|やり通|やり抜|効率|コツコツ|準備)/ },
-    { dim: '開放性', regex: /(工夫|アイデア|新しい|興味|知見|試み|発想|好奇心|創作|芸術|音楽|美術|文学|深く考|探究|独自)/ }
-  ];
-
-  // 1. まず「質問本体」の文からマッチする因子を探す（未カバー因子を優先）
-  const primaryMatches = dimPatterns.filter(p => p.regex.test(primaryQuestionText)).map(p => p.dim);
-  if (primaryMatches.length > 0) {
-    if (alreadyCovered) {
-      const uncoveredMatch = primaryMatches.find(d => !alreadyCovered[d]);
-      if (uncoveredMatch) return uncoveredMatch;
-    }
-    return primaryMatches[0];
-  }
-
-  // 2. 質問本体でヒットしない場合は全文から探す（未カバー因子を優先）
-  const fullMatches = dimPatterns.filter(p => p.regex.test(assistantText)).map(p => p.dim);
-  if (fullMatches.length > 0) {
-    if (alreadyCovered) {
-      const uncoveredMatch = fullMatches.find(d => !alreadyCovered[d]);
-      if (uncoveredMatch) return uncoveredMatch;
-    }
-    return fullMatches[0];
-  }
-
-  return null;
+export interface FacetDefinition {
+  key: string;
+  factor: FactorNameJP;
+  name: string;
+  probeHint: string;
+  evidenceInstruction: string;
+  regexFallback: RegExp;
 }
 
 /**
- * 対話履歴から各ビッグファイブ因子の質問・回答進捗を解析
- * 導入挨拶（messages[0]）を除き、インタビュアーが実際に質問してユーザーが回答した因子のみを「測定済み」と判定
+ * BFI-2-S 15ファセットの行動エビデンス定義（パターンC）
+ * 本人回答でも他者観察でも共通して確認できる「具体的な場面での振る舞い・発言・選択・事後の様子」を基準とする
+ */
+export const FACET_DEFINITIONS: FacetDefinition[] = [
+  // 1. 開放性 (Openness)
+  {
+    key: 'ev_openness_intellectual',
+    factor: '開放性',
+    name: '知的好奇心',
+    probeHint: '普段の会話でどんな話題（「なぜそうなるのか」等の仕組みや知的なテーマ）に食いつくか、疑問が湧いたときにどう調べるか',
+    evidenceInstruction: '【開放性 - 知的好奇心の行動エビデンス】単なる抽象的な自己紹介ではなく、対話の中で「普段どんな話題に食いつくか」「疑問や未知のテーマに対してどう調べたり議論したりしたか」という具体的な行動・会話エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(調べ|仕組み|なぜ|理由|議論|深掘り|知識|勉強|本|ニュース|考察|分析|知的好奇心)/
+  },
+  {
+    key: 'ev_openness_aesthetic',
+    factor: '開放性',
+    name: '美的好奇心',
+    probeHint: '自由な時間や休日にどんなコンテンツ（音楽・映画・美術・デザイン・景色・雰囲気の良い場所など）を選び、どう楽しむか',
+    evidenceInstruction: '【開放性 - 美的好奇心の行動エビデンス】対話の中で、音楽・映画・芸術・デザイン・風景・作品のこだわりなど、美的・文化的な体験にどう触れているか（または全く関心がないか）が分かる具体的な選択・行動エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(音楽|映画|美術|芸術|デザイン|景色|雰囲気|カフェ|建築|作品|イラスト|写真|ライブ|センス)/
+  },
+  {
+    key: 'ev_openness_creative',
+    factor: '開放性',
+    name: '創造力',
+    probeHint: 'いつものやり方に飽きたときや課題に直面したとき、新しい方法・独自の工夫・変わった選択肢をどう試したか',
+    evidenceInstruction: '【開放性 - 創造力の行動エビデンス】対話の中で、新しいやり方を試した、独自の工夫やアイデアを出した（あるいは定番・ルーティンをあえて守った）という具体的な行動エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(工夫|新しい|アイデア|試|自作|アレンジ|独自|発想|挑戦|ルーティン|定番)/
+  },
+
+  // 2. 誠実性 (Conscientiousness)
+  {
+    key: 'ev_conscientiousness_organization',
+    factor: '誠実性',
+    name: '組織化（段取り・整理）',
+    probeHint: '出かける前や作業前にどこまで事前に計画・段取りを組むか、あるいは予定変更時にどう再手配したか',
+    evidenceInstruction: '【誠実性 - 組織化の行動エビデンス】対話の中で、事前の計画・スケジュール管理・段取り・整理整頓（あるいはノープラン・行き当たりばったりで動く様子）が分かる具体的な行動エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(計画|段取り|準備|スケジュール|予約|整理|リスト|片付け|ノープラン|行き当たりばったり|ルート)/
+  },
+  {
+    key: 'ev_conscientiousness_productiveness',
+    factor: '誠実性',
+    name: '生産性（やり抜く力）',
+    probeHint: 'やらなければいけないけれど面倒な作業や課題があるとき、すぐ着手してやり通したか、後回しにしたか',
+    evidenceInstruction: '【誠実性 - 生産性の行動エビデンス】対話の中で、面倒な作業や地道なタスクに対して「どう着手し、最後までどうやり抜いたか（あるいは先延ばし・休憩を優先したか）」が分かる具体的な行動エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(面倒|コツコツ|やり切|やり抜|最後|終わらせ|後回し|先延ばし|集中|継続|作業|課題)/
+  },
+  {
+    key: 'ev_conscientiousness_responsibility',
+    factor: '誠実性',
+    name: '責任感',
+    probeHint: '自分の役割や約束・時間を守るために具体的にどう動いたか、周囲から頼まれた時にどう対応したか',
+    evidenceInstruction: '【誠実性 - 責任感の行動エビデンス】対話の中で、約束や締切の遵守、自分の役割を最後まで果たす行動、周囲からの頼まれごとへの対応ぶりが分かる具体的な行動エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(役割|責任|約束|時間|遅刻|締切|期限|守る|任され|担当|きっちり)/
+  },
+
+  // 3. 外向性 (Extraversion)
+  {
+    key: 'ev_extraversion_sociability',
+    factor: '外向性',
+    name: '社交性',
+    probeHint: '人が集まる場や会話の中で、自分からどう話しかけたか、または聞き役に回ったか',
+    evidenceInstruction: '【外向性 - 社交性の行動エビデンス】対話の中で、他者との会話や集まりの場面で「自分から話しかけたか、会話を広げたか、それとも静かに聞き役に回ったか」という具体的な振る舞い・発言エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(話しかけ|会話|盛り上|雑談|聞き役|しゃべ|初対面|友達|仲間|声かけ|明るく)/
+  },
+  {
+    key: 'ev_extraversion_assertiveness',
+    factor: '外向性',
+    name: '主張性（主導権）',
+    probeHint: '複数人で何かを決めるときや場が停滞したとき、自分から「こうしよう」と提案・リードしたか、周囲の決定に従ったか',
+    evidenceInstruction: '【外向性 - 主張性の行動エビデンス】対話の中で、集団や対人場面で「自分から意見を出して主導（リード）したか、それとも他人の提案に任せたか」が分かる具体的な発言・行動エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(提案|リード|主導|意見|まとめ|引っ張|仕切|決め|従う|合わせる)/
+  },
+  {
+    key: 'ev_extraversion_activity',
+    factor: '外向性',
+    name: '活動性',
+    probeHint: '休日や日常の中でどれくらい予定を入れて外へ動き回るか、あるいは家でゆっくり過ごすか、行動のテンポやフットワークの軽さ',
+    evidenceInstruction: '【外向性 - 活動性の行動エビデンス】対話の中で、日々の行動量、休日のフットワークの軽さ、エネルギッシュに動き回るかゆっくり過ごすかが分かる具体的な行動エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(休日|出かけ|動き回|アクティブ|フットワーク|インドア|家でのんびり|予定を入れ|活発|外に出)/
+  },
+
+  // 4. 協調性 (Agreeableness)
+  {
+    key: 'ev_agreeableness_compassion',
+    factor: '協調性',
+    name: '思いやり',
+    probeHint: '周囲で困っている人や疲れている人がいたとき、どんな声をかけたか・どんな手助けをしたか',
+    evidenceInstruction: '【協調性 - 思いやりの行動エビデンス】対話の中で、周囲の人への気遣い、声かけ、手助け、フォロー（あるいは自分のペースを優先した様子）が分かる具体的な行動・発言エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(気遣|フォロー|助け|手伝|声.*かけ|心配|優し|サポート|気づか|寄り添)/
+  },
+  {
+    key: 'ev_agreeableness_respect',
+    factor: '協調性',
+    name: '敬意（対立回避）',
+    probeHint: '意見が食い違ったときや相手がミスをしたとき、角が立たないようにどう言い方を選んだか（またははっきり指摘したか）',
+    evidenceInstruction: '【協調性 - 敬意の行動エビデンス】対話の中で、意見の相違や他人のミスに直面した際、「角を立てずに穏やかに伝えたか、譲歩したか、それともストレートに反論・指摘したか」という具体的な言葉遣い・態度のエピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(意見.*違|対立|譲|穏やか|角が立た|怒ら|指摘|反論|言い方|空気を読|丁寧)/
+  },
+  {
+    key: 'ev_agreeableness_trust',
+    factor: '協調性',
+    name: '信頼',
+    probeHint: '他人に作業や役割を任せるとき、相手を信じて任せたか、それとも自分で確認しないと気が済まなかったか',
+    evidenceInstruction: '【協調性 - 信頼の行動エビデンス】対話の中で、他者の言動や役割分担に対して「相手を信頼して任せたか、好意的に受け止めたか、あるいは疑って自分で確認したか」が分かる具体的な行動エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(任せ|信頼|信じ|頼る|疑|自分でや|確認しな|お願いし)/
+  },
+
+  // 5. 情緒安定性 (Emotional Stability)
+  {
+    key: 'ev_neuroticism_anxiety',
+    factor: '情緒安定性',
+    name: '不安の低さ（ストレス対処）',
+    probeHint: 'プレッシャーがかかる場面や結果が分からない状況で、どんな態度・行動をとっていたか',
+    evidenceInstruction: '【情緒安定性 - 不安の低さの行動エビデンス】対話の中で、プレッシャーや不確実な状況に対して「落ち着いて構えていたか、それとも心配や焦りが行動・言葉に出ていたか」が分かる具体的なエピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(不安|焦|心配|緊張|プレッシャー|落ち着|リラックス|ドキドキ|気にし)/
+  },
+  {
+    key: 'ev_neuroticism_depression',
+    factor: '情緒安定性',
+    name: '抑うつの低さ（気分の切り替え）',
+    probeHint: '失敗したあとや嫌な出来事があった直後〜翌日にかけて、どれくらい引きずったか、どうやって気分を切り替えたか（口数・態度・行動）',
+    evidenceInstruction: '【情緒安定性 - 抑うつの低さの行動エビデンス】対話の中で、失敗や嫌な出来事があった後の「気分の切り替え行動・翌日の様子・どれくらい引きずったか」が分かる具体的な事後エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(落ち込|引きず|切り替え|立ち直|寝れば|翌日|気分|ショック|凹|へこ|元気)/
+  },
+  {
+    key: 'ev_neuroticism_volatility',
+    factor: '情緒安定性',
+    name: '感情変動の低さ（トラブル時の冷静さ）',
+    probeHint: '予定外のトラブルや邪魔が入った瞬間、最初にどんな言葉が出たか、イライラや動揺が態度に出たか冷静だったか',
+    evidenceInstruction: '【情緒安定性 - 感情変動の低さの行動エビデンス】対話の中で、予定外のトラブルやハプニングが起きた瞬間に「イライラやパニックを態度・口調に出したか、それとも動じず冷静に対処したか」が分かる具体的な行動・発言エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(イライラ|パニック|冷静|動じ|トラブル|ハプニング|怒|感情的|落ち着いて対)/
+  }
+];
+
+interface GoldenSituation {
+  id: string;
+  title: string;
+  targetFactors: FactorNameJP[];
+  primaryFacets: string[];
+  promptInstruction: string;
+  detectionRegex: RegExp;
+}
+
+/**
+ * 1つのエピソードから複数の因子・ファセットを同時に引き出す「4つの黄金シチュエーション」
+ */
+const GOLDEN_SITUATIONS: GoldenSituation[] = [
+  {
+    id: 'situation_trouble',
+    title: '予定外のトラブル・急な予定変更の場面',
+    targetFactors: ['情緒安定性', '誠実性', '外向性'],
+    primaryFacets: [
+      'ev_neuroticism_volatility',
+      'ev_neuroticism_anxiety',
+      'ev_conscientiousness_organization',
+      'ev_extraversion_assertiveness'
+    ],
+    promptInstruction:
+      '【シチュエーション提示：予定外のトラブル・ハプニング】最近、出先や仕事・日常の中で「予定外のトラブル（遅れ、道に迷う、急な予定変更、機材や手順のトラブルなど）」が起きた具体的な場面を1つ思い出してもらい、その瞬間に最初になんと言ったか・どう動いたかを尋ねてください。（※もし最近なければ、過去で印象に残っている場面でも構わないと添えてください）',
+    detectionRegex: /(予定外のトラブル|ハプニング|思い通りにいかない|急な予定変更|道に迷)/
+  },
+  {
+    id: 'situation_group_decision',
+    title: '複数人での意思決定・意見の食い違い・協力の場面',
+    targetFactors: ['外向性', '協調性'],
+    primaryFacets: [
+      'ev_extraversion_sociability',
+      'ev_extraversion_assertiveness',
+      'ev_agreeableness_compassion',
+      'ev_agreeableness_respect',
+      'ev_agreeableness_trust'
+    ],
+    promptInstruction:
+      '【シチュエーション提示：複数人での意思決定・意見の相違】最近、友人や家族、仕事・活動の仲間など複数人で「どこに行くか・どう進めるかを決めた場面」や「お互いの意見や希望が少し分かれた場面」を1つ挙げてもらい、その場で具体的にどんな発言や立ち回りをしたかを尋ねてください。',
+    detectionRegex: /(複数人で|意見が分かれ|意見や希望|どう進めるかを決め|立ち回り)/
+  },
+  {
+    id: 'situation_free_time_curiosity',
+    title: '自由時間の選択・盛り上がる話題・新しい体験の場面',
+    targetFactors: ['開放性', '外向性'],
+    primaryFacets: [
+      'ev_openness_intellectual',
+      'ev_openness_aesthetic',
+      'ev_openness_creative',
+      'ev_extraversion_activity'
+    ],
+    promptInstruction:
+      '【シチュエーション提示：自由時間の過ごし方・好奇心とこだわり】最近、休日にぽっかり自由な時間ができた時に実際にどう過ごしたか（どんな場所・作品・音楽・デザイン・新しい体験を選んだか）、あるいは普段の雑談で「一番食いついて盛り上がった話題」はどんなものだったか、具体的なエピソードを尋ねてください。',
+    detectionRegex: /(自由な時間|ぽっかり|盛り上がった話題|食いついて|作品・音楽)/
+  },
+  {
+    id: 'situation_task_and_recovery',
+    title: '面倒な課題への着手・失敗や嫌な出来事の後の切り替え場面',
+    targetFactors: ['誠実性', '情緒安定性'],
+    primaryFacets: [
+      'ev_conscientiousness_productiveness',
+      'ev_conscientiousness_responsibility',
+      'ev_neuroticism_depression',
+      'ev_neuroticism_anxiety'
+    ],
+    promptInstruction:
+      '【シチュエーション提示：面倒な課題への取り組みと気分の切り替え】最近、「やらなければいけないけれど少し面倒だった作業・課題」にどう取り組んだか、また、ちょっとした失敗や嫌なことがあった日の「その後の過ごし方や翌日の様子（どう切り替えたか）」について具体的なエピソードを尋ねてください。',
+    detectionRegex: /(面倒だった作業|その後の過ごし方|翌日の様子|どう切り替えた)/
+  }
+];
+
+/**
+ * 直近で同じエピソードの深掘り（フォローアップ質問）が何ターン連続しているかを推定
+ */
+function countConsecutiveDeepenTurns(messages: ChatMessage[]): number {
+  let deepenCount = 0;
+  // 最後のアシスタントメッセージから逆順に見て、新しいシチュエーション提示でなければ深掘りとみなす
+  const assistantMsgs = messages.slice(1).filter(m => m.role === 'assistant');
+  for (let i = assistantMsgs.length - 1; i >= 0; i--) {
+    const text = assistantMsgs[i].content;
+    const isNewSituationPrompt =
+      /(別の場面|ここからは少し場面を変え|最近.*場面はありますか|どんな場面がありましたか|思い出してみてください)/.test(text) ||
+      GOLDEN_SITUATIONS.some(s => s.detectionRegex.test(text));
+    if (isNewSituationPrompt) {
+      break;
+    }
+    deepenCount++;
+  }
+  return deepenCount;
+}
+
+/**
+ * 対話履歴から各ビッグファイブ因子の進捗を解析（ルールベース・フォールバック兼用）
+ * ユーザーの実際の発言内容（エピソード）から15ファセットの言及を複数同時に検出する
  */
 export function analyzeDimensionCoverage(messages: ChatMessage[]): {
   covered: Record<string, boolean>;
   uncovered: string[];
   lastAssignedDim: string | null;
+  facetScoresFallback: Record<string, number>;
 } {
-  const allDimensions = ['開放性', '誠実性', '外向性', '協調性', '情緒安定性'];
+  const allDimensions: FactorNameJP[] = ['開放性', '誠実性', '外向性', '協調性', '情緒安定性'];
+  const userTextCombined = messages
+    .filter(m => m.role === 'user')
+    .map(m => m.content)
+    .join('\n');
+
+  const facetScoresFallback: Record<string, number> = {};
+  for (const facet of FACET_DEFINITIONS) {
+    const matched = facet.regexFallback.test(userTextCombined);
+    facetScoresFallback[facet.key] = matched ? 0.72 : 0.35;
+  }
+
   const covered: Record<string, boolean> = {
     '開放性': false,
     '誠実性': false,
@@ -220,127 +427,226 @@ export function analyzeDimensionCoverage(messages: ChatMessage[]): {
     '情緒安定性': false
   };
 
-  let lastAssignedDim: string | null = null;
-
-  // messages[0] は最初の「素や性格がよく出る場所や場面」の挨拶なのでスキップし、
-  // それ以降のインタビュアーの質問（かつその後にユーザーの回答が存在するもの）を順番に判定
-  for (let i = 1; i < messages.length; i++) {
-    const msg = messages[i];
-    if (msg.role === 'assistant') {
-      const hasUserReplyAfter = messages.slice(i + 1).some(m => m.role === 'user');
-      const detected = detectQuestionDimension(msg.content, covered);
-      if (detected) {
-        lastAssignedDim = detected;
-        if (hasUserReplyAfter) {
-          covered[detected] = true;
-        }
-      }
-    }
+  for (const dim of allDimensions) {
+    const dimFacets = FACET_DEFINITIONS.filter(f => f.factor === dim);
+    const evidencedCount = dimFacets.filter(f => (facetScoresFallback[f.key] ?? 0) >= FACET_EVIDENCE_THRESHOLD).length;
+    covered[dim] = evidencedCount >= 2;
   }
 
   const uncovered = allDimensions.filter(d => !covered[d]);
-
-  return { covered, uncovered, lastAssignedDim };
+  return { covered, uncovered, lastAssignedDim: null, facetScoresFallback };
 }
 
 /**
- * Clef-flashの意思決定レスポンスを解析してAnalystStrategyを生成
+ * Clef-flashの15ファセット同時評価レスポンス（パターンC）を解析し、
+ * 「同じエピソードの2〜3往復深掘り」または「未充足ファセットを狙う新シチュエーション提示」を決定する
  */
-function parseClefFlashDecision(
+function parseClefPatternCDecision(
   resObj: any,
-  userCount: number,
-  coverage?: { covered: Record<string, boolean>; uncovered: string[]; lastAssignedDim: string | null }
+  messages: ChatMessage[],
+  userCount: number
 ): AnalystStrategy | null {
   if (!resObj) return null;
-
-  // resObjが { answers: { ... } } や { result: { ... } } の入れ子になっている場合を考慮
   const target = resObj.answers || resObj.result || resObj;
-  if (!target || (target.is_ready === undefined && target.focus_dimension === undefined)) {
+  if (!target || typeof target !== 'object') return null;
+
+  const extractProb = (item: any): number | null => {
+    if (item === undefined || item === null) return null;
+    if (typeof item === 'number') return item <= 1.0 ? item : item / 100;
+    if (typeof item?.noul === 'number') return item.noul;
+    if (typeof item?.probability === 'number') return item.probability;
+    if (typeof item?.yes_probability === 'number') return item.yes_probability;
+    if (item === 'yes' || item === true || item?.answer === 'yes') return 0.85;
+    if (item === 'no' || item === false || item?.answer === 'no') return 0.20;
     return null;
-  }
+  };
 
-  const isReadyItem = target.is_ready;
-  // Clef-flashの type: "noul" の場合、isReadyItem.noul に確率 (0.0〜1.0) が格納される
-  const isReadyProb = typeof isReadyItem === 'number'
-    ? isReadyItem
-    : (typeof isReadyItem?.noul === 'number'
-      ? isReadyItem.noul
-      : (typeof isReadyItem?.probability === 'number'
-        ? isReadyItem.probability
-        : (typeof isReadyItem?.yes_probability === 'number' ? isReadyItem.yes_probability : 0)));
-  const isReadyAnswer = isReadyItem === 'yes' || isReadyItem === true || isReadyItem?.answer === 'yes';
-  const aiDeterminedReady = isReadyAnswer || isReadyProb >= 0.7;
-
-  // 上限ターンによる強制終了は行わず、全5因子が測定済み（uncovered が 0）かつ最低ターン数以上で、
-  // 分析官AI（Clef-flash）が「情報収集が十分」と判定した場合のみ完了とする
-  const hasAnyUncovered = coverage ? coverage.uncovered.length > 0 : false;
-  const isReady = userCount >= MIN_USER_TURNS && !hasAnyUncovered && aiDeterminedReady;
-
-  let rawFocusDim = target.focus_dimension?.chosen
-    || target.focus_dimension?.answer
-    || target.focus_dimension?.choice
-    || (typeof target.focus_dimension === 'string' ? target.focus_dimension : null)
-    || '外向性';
-
-  // 【重要: 因子固執防止 & 5因子均等カバレッジのスマートバランサー】
-  // Clef-flashが直前と同じ因子を連続して選んだり、未測定の因子がある場合は確実に未測定因子へ誘導
-  let focusDim = rawFocusDim;
-  if (coverage && coverage.uncovered.length > 0) {
-    if (focusDim === coverage.lastAssignedDim || !coverage.uncovered.includes(focusDim)) {
-      if (coverage.uncovered.includes('外向性')) {
-        focusDim = '外向性';
-      } else if (coverage.uncovered.includes('情緒安定性')) {
-        focusDim = '情緒安定性';
-      } else {
-        focusDim = coverage.uncovered[0];
-      }
+  // 15ファセットの行動エビデンス確率を取得
+  const facetProbs: Record<string, number> = {};
+  let validFacetCount = 0;
+  for (const facet of FACET_DEFINITIONS) {
+    const p = extractProb(target[facet.key]);
+    if (p !== null) {
+      facetProbs[facet.key] = p;
+      validFacetCount++;
+    } else {
+      facetProbs[facet.key] = 0.0;
     }
   }
 
-  const strategyRaw = target.strategy_type?.chosen
-    || target.strategy_type?.answer
-    || target.strategy_type?.choice
-    || (typeof target.strategy_type === 'string' ? target.strategy_type : null)
-    || '社交性・主張性・活動性';
+  if (validFacetCount === 0) {
+    return null;
+  }
 
-  const strategyMap: Record<string, string> = {
-    '知的好奇心・美的好奇心・創造力': '新しいアイデアや工夫（創造力）、物事を深く考えることや知的探求（知的好奇心）、芸術・音楽・創作などへの関心（美的好奇心）',
-    '組織化・生産性・責任感': '計画や段取り・整理整頓のスタイル（組織化）、面倒なことも最後までやり通す姿勢（生産性）、自分の役割を効率的・着実に果たす行動（責任感）',
-    '社交性・主張性・活動性': '周囲との会話や関わり方（社交性）、チーム内で意見を出したりリードする場面（主張性）、日々の活動のエネルギー量や積極性（活動性）',
-    '思いやり・敬意・信頼': '他者への気配りやサポート（思いやり）、意見の相違がある場面でも敬意を払い対立を避ける姿勢（敬意）、周囲の人を信じて任せるスタンス（信頼）',
-    '不安・抑うつ・感情の変動': 'プレッシャーや悩みへのストレス対処（不安）、落ち込んだ時の気分の切り替え（抑うつ）、想定外のトラブルでも動じず冷静に対応する様子（感情の変動）'
+  const allFactors: FactorNameJP[] = ['開放性', '誠実性', '外向性', '協調性', '情緒安定性'];
+  const factorEvidencedCounts: Record<FactorNameJP, number> = {
+    '開放性': 0,
+    '誠実性': 0,
+    '外向性': 0,
+    '協調性': 0,
+    '情緒安定性': 0
+  };
+  const factorCovered: Record<FactorNameJP, boolean> = {
+    '開放性': false,
+    '誠実性': false,
+    '外向性': false,
+    '協調性': false,
+    '情緒安定性': false
   };
 
-  // 因子に適合したBFI-2-Sファセット戦略のデフォルトマッピング（不一致を補正）
-  const dimensionDefaultStrategies: Record<string, string> = {
-    '開放性': strategyMap['知的好奇心・美的好奇心・創造力'],
-    '誠実性': strategyMap['組織化・生産性・責任感'],
-    '外向性': strategyMap['社交性・主張性・活動性'],
-    '協調性': strategyMap['思いやり・敬意・信頼'],
-    '情緒安定性': strategyMap['不安・抑うつ・感情の変動']
-  };
+  let totalEvidencedFacets = 0;
 
-  const strategyChoice = (focusDim !== rawFocusDim && dimensionDefaultStrategies[focusDim])
-    ? dimensionDefaultStrategies[focusDim]
-    : (strategyMap[strategyRaw] || dimensionDefaultStrategies[focusDim] || strategyRaw);
+  for (const factor of allFactors) {
+    const facets = FACET_DEFINITIONS.filter(f => f.factor === factor);
+    const evidenced = facets.filter(f => (facetProbs[f.key] ?? 0) >= FACET_EVIDENCE_THRESHOLD);
+    const partial = facets.filter(f => (facetProbs[f.key] ?? 0) >= FACET_PARTIAL_THRESHOLD);
+    const meanProb = facets.reduce((sum, f) => sum + (facetProbs[f.key] ?? 0), 0) / facets.length;
 
-  const targetStrategy = isReady
-    ? 'すべての質問が完了しました。新たな質問は一切行わず、直前の回答に温かく共感・感謝した上で、次の質問紙（BFI-2-S）へ進むよう案内してください。'
-    : `${focusDim}（BFI-2-Sファセット）の特性を客観的に測定するため、対話で挙がった場面や日常の経験の中から「${strategyChoice}」についての具体的な過去の体験・エピソードを尋ねてください。`;
+    factorEvidencedCounts[factor] = evidenced.length;
+    totalEvidencedFacets += evidenced.length;
+
+    // パターンC 因子充足条件:
+    // 3ファセット中2ファセット以上が >= 0.70、または 1ファセット以上が >= 0.70 かつ全3ファセットが >= 0.50（平均 >= 0.65）
+    factorCovered[factor] =
+      evidenced.length >= 2 || (evidenced.length >= 1 && partial.length === 3 && meanProb >= 0.65);
+  }
+
+  const uncoveredFactors = allFactors.filter(f => !factorCovered[f]);
+  const overallReadyProb = extractProb(target.is_ready_overall) ?? 0;
+
+  const episodeDepthChoice =
+    target.episode_depth_status?.chosen ||
+    target.episode_depth_status?.answer ||
+    target.episode_depth_status?.choice ||
+    (typeof target.episode_depth_status === 'string' ? target.episode_depth_status : null);
+
+  const consecutiveDeepen = countConsecutiveDeepenTurns(messages);
+  const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
+  const userSaidNoEpisode = /(特にない|思いつかない|あまりない|覚えていない|わからない|ないです)/.test(lastUserMsg);
+
+  // パターンC 完了判定:
+  // 1) 最低ターン数（6ターン）以上
+  // 2) 全5因子が充足（各2ファセット以上 >= 0.70）かつ10ファセット以上が >= 0.70
+  //    （または 9ターン以上で4因子以上充足 ＆ overallReadyProb >= 0.70）
+  const isAllFactorsSatisfied = uncoveredFactors.length === 0 && totalEvidencedFacets >= 10;
+  const isLongDialogueSatisfied = userCount >= 9 && uncoveredFactors.length <= 1 && overallReadyProb >= 0.70;
+  const isReady = userCount >= MIN_USER_TURNS && (isAllFactorsSatisfied || isLongDialogueSatisfied);
+
+  if (isReady) {
+    return {
+      focus_dimension: '完了',
+      target_question_strategy:
+        'すべての質問が完了しました。新たな質問は一切行わず、直前の回答に温かく共感・感謝した上で、次の質問紙（BFI-2-S）へ進むよう案内してください。',
+      is_ready_for_final_analysis: true,
+      action_mode: 'complete',
+      evidenced_facets_count: totalEvidencedFacets,
+      notes: `Clef-flash Pattern C Complete (evidencedFacets: ${totalEvidencedFacets}/15, turns: ${userCount})`
+    };
+  }
+
+  // 「断片的ヒント（0.50 <= prob < 0.70）」が出ているファセット（あと1問深掘りすれば0.70を超える有望ファセット）
+  const partialFacets = FACET_DEFINITIONS.filter(
+    f => (facetProbs[f.key] ?? 0) >= FACET_PARTIAL_THRESHOLD && (facetProbs[f.key] ?? 0) < FACET_EVIDENCE_THRESHOLD
+  ).sort((a, b) => (facetProbs[b.key] ?? 0) - (facetProbs[a.key] ?? 0));
+
+  // まだ0.70に達していない全未充足ファセット（未充足因子のファセットを優先）
+  const missingFacets = FACET_DEFINITIONS.filter(f => (facetProbs[f.key] ?? 0) < FACET_EVIDENCE_THRESHOLD).sort(
+    (a, b) => {
+      const aFactorUncovered = uncoveredFactors.includes(a.factor) ? 1 : 0;
+      const bFactorUncovered = uncoveredFactors.includes(b.factor) ? 1 : 0;
+      if (aFactorUncovered !== bFactorUncovered) return bFactorUncovered - aFactorUncovered;
+      return (facetProbs[a.key] ?? 0) - (facetProbs[b.key] ?? 0);
+    }
+  );
+
+  // 深掘りモード vs 新シチュエーション提示モードの決定
+  // - 1ターン目から具体的な出来事・エピソードが語られた場合（または断片的ヒントがある場合）は、そのエピソードを2〜3往復深掘りする
+  // - 万一1ターン目で場所だけ（「職場です」等の極端に短い回答）だった場合は、その場所に関連づけて黄金シチュエーションを提示する
+  const hasInitialEpisodeContent = userCount > 1 || lastUserMsg.trim().length >= 15;
+  const shouldDeepen =
+    userCount >= 1 &&
+    hasInitialEpisodeContent &&
+    !userSaidNoEpisode &&
+    consecutiveDeepen < 2 &&
+    (episodeDepthChoice === 'needs_behavioral_probe' || partialFacets.length > 0 || userCount === 1);
+
+  if (shouldDeepen) {
+    // 今のエピソードを深掘りして、断片的ファセット（0.50〜0.69）＋未充足ファセットの具体的行動・セリフを2〜3個同時に回収する
+    const probeTargets = [...partialFacets, ...missingFacets]
+      .filter((f, idx, arr) => arr.findIndex(x => x.key === f.key) === idx)
+      .slice(0, 3);
+
+    const primaryFactor = probeTargets[0]?.factor || uncoveredFactors[0] || '外向性';
+    const targetNames = probeTargets.map(f => `${f.factor}［${f.name}］`).join('・');
+    const targetHints = probeTargets.map(f => `・${f.factor}（${f.name}）: ${f.probeHint}`).join('\n');
+
+    return {
+      focus_dimension: primaryFactor,
+      action_mode: 'deepen_episode',
+      target_facets: probeTargets.map(f => f.name),
+      evidenced_facets_count: totalEvidencedFacets,
+      is_ready_for_final_analysis: false,
+      target_question_strategy: [
+        `【現在のエピソードの深掘り（2〜3往復目）】`,
+        `ユーザーが直前に語ってくれたエピソード（場面）の話題は変えず、その場面の中で以下の未確定ファセット（${targetNames}）が客観的に判断できるよう、具体的な振る舞いを深掘りしてください：`,
+        targetHints,
+        `※「心の中でどう思ったか」ではなく、「その時、実際に最初になんと言ったか？」「具体的にどう動いたか？」「その後どんな行動・様子になったか？」のようにビデオカメラに映る行動・発言を1つの自然な質問で尋ねてください。`
+      ].join('\n'),
+      notes: `Clef-flash Pattern C [deepen_episode] (evidenced: ${totalEvidencedFacets}/15, targets: ${targetNames})`
+    };
+  }
+
+  // 新しいシチュエーション（黄金シチュエーション）を提示するモード
+  // 既にアシスタントが提示済みのシチュエーションを除外し、未充足ファセットを最も多くカバーできるシチュエーションを選択
+  const assistantHistoryText = messages
+    .filter(m => m.role === 'assistant')
+    .map(m => m.content)
+    .join('\n');
+
+  const scoredSituations = GOLDEN_SITUATIONS.map(sit => {
+    const alreadyAsked = sit.detectionRegex.test(assistantHistoryText);
+    const missingPrimaryCount = sit.primaryFacets.filter(
+      key => (facetProbs[key] ?? 0) < FACET_EVIDENCE_THRESHOLD
+    ).length;
+    const uncoveredFactorHits = sit.targetFactors.filter(f => uncoveredFactors.includes(f)).length;
+    const score = (alreadyAsked ? -10 : 0) + uncoveredFactorHits * 3 + missingPrimaryCount * 2;
+    return { sit, score };
+  }).sort((a, b) => b.score - a.score);
+
+  const chosenSituation = scoredSituations[0].sit;
+  const sitTargetFacets = FACET_DEFINITIONS.filter(
+    f => chosenSituation.primaryFacets.includes(f.key) && (facetProbs[f.key] ?? 0) < FACET_EVIDENCE_THRESHOLD
+  ).slice(0, 3);
+
+  const focusFactor = chosenSituation.targetFactors.find(f => uncoveredFactors.includes(f))
+    || chosenSituation.targetFactors[0];
+  const facetSummary = sitTargetFacets.length > 0
+    ? sitTargetFacets.map(f => `${f.factor}［${f.name}］`).join('・')
+    : chosenSituation.targetFactors.join('・');
+
+  const firstTurnContextNote = userCount === 1
+    ? `ユーザーが挙げてくれた「素や性格が出る場所・場面」に関連づけながら、`
+    : `直前の回答に温かく共感・要約した上で、「では、少し別の場面についても伺わせてください」と自然に切り出し、`;
 
   return {
-    focus_dimension: isReady ? '完了' : focusDim,
-    target_question_strategy: targetStrategy,
-    is_ready_for_final_analysis: isReady,
-    notes: `Clef-flash (dim: ${focusDim}, isReady: ${isReady}, prob: ${isReadyProb.toFixed(2)})`
+    focus_dimension: focusFactor,
+    action_mode: 'new_situation',
+    target_facets: sitTargetFacets.map(f => f.name),
+    evidenced_facets_count: totalEvidencedFacets,
+    is_ready_for_final_analysis: false,
+    target_question_strategy: [
+      `【新しいシチュエーションのお題提示（狙い: ${facetSummary}）】`,
+      `${firstTurnContextNote}以下のシチュエーションでの最近の具体的なエピソードを尋ねてください：`,
+      chosenSituation.promptInstruction
+    ].join('\n'),
+    notes: `Clef-flash Pattern C [new_situation:${chosenSituation.id}] (evidenced: ${totalEvidencedFacets}/15, target: ${facetSummary})`
   };
 }
 
 /**
  * ステップ1: 分析官AI (Workers AI @cf/cloudflare/clef-flash を呼び出し)
- * 1. Cloudflare Workers AI 内部バインディング (env.AI) を優先使用（トークン不要・401エラー防止）
- * 2. HTTP Gateway (CF_AIG_TOKEN / CLOUDFLARE_API_TOKEN 付き) をフォールバック使用
- * 3. 万一の障害時は堅牢なルールベース判定へ移行
+ * パターンC: 1回のリクエストで「BFI-2-S 15ファセットすべての行動エビデンス充足度（閾値0.70）」と
+ * 「今のエピソードを深掘りすべきか／新しい場面に切り替えるべきか」を同時に評価する
  */
 export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<AnalystStrategy> {
   const dialogueHistory = messages
@@ -348,51 +654,46 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
     .join('\n');
   const userCount = messages.filter(m => m.role === 'user').length;
 
-  // 5因子のカバレッジを事前解析
-  const coverage = analyzeDimensionCoverage(messages);
-
-  // Clef-flash が要求する意思決定スキーマ (BFI-2-S 5因子×3ファセット準拠)
-  const coverageStatusText = [
-    `【BFI-2-S 各因子の測定状況】`,
-    `- 開放性 (知的好奇心・美的好奇心・創造力): ${coverage.covered['開放性'] ? '測定済み（エピソードあり）' : '【未測定】'}`,
-    `- 誠実性 (組織化・生産性・責任感): ${coverage.covered['誠実性'] ? '測定済み（エピソードあり）' : '【未測定】'}`,
-    `- 外向性 (社交性・主張性・活動性): ${coverage.covered['外向性'] ? '測定済み（エピソードあり）' : '【未測定・重要】'}`,
-    `- 協調性 (思いやり・敬意・信頼): ${coverage.covered['協調性'] ? '測定済み（エピソードあり）' : '【未測定】'}`,
-    `- 情緒安定性 (不安・抑うつ・感情の変動): ${coverage.covered['情緒安定性'] ? '測定済み（エピソードあり）' : '【未測定・重要】'}`
+  const clefState = [
+    `【対話履歴】`,
+    dialogueHistory,
+    ``,
+    `ユーザー発話回数: ${userCount}回`,
+    `【評価基準】`,
+    `ユーザーが語ったエピソード（場面）と、その中での具体的な振る舞い（実際に何と言ったか・どう動いたか・どんな選択をしたか・事後にどう切り替えたか）から、BFI-2-Sの15ファセットそれぞれについて「客観的に採点できるだけの具体的な行動エビデンスがすでに得られたか」を厳密に判定してください。`
   ].join('\n');
 
-  const clefState = `【対話履歴】\n${dialogueHistory}\n\nユーザー発話回数: ${userCount}回\n\n${coverageStatusText}`;
-  const clefQuestions: Record<string, any> = {
-    is_ready: {
-      type: "noul",
-      instructions: "これまでの対話から、BFI-2-S準拠のビッグファイブ全5因子（開放性・誠実性・外向性・協調性・情緒安定性）すべてについて測定が完了し、各因子を精密に採点できるだけの具体的な行動エピソードが十分に集まりましたか？未測定の因子が1つでも残っている場合や、回答が短く掘り下げが不十分な因子がある場合は必ずnoとしてください。"
-    },
-    focus_dimension: {
-      type: "choice",
-      instructions: "次の質問で深掘りすべき、情報が最も不足しているBFI-2-S性格因子はどれですか？【重要】【未測定】の因子がある場合は必ず【未測定】の因子の中から選択し、全因子が測定済みの場合はまだ具体的なエピソードが浅い因子を選択してください。",
-      criteria: {
-        "外向性": "社交性（積極的・社交的⇔無口）、主張性（自己主張・他人をリード）、活動性（エネルギッシュ⇔控えめ・大人しい）",
-        "情緒安定性": "不安（ストレス対処・リラックス⇔悩みが多い）、抑うつ（気分の安定⇔落ち込み・浮き沈み）、感情の変動（動じにくさ・冷静⇔緊張しやすい）",
-        "協調性": "思いやり（優しさ・親身⇔冷淡）、敬意（礼儀正しさ・対立回避）、信頼（他者を信じる・好意的関心⇔疑いやすい）",
-        "開放性": "知的好奇心（深く考える・抽象的思考）、美的好奇心（芸術・音楽・文学への関心）、創造力（独創的・新しいアイデア）",
-        "誠実性": "組織化（計画的・整理整頓⇔行き当たりばったり）、生産性（怠けず最後までやり通す）、責任感（頼りになる・効率的にこなす）"
-      }
-    },
-    strategy_type: {
-      type: "choice",
-      instructions: "その因子のBFI-2-Sファセットを測定するために尋ねるべき、最も適切な行動エピソードの切り口はどれですか？",
-      criteria: {
-        "社交性・主張性・活動性": "周囲との会話や関わり方（社交性）、チーム内で意見を出したりリードする場面（主張性）、日々の活動のエネルギー量や積極性（活動性）",
-        "不安・抑うつ・感情の変動": "プレッシャーや悩みへのストレス対処（不安）、落ち込んだ時の気分の切り替え（抑うつ）、想定外のトラブルでも動じず冷静に対応する様子（感情の変動）",
-        "思いやり・敬意・信頼": "他者への気配りやサポート（思いやり）、意見の相違がある場面でも敬意を払い対立を避ける姿勢（敬意）、周囲の人を信じて任せるスタンス（信頼）",
-        "組織化・生産性・責任感": "計画や段取り・整理整頓のスタイル（組織化）、面倒なことも最後までやり通す姿勢（生産性）、自分の役割を効率的・着実に果たす行動（責任感）",
-        "知的好奇心・美的好奇心・創造力": "新しいアイデアや工夫（創造力）、物事を深く考えることや知的探求（知的好奇心）、芸術・音楽・創作などへの関心（美的好奇心）"
-      }
+  const clefQuestions: Record<string, any> = {};
+
+  // 15ファセットそれぞれの行動エビデンス有無を type: "noul" で同時質問
+  for (const facet of FACET_DEFINITIONS) {
+    clefQuestions[facet.key] = {
+      type: 'noul',
+      instructions: facet.evidenceInstruction
+    };
+  }
+
+  // 現在のエピソードの深掘り要否
+  clefQuestions.episode_depth_status = {
+    type: 'choice',
+    instructions:
+      '直前のユーザーの回答について、まだ「具体的に何と言ったか・どう行動したか・その後どうなったか」の掘り下げが足りず、同じエピソードをもう1問深掘りすることで複数の性格ファセットの行動エビデンスを引き出せますか？それとも今のエピソードからは十分引き出せた（または該当エピソードがない）ため、別のシチュエーションへ切り替えるべきですか？',
+    criteria: {
+      needs_behavioral_probe:
+        '直前の回答で場面や出来事は語られたが、「具体的に何と言ったか・どう動いたか・周囲とどう関わったか・その後どう切り替えたか」がまだ浅く、同じ場面をもう1問深掘りすると具体的な振る舞いが引き出せる',
+      episode_sufficient_or_none:
+        '直前のエピソードからは具体的な行動やセリフが十分に語られた、またはすでに2〜3往復深掘りした、あるいは「そういう場面はない」と回答されたため、新しい場面（シチュエーション）へ切り替えるべき'
     }
   };
 
-  // 1. Cloudflare Workers AI バインディング (env.AI) が存在する場合は最優先で直接実行
-  // ※ 内部バインディングのため API トークン認証エラー (HTTP 401) が原理的に発生せず、AI Gateway にも自動連携
+  // 全体の完了判定
+  clefQuestions.is_ready_overall = {
+    type: 'noul',
+    instructions:
+      'これまでの対話全体を通じて、ビッグファイブ全5因子（開放性・誠実性・外向性・協調性・情緒安定性）すべてについて、各因子2ファセット以上の具体的な行動エピソードが十分に集まり、質問紙と同等の精度で採点できる状態に達しましたか？'
+  };
+
+  // 1. Cloudflare Workers AI バインディング (env.AI) を最優先で実行
   if (env.AI && typeof env.AI.run === 'function') {
     try {
       const aiRes: any = await env.AI.run(
@@ -408,7 +709,7 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
           }
         }
       );
-      const parsed = parseClefFlashDecision(aiRes, userCount, coverage);
+      const parsed = parseClefPatternCDecision(aiRes, messages, userCount);
       if (parsed) {
         parsed.notes = `${parsed.notes} [via env.AI binding]`;
         return parsed;
@@ -418,7 +719,7 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
     }
   }
 
-  // 2. HTTP fetch (AI Gateway Workers AI エンドポイント経由で @cf/cloudflare/clef-flash を直接呼び出し)
+  // 2. HTTP fetch (AI Gateway Workers AI エンドポイント経由で @cf/cloudflare/clef-flash を呼び出し)
   try {
     const endpoint = getGatewayWorkersAiUrl(env, '@cf/cloudflare/clef-flash');
     const headers = getGatewayHeaders(env);
@@ -434,7 +735,7 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
 
     if (res.ok) {
       const data: any = await res.json();
-      const parsed = parseClefFlashDecision(data, userCount, coverage);
+      const parsed = parseClefPatternCDecision(data, messages, userCount);
       if (parsed) {
         parsed.notes = `${parsed.notes} [via HTTP Gateway]`;
         return parsed;
@@ -447,67 +748,85 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
     console.error('Clef-flash HTTP fetch error:', err);
   }
 
-  // 3. ルールベースのフォールバック戦略（万一のClef-flash通信障害時は強制終了せず、未測定・ローテーション因子を質問継続）
-  const orderedDimensions = ['開放性', '誠実性', '外向性', '情緒安定性', '協調性'];
-  const isReady = false;
-
-  let focusDim = '外向性';
-  if (coverage.uncovered.length > 0) {
-    focusDim = coverage.uncovered.includes('外向性')
-      ? '外向性'
-      : (coverage.uncovered.includes('情緒安定性') ? '情緒安定性' : coverage.uncovered[0]);
-  } else {
-    focusDim = orderedDimensions[userCount % orderedDimensions.length];
+  // 3. 万一の通信障害時のルールベース・フォールバック（正規表現による15ファセット簡易判定から同じロジックを実行）
+  const fallbackCoverage = analyzeDimensionCoverage(messages);
+  const mockAnswers: Record<string, any> = {
+    episode_depth_status: {
+      chosen: userCount % 2 === 1 ? 'needs_behavioral_probe' : 'episode_sufficient_or_none'
+    },
+    is_ready_overall: { noul: fallbackCoverage.uncovered.length === 0 ? 0.75 : 0.3 }
+  };
+  for (const facet of FACET_DEFINITIONS) {
+    mockAnswers[facet.key] = { noul: fallbackCoverage.facetScoresFallback[facet.key] ?? 0.35 };
   }
 
-  const strategyDetails: Record<string, string> = {
-    '開放性': '新しいアイデアや工夫（創造力）、物事を深く考えることや知的探求（知的好奇心）、芸術・音楽・創作などへの関心（美的好奇心）',
-    '誠実性': '計画や段取り・整理整頓のスタイル（組織化）、面倒なことも最後までやり通す姿勢（生産性）、自分の役割を効率的・着実に果たす行動（責任感）',
-    '外向性': '周囲との会話や関わり方（社交性）、チーム内で意見を出したりリードする場面（主張性）、日々の活動のエネルギー量や積極性（活動性）',
-    '協調性': '他者への気配りやサポート（思いやり）、意見の相違がある場面でも敬意を払い対立を避ける姿勢（敬意）、周囲の人を信じて任せるスタンス（信頼）',
-    '情緒安定性': 'プレッシャーや悩みへのストレス対処（不安）、落ち込んだ時の気分の切り替え（抑うつ）、想定外のトラブルでも動じず冷静に対応する様子（感情の変動）'
-  };
-  const detail = strategyDetails[focusDim] || '具体的な行動エピソード';
+  const fallbackParsed = parseClefPatternCDecision({ answers: mockAnswers }, messages, userCount);
+  if (fallbackParsed) {
+    fallbackParsed.notes = `${fallbackParsed.notes} [Rule-based fallback]`;
+    return fallbackParsed;
+  }
 
   return {
-    focus_dimension: focusDim,
-    target_question_strategy: `${focusDim}（BFI-2-Sファセット）の特性を客観的に測定するため、対話で挙がった場面や日常の経験の中から「${detail}」についての具体的な過去の体験・エピソードを尋ねてください。`,
-    is_ready_for_final_analysis: isReady,
-    notes: 'Rule-based fallback strategy (continue questioning)'
+    focus_dimension: '外向性',
+    action_mode: 'new_situation',
+    target_question_strategy: GOLDEN_SITUATIONS[userCount % GOLDEN_SITUATIONS.length].promptInstruction,
+    is_ready_for_final_analysis: false,
+    notes: 'Minimal fallback strategy'
   };
 }
 
 /**
  * インタビュアーAI用のシステムプロンプトを生成
- * 対話継続中（isReady === false）と対話完了時（isReady === true）で指示を完全に分離し、
- * 「質問の途中で質問紙に誘導される」「完了案内しながらさらに質問してしまう」矛盾を防止する
+ * パターンC: 「同一エピソードの2〜3往復深掘り（カメラに映る行動・発言の引き出し）」と
+ * 「複数因子が活性化する新シチュエーション提示」を明確に制御する
  */
 function buildInterviewerInstruction(strategy: AnalystStrategy): string {
   const isReady = strategy.is_ready_for_final_analysis;
   const focusDimension = strategy.focus_dimension || '行動特性';
-  const targetStrategy = strategy.target_question_strategy || 'これまでの活動や具体的な行動エピソードについて尋ねる';
+  const targetStrategy = strategy.target_question_strategy || '具体的な行動エピソードについて尋ねる';
+  const actionMode = strategy.action_mode || 'new_situation';
 
-  if (isReady) {
+  if (isReady || actionMode === 'complete') {
     return `
-あなたはプロフェッショナルな性格分析インタビュアーです。
-これまでの対話で、ビッグファイブ全5因子のエピソード収集がすべて完了しました。
+あなたはプロフェッショナルな行動エピソード・インタビュアーです。
+これまでの対話で、ビッグファイブ全5因子（および主要ファセット）のエピソード収集がすべて完了しました。
 
 【あなたのタスク（対話完了の締めくくり）】
 1. ユーザーの直前の発言に対して、温かく具体的に共感・要約（1〜2文）してください。
 2. 【重要・追加質問の絶対禁止】: これ以上、新しい質問や問いかけ（「〜ですか？」「〜ありましたか？」など）は絶対にしないでください。疑問符（？）も使わないでください。
-3. 最後に、「ここまでたくさんの素敵なお話を聞かせていただき、ありがとうございました！対話セッションはこれで完了です。画面下のボタンから、次のステップ『質問紙（BFI-2-S）』へお進みください。」と案内して締めくくってください。
+3. 最後に、「ここまで具体的なエピソードをたくさん聞かせていただき、ありがとうございました！対話セッションはこれで完了です。画面下のボタンから、次のステップ『質問紙（BFI-2-S）』へお進みください。」と案内して締めくくってください。
 4. 思考プロセスや内部推論（<thought>や<think>タグなど）は一切出力に含めず、ユーザーへの発話文のみを直接出力してください。
 `;
   }
 
-  return `
-裏方の分析官から以下の指示（戦略）が届いています:
-【分析官の指示】:
-- 狙う因子: ${focusDimension}
-- 質問の方向性: ${targetStrategy}
+  const modeSpecificGuide =
+    actionMode === 'deepen_episode'
+      ? `
+【現在のモード：今のエピソードの深掘り（フォローアップ）】
+- 話題や場面を切り替えず、直前にユーザーが話してくれたエピソードの「続き・詳細」を尋ねてください。
+- 抽象的な感想（「どう思いましたか？」）ではなく、もしその場にビデオカメラがあったら映っているような**具体的な振る舞い（「その時、実際に最初になんと言いましたか？」「誰がどう動きましたか？」「その後どんな行動・様子になりましたか？」）**を引き出してください。
+`
+      : `
+【現在のモード：新しいシチュエーションのお題提示】
+- まず直前のユーザーの回答に対して、1〜2文で自然に共感・受け止めを述べてください。
+- その上で、分析官の指示にある「シチュエーション」を提示し、最近（もし最近なければ過去でも可）の具体的なエピソードと、その時どう振る舞ったかを尋ねてください。
+- もしユーザーが「そういう場面自体がめったにない」と答えた場合は、「なぜそういう場面が起きないのか（事前に全部決めておくから、最初から相手に合わせるから等）」や「普段の小さな場面ではどう動くか」を答えやすく案内してください。
+`;
 
+  return `
+あなたは心理学に基づく行動エピソード・インタビュアーです。
+ユーザーが実際に経験した「場面（エピソード）」と「その中での具体的な振る舞い（発言・行動・選択・事後の様子）」を引き出すことがあなたの役割です。
+
+裏方の分析官AI（Clef-flash）から以下の戦略指示が届いています:
+【分析官の指示】:
+- 主な注目領域: ${focusDimension}${strategy.target_facets?.length ? `（注目ファセット: ${strategy.target_facets.join(' / ')}）` : ''}
+${targetStrategy}
+${modeSpecificGuide}
 【対話・質問の絶対ルール】
-1. 必ず敬語を使用してください
+1. 必ず丁寧で親しみやすい敬語を使用してください。
+2. 1回の発言で聞く質問は「1つ（または密接に関連する具体的な問いかけ）」に絞り、長すぎない自然な会話文（3〜4文程度）にしてください。
+3. 「あなたの誠実性を測るために〜」のような検査の裏側の意図や専門用語（ビッグファイブ、ファセット等）は絶対に出さないでください。
+4. 思考プロセスや内部推論（<thought>や<think>タグなど）は一切出力に含めず、ユーザーへの発話文のみを直接出力してください。
 `;
 }
 
