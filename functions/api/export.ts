@@ -44,17 +44,36 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         'id', 'student_id', 'age', 'gender', 'created_at', 'dialogue_turns',
         'ai_personality_title', 'ai_personality_type',
         'ai_openness', 'ai_conscientiousness', 'ai_extraversion', 'ai_agreeableness', 'ai_neuroticism',
+        'ai_direct_openness', 'ai_direct_conscientiousness', 'ai_direct_extraversion', 'ai_direct_agreeableness', 'ai_direct_neuroticism',
         'survey_scale_type', 'survey_scale_name',
         'survey_openness', 'survey_conscientiousness', 'survey_extraversion', 'survey_agreeableness', 'survey_neuroticism',
-        'survey_completed_at'
+        'survey_completed_at',
+        'clef_facets_json'
       ];
 
       const csvRows = [headers.join(',')];
 
       for (const row of (results as any[])) {
+        let parsedAi: any = null;
+        try {
+          if (row.ai_full_result) parsedAi = JSON.parse(row.ai_full_result);
+        } catch (_) {}
+        const directScores = parsedAi?.clef_scoring_data?.direct_scores;
+        const facetsObj = parsedAi?.clef_scoring_data?.facets;
+
+        const enrichedRow: Record<string, any> = {
+          ...row,
+          ai_direct_openness: directScores?.openness ?? '',
+          ai_direct_conscientiousness: directScores?.conscientiousness ?? '',
+          ai_direct_extraversion: directScores?.extraversion ?? '',
+          ai_direct_agreeableness: directScores?.agreeableness ?? '',
+          ai_direct_neuroticism: directScores?.neuroticism ?? '',
+          clef_facets_json: facetsObj ? JSON.stringify(facetsObj) : ''
+        };
+
         const line = headers.map(h => {
-          const val = row[h];
-          if (val === null || val === undefined) return '';
+          const val = enrichedRow[h];
+          if (val === null || val === undefined || val === '') return '';
           const str = String(val).replace(/"/g, '""');
           return `"${str}"`;
         }).join(',');

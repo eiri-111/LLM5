@@ -12,7 +12,7 @@ interface ChatModeProps {
 }
 
 const INITIAL_GREETING =
-  "本調査へのご協力ありがとうございます。\nこれより、AIインタビュアーとの短い対話を通して、あなたの普段の行動スタイルや考え方について伺います。\n\n正誤を問うテストではありませんので、普段通りの言葉でお気軽にお答えください。\nはじめに、あなたが現在【最も時間やエネルギーを注いでいる活動】（学業、仕事、趣味、サークルなど）について教えていただけますか？";
+  "本調査へのご協力ありがとうございます。\nこれより、AIインタビュアーとの短い対話を通して、あなたの普段の行動スタイルや考え方について伺います。\n\n正誤を問うテストではありませんので、普段通りの言葉でお気軽にお答えください。\nはじめに、あなたの「素」や性格がよく出るなと思う場所や場面（学校、職場、車の中、ゲームの中など）がどこかを教えていただけますか？";
 
 function sanitizeMessage(text: string): string {
   if (!text) return '';
@@ -50,7 +50,16 @@ export const ChatMode: React.FC<ChatModeProps> = ({
 
   const [isReady, setIsReady] = useState<boolean>(() => {
     try {
-      return localStorage.getItem('llm5_chat_is_ready') === 'true';
+      const savedReady = localStorage.getItem('llm5_chat_is_ready') === 'true';
+      if (!savedReady) return false;
+      const savedMsgs = localStorage.getItem('llm5_chat_messages');
+      if (savedMsgs) {
+        const parsed = JSON.parse(savedMsgs);
+        if (Array.isArray(parsed)) {
+          const uCount = parsed.filter((m: ChatMessage) => m.role === 'user').length;
+          return uCount >= 6;
+        }
+      }
     } catch (_) {}
     return false;
   });
@@ -88,6 +97,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
     if (!text || isLoading) return;
 
     const newMessages: ChatMessage[] = [...messages, { role: 'user', content: text }];
+    const nextUserTurns = newMessages.filter(m => m.role === 'user').length;
     setMessages(newMessages);
     setInputText('');
     setIsLoading(true);
@@ -120,6 +130,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
         const decoder = new TextDecoder();
         let accumulatedText = '';
         let buffer = '';
+        let readyFlagFromServer = false;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -141,9 +152,9 @@ export const ChatMode: React.FC<ChatModeProps> = ({
               if (event.type === 'chunk' && event.text) {
                 accumulatedText += event.text;
                 setStreamingText(accumulatedText);
-              } else if (event.type === 'done' || event.type === 'meta') {
+              } else if (event.type === 'done') {
                 if (event.is_ready_for_analysis) {
-                  setIsReady(true);
+                  readyFlagFromServer = true;
                 }
               } else if (event.type === 'error') {
                 throw new Error(event.error);
@@ -159,11 +170,18 @@ export const ChatMode: React.FC<ChatModeProps> = ({
         const finalReply = sanitizeMessage(accumulatedText) || 'ご回答ありがとうございます。';
         setMessages([...newMessages, { role: 'assistant', content: finalReply }]);
         setStreamingText('');
+
+        // ストリーミング完了後、かつ質問の途中（疑問符で終わっている状態）でないことを確認して完了ボタンを表示
+        const endsWithQuestion = /[？?]\s*$/.test(finalReply);
+        if (readyFlagFromServer && !endsWithQuestion && nextUserTurns >= 6) {
+          setIsReady(true);
+        }
       } else {
         const data: any = await res.json();
         const cleanReply = sanitizeMessage(data.response);
         setMessages([...newMessages, { role: 'assistant', content: cleanReply }]);
-        if (data.is_ready_for_analysis) {
+        const endsWithQuestion = /[？?]\s*$/.test(cleanReply);
+        if (data.is_ready_for_analysis && !endsWithQuestion && nextUserTurns >= 6) {
           setIsReady(true);
         }
       }
@@ -205,7 +223,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
       <div className="chat-instruction-banner">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
           <span>
-            <strong>設問ブロック 1:</strong> AIインタビュアーの質問に対して、あなたの具体的な経験やエピソードをご記入ください。（約5〜8往復）
+            <strong>設問ブロック 1:</strong> AIインタビュアーの質問に対して、あなたの具体的な経験やエピソードをご記入ください。
           </span>
           {(onSkipToSurvey || onSkipToResult) && (
             <div style={{ display: 'flex', gap: '6px' }}>

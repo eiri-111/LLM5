@@ -70,7 +70,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       });
     }
 
-    // CSVエクスポート
+    // CSVエクスポート（案1のメインスコア ai_* に加え、比較検証用の案2 ai_direct_* も列として出力）
     const headers = [
       'id',
       'student_id',
@@ -87,6 +87,11 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       'ai_extraversion',
       'ai_agreeableness',
       'ai_neuroticism',
+      'ai_direct_openness',
+      'ai_direct_conscientiousness',
+      'ai_direct_extraversion',
+      'ai_direct_agreeableness',
+      'ai_direct_neuroticism',
       'survey_scale_type',
       'survey_scale_name',
       'survey_openness',
@@ -94,6 +99,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       'survey_extraversion',
       'survey_agreeableness',
       'survey_neuroticism',
+      'clef_facets_json',
       'survey_raw_answers',
       'chat_messages'
     ];
@@ -101,9 +107,26 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     const csvLines: string[] = [headers.join(',')];
 
     for (const row of dataRows) {
+      let parsedAi: any = null;
+      try {
+        if (row.ai_full_result) parsedAi = JSON.parse(row.ai_full_result);
+      } catch (_) {}
+      const directScores = parsedAi?.clef_scoring_data?.direct_scores;
+      const facetsObj = parsedAi?.clef_scoring_data?.facets;
+
+      const enrichedRow: Record<string, any> = {
+        ...row,
+        ai_direct_openness: directScores?.openness ?? '',
+        ai_direct_conscientiousness: directScores?.conscientiousness ?? '',
+        ai_direct_extraversion: directScores?.extraversion ?? '',
+        ai_direct_agreeableness: directScores?.agreeableness ?? '',
+        ai_direct_neuroticism: directScores?.neuroticism ?? '',
+        clef_facets_json: facetsObj ? JSON.stringify(facetsObj) : ''
+      };
+
       const line = headers.map(h => {
-        const val = row[h];
-        if (val === null || val === undefined) return '""';
+        const val = enrichedRow[h];
+        if (val === null || val === undefined || val === '') return '""';
         // 改行やダブルクォートを適切にエスケープ
         const str = String(val).replace(/"/g, '""');
         return `"${str}"`;

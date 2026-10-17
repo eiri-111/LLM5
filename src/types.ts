@@ -15,6 +15,22 @@ export interface BigFiveScores {
   neuroticism: BigFiveDimension;
 }
 
+export interface ClefScoringBreakdown {
+  /** 案1（メイン採用）: BFI-2-S 3ファセット平均による5因子スコア (0-100) */
+  facet_mean_scores: Record<'openness' | 'conscientiousness' | 'extraversion' | 'agreeableness' | 'neuroticism', number>;
+  /** 案2（比較検証用）: 5因子直接質問によるスコア (0-100) */
+  direct_scores: Record<'openness' | 'conscientiousness' | 'extraversion' | 'agreeableness' | 'neuroticism', number>;
+  /** BFI-2-S 15ファセット個別のスコア (0-100) */
+  facets: {
+    openness: { intellectual: number; aesthetic: number; creative: number };
+    conscientiousness: { organization: number; productiveness: number; responsibility: number };
+    extraversion: { sociability: number; assertiveness: number; activity: number };
+    agreeableness: { compassion: number; respect: number; trust: number };
+    neuroticism: { anxiety: number; depression: number; volatility: number };
+  };
+  source: string;
+}
+
 export interface AnalysisResult {
   personality_title: string;
   personality_type: string;
@@ -31,6 +47,7 @@ export interface AnalysisResult {
     age?: number | string | null;
     gender?: string | null;
   };
+  clef_scoring_data?: ClefScoringBreakdown; // Clef-flashによる20問同時採点データ（案1・案2比較検証用）
 }
 
 export interface ChatMessage {
