@@ -882,10 +882,7 @@ export async function runInterviewerStream(
         ...formattedMessages
       ],
       temperature: 0.7,
-      stream: true,
-      chat_template_kwargs: {
-        enable_thinking: false
-      }
+      stream: true
     })
   });
 
@@ -1067,10 +1064,7 @@ export async function runInterviewer(
           { role: 'system', content: interviewerInstruction },
           ...formattedMessages
         ],
-        temperature: 0.7,
-        chat_template_kwargs: {
-          enable_thinking: false
-        }
+        temperature: 0.7
       })
     });
 
