@@ -307,107 +307,7 @@ export const FACET_DEFINITIONS: FacetDefinition[] = [
   }
 ];
 
-interface GoldenSituation {
-  id: string;
-  title: string;
-  targetFactors: FactorNameJP[];
-  primaryFacets: string[];
-  bridgeGuide: string;
-  promptInstruction: string;
-  detectionRegex: RegExp;
-}
 
-/**
- * 1つのエピソードから複数の因子・ファセットを同時に引き出す「4つの黄金シチュエーション」
- * 話題転換時（new_situation）に唐突感が出ないよう、直前の話題から繋ぐ bridgeGuide を併設
- */
-const GOLDEN_SITUATIONS: GoldenSituation[] = [
-  {
-    id: 'situation_trouble',
-    title: '予定通りにいかない場面・急な予定変更への対応',
-    targetFactors: ['情緒安定性', '誠実性', '外向性'],
-    primaryFacets: [
-      'ev_neuroticism_volatility',
-      'ev_neuroticism_anxiety',
-      'ev_conscientiousness_organization',
-      'ev_extraversion_assertiveness'
-    ],
-    bridgeGuide:
-      '直前のエピソードでのユーザーの落ち着いた取り組みや行動スタイルを受け止めた上で、「ところで、普段そうして過ごす中で、たまに『予定通りにいかないこと』や『急な予定変更・ちょっとしたハプニング』が起きることもあると思いますが〜」と日常の延長として自然に繋げてください。',
-    promptInstruction:
-      '【シチュエーション提示：予定通りにいかない場面・急な変更】最近、日常や学校・仕事・出先などで「予定通りにいかなくなった場面（電車の遅れ、急な予定変更、手順や機材のトラブルなど）」があれば1つ挙げてもらい、その時にどんな態度でどう動いたか（周りになんと言ったか、どう段取りし直したか）を尋ねてください。（※もし最近大きなトラブルがなければ、ちょっとした予定変更の場面でどう動くかでも構わないと添えてください）',
-    detectionRegex: /(予定外のトラブル|予定通りにいかない|ハプニング|急な予定変更|道に迷)/
-  },
-  {
-    id: 'situation_group_decision',
-    title: '複数人での意思決定・役割分担・協力の場面',
-    targetFactors: ['外向性', '協調性'],
-    primaryFacets: [
-      'ev_extraversion_sociability',
-      'ev_extraversion_assertiveness',
-      'ev_agreeableness_compassion',
-      'ev_agreeableness_respect',
-      'ev_agreeableness_trust'
-    ],
-    bridgeGuide:
-      '直前の話に共感した上で、「ちなみに、友人や家族、活動の仲間など『誰かと一緒に何かを決めたり進めたりする場面』についても少し伺いたいのですが〜」と対人場面へ自然にスライドさせてください。',
-    promptInstruction:
-      '【シチュエーション提示：複数人での意思決定・協力】最近、友人や家族、学校・仕事の仲間など複数人で「どこに行くか・どう進めるかを決めた場面」や「役割分担をして協力した場面」を1つ挙げてもらい、自分から提案して引っ張ったか、周りの意見を聞いてまとめる役に回ったかなど、実際の立ち回りを尋ねてください。',
-    detectionRegex: /(複数人で|意見が分かれ|意見や希望|どう進めるかを決め|立ち回り)/
-  },
-  {
-    id: 'situation_free_time_curiosity',
-    title: '自由時間の選択・興味の深掘り・新しい体験の場面',
-    targetFactors: ['開放性', '外向性'],
-    primaryFacets: [
-      'ev_openness_intellectual',
-      'ev_openness_aesthetic',
-      'ev_openness_creative',
-      'ev_extraversion_activity'
-    ],
-    bridgeGuide:
-      '直前までの話（学校・仕事・課題などのオンの場面）と自然に対比させて、「ちなみに、そういった普段の活動や課題から離れて、休日にぽっかり自由な時間ができた時（オフの時間）についても伺いたいのですが〜」とクッションを入れて切り出してください。',
-    promptInstruction:
-      '【シチュエーション提示：自由時間の過ごし方・好奇心とこだわり】最近、休日に自由な時間ができた時に実際にどう過ごしたか（外に出かけて動き回ったか、家でどんな音楽・映画・作品・デザイン等を楽しんだか、あるいは気になって徹底的に調べたことや新しく試したことはあるか）、具体的なエピソードを尋ねてください。',
-    detectionRegex: /(自由な時間|ぽっかり|盛り上がった話題|食いついて|作品・音楽)/
-  },
-  {
-    id: 'situation_task_and_recovery',
-    title: '面倒な課題への着手・疲れた日や失敗後の切り替え場面',
-    targetFactors: ['誠実性', '情緒安定性'],
-    primaryFacets: [
-      'ev_conscientiousness_productiveness',
-      'ev_conscientiousness_responsibility',
-      'ev_neuroticism_depression',
-      'ev_neuroticism_anxiety'
-    ],
-    bridgeGuide:
-      '直前の話を受け止めた上で、「ところで、普段の生活の中で『やらなきゃいけないけれど少し面倒な課題・作業』に向き合う時や、『ちょっとうまくいかず疲れた日』の切り替えについても伺いたいのですが〜」と自然に繋げてください。',
-    promptInstruction:
-      '【シチュエーション提示：面倒な課題への取り組みと気分の切り替え】最近、「やらなければいけないけれど少し面倒だった作業・課題」にどう着手して進めたか（先に片付けたか、ギリギリまで寝かせたか等）、また、ちょっとした失敗や嫌なことがあった後にどうやって気分を切り替えたか、具体的なエピソードを尋ねてください。',
-    detectionRegex: /(面倒だった作業|その後の過ごし方|翌日の様子|どう切り替えた)/
-  }
-];
-
-/**
- * 直近で同じエピソードの深掘り（フォローアップ質問）が何ターン連続しているかを推定
- */
-function countConsecutiveDeepenTurns(messages: ChatMessage[]): number {
-  let deepenCount = 0;
-  // 最後のアシスタントメッセージから逆順に見て、新しいシチュエーション提示でなければ深掘りとみなす
-  const assistantMsgs = messages.slice(1).filter(m => m.role === 'assistant');
-  for (let i = assistantMsgs.length - 1; i >= 0; i--) {
-    const text = assistantMsgs[i].content;
-    const isNewSituationPrompt =
-      /(別の場面|ここからは少し場面を変え|最近.*場面はありますか|どんな場面がありましたか|思い出してみてください|から離れて|についても伺いたいのですが)/.test(text) ||
-      GOLDEN_SITUATIONS.some(s => s.detectionRegex.test(text));
-    if (isNewSituationPrompt) {
-      break;
-    }
-    deepenCount++;
-  }
-  return deepenCount;
-}
 
 /**
  * 対話履歴から各ビッグファイブ因子の進捗を解析（ルールベース・フォールバック兼用）
@@ -532,7 +432,6 @@ function parseClefPatternCDecision(
     target.episode_depth_status?.choice ||
     (typeof target.episode_depth_status === 'string' ? target.episode_depth_status : null);
 
-  const consecutiveDeepen = countConsecutiveDeepenTurns(messages);
   const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
   const userSaidNoEpisode = /(特にない|思いつかない|あまりない|覚えていない|わからない|ないです)/.test(lastUserMsg);
 
@@ -561,7 +460,7 @@ function parseClefPatternCDecision(
     f => (facetProbs[f.key] ?? 0) >= FACET_PARTIAL_THRESHOLD && (facetProbs[f.key] ?? 0) < FACET_EVIDENCE_THRESHOLD
   ).sort((a, b) => (facetProbs[b.key] ?? 0) - (facetProbs[a.key] ?? 0));
 
-  // 【深掘り用】まだ0.70に達していないファセットのうち、「今のエピソードの文脈に最も関連している順（確率が高い順 b - a）」にソート
+  // まだ0.70に達していないファセットのうち、「今の文脈に関連している順（確率が高い順 b - a）」にソート
   const contextualMissingFacets = FACET_DEFINITIONS.filter(
     f => (facetProbs[f.key] ?? 0) < FACET_EVIDENCE_THRESHOLD
   ).sort((a, b) => {
@@ -570,13 +469,14 @@ function parseClefPatternCDecision(
     return scoreB - scoreA;
   });
 
-  // 深掘りモード vs 新シチュエーション提示モードの決定
-  const hasInitialEpisodeContent = userCount > 1 || lastUserMsg.trim().length >= 10;
+  // 深掘りモード vs 新展開モードの決定:
+  // ユーザーがエピソードを話し、Clef-flashが「深掘りが必要（needs_behavioral_probe）」と判定、
+  // または部分ヒント（partialFacets）がある限り、機械的な回数制限（consecutiveDeepen）なしで丁寧に深掘りする
+  const hasInitialEpisodeContent = userCount > 1 || lastUserMsg.trim().length >= 8;
   const shouldDeepen =
     userCount >= 1 &&
     hasInitialEpisodeContent &&
     !userSaidNoEpisode &&
-    consecutiveDeepen < 2 &&
     (episodeDepthChoice === 'needs_behavioral_probe' || partialFacets.length > 0 || userCount === 1);
 
   if (shouldDeepen) {
@@ -597,67 +497,41 @@ function parseClefPatternCDecision(
       is_ready_for_final_analysis: false,
       target_question_strategy: [
         `【現在のエピソードの自然な深掘り】`,
-        `ユーザーが直前に語ってくれたエピソード（場面）の話題は変えず、まずはその内容をカギカッコなしで自然に受け止めてください。`,
-        `もしユーザーが「〜と思った」と心の中の感想だけを答えた場合は、「そう思ったとき、実際には相手にそれを口に出して伝えましたか？それとも態度には出さず周りに合わせましたか？」のように、必ず【実際の行動・発言】へ変換して尋ねてください。`,
-        `その場面に関連する以下の観点（${targetNames}）から、今の文脈に最も自然に繋がるものを1〜2個選び、ユーザーが実際にどう動いたか・周囲とどうやり取りしたかを尋ねてください：`,
+        `ユーザーが直前に語ってくれたエピソード（場面・出来事）の話題は絶対に変えず、まずはその内容をカギカッコなしで自然に受け止めてください。`,
+        `その場面の中で、ユーザーが【具体的に何と言ったか／口に出さなかったか／どう動いたか】という客観的な事実（カメラに映る振る舞い）を1つ尋ねてください。`,
+        `（※「なぜそう思ったのか」「どんな原因があるか」といった内省・心理的理由を聞くことは厳禁です。事実・振る舞いを尋ねてください）`,
+        `今の文脈に自然に繋がる観点（${targetNames}の参考ヒント）:`,
         targetHints
       ].join('\n'),
       notes: `Clef-flash Pattern C [deepen_episode] (evidenced: ${totalEvidencedFacets}/15, targets: ${targetNames})`
     };
   }
 
-  // 新しいシチュエーション（黄金シチュエーション）を提示するモード
-  // 既にアシスタントが提示済みのシチュエーションを除外し、「まだ確率が低い（全く触れられていない）未充足因子・ファセット」を最も多くカバーできるシチュエーションを選択
-  const assistantHistoryText = messages
-    .filter(m => m.role === 'assistant')
-    .map(m => m.content)
-    .join('\n');
-
-  const scoredSituations = GOLDEN_SITUATIONS.map(sit => {
-    const alreadyAsked = sit.detectionRegex.test(assistantHistoryText);
-    const missingFacetsInSit = sit.primaryFacets.filter(
-      key => (facetProbs[key] ?? 0) < FACET_EVIDENCE_THRESHOLD
-    );
-    // 確率が低い（まだ全然話に出ていない）ファセットほど高スコアを付与して優先的に穴埋めする
-    const unexploredWeight = missingFacetsInSit.reduce(
-      (sum, key) => sum + (1.0 - (facetProbs[key] ?? 0)),
-      0
-    );
-    const uncoveredFactorHits = sit.targetFactors.filter(f => uncoveredFactors.includes(f)).length;
-    const score = (alreadyAsked ? -15 : 0) + uncoveredFactorHits * 3 + unexploredWeight * 2;
-    return { sit, score };
-  }).sort((a, b) => b.score - a.score);
-
-  const chosenSituation = scoredSituations[0].sit;
-  // そのシチュエーション内でまだ確率が低いファセットから優先して最大3つをターゲットにする
-  const sitTargetFacets = FACET_DEFINITIONS.filter(
-    f => chosenSituation.primaryFacets.includes(f.key) && (facetProbs[f.key] ?? 0) < FACET_EVIDENCE_THRESHOLD
-  )
-    .sort((a, b) => (facetProbs[a.key] ?? 0) - (facetProbs[b.key] ?? 0))
-    .slice(0, 3);
-
-  const focusFactor = chosenSituation.targetFactors.find(f => uncoveredFactors.includes(f))
-    || chosenSituation.targetFactors[0];
-  const facetSummary = sitTargetFacets.length > 0
-    ? sitTargetFacets.map(f => `${f.factor}［${f.name}］`).join('・')
-    : chosenSituation.targetFactors.join('・');
-
-  const bridgeInstruction = userCount === 1
-    ? `ユーザーが挙げてくれた「素や性格が出る場所・場面」を受け止め、そこに関連づけながら、`
-    : `【急な話題転換を防ぐ橋渡し（重要）】\n${chosenSituation.bridgeGuide}\nその流れで、`;
+  // 話題の自然な展開・新場面の提示モード（固定シチュエーションを廃止し、直前の文脈を活かした動的展開）
+  // まだエビデンスが足りない未充足因子・ファセットを特定
+  const targetFactor = uncoveredFactors[0] || '誠実性';
+  const missingFacetsInFactor = FACET_DEFINITIONS.filter(
+    f => f.factor === targetFactor && (facetProbs[f.key] ?? 0) < FACET_EVIDENCE_THRESHOLD
+  );
+  const targetFacets = (missingFacetsInFactor.length > 0 ? missingFacetsInFactor : contextualMissingFacets).slice(0, 3);
+  const targetNames = targetFacets.map(f => `${f.factor}［${f.name}］`).join('・');
+  const targetHints = targetFacets.map(f => `・${f.factor}（${f.name}）: ${f.probeHint}`).join('\n');
 
   return {
-    focus_dimension: focusFactor,
+    focus_dimension: targetFactor,
     action_mode: 'new_situation',
-    target_facets: sitTargetFacets.map(f => f.name),
+    target_facets: targetFacets.map(f => f.name),
     evidenced_facets_count: totalEvidencedFacets,
     is_ready_for_final_analysis: false,
     target_question_strategy: [
-      `【新しいシチュエーションのお題提示（狙い: ${facetSummary}）】`,
-      `${bridgeInstruction}以下のシチュエーションでの具体的なエピソードを尋ねてください：`,
-      chosenSituation.promptInstruction
+      `【話題の自然な展開・別場面の提示（狙い: ${targetNames}）】`,
+      `直前までのユーザーの話（学校・ゼミ・仕事・対人関係など）を温かく受け止めた上で、急に機械的なお題を投げずに、自然な会話の橋渡し文（クッション）を挟んでください。`,
+      `直前の文脈の別のアスペクト（例: その場面での準備や段取り、予期せぬトラブル時の対応、その後の気分の切り替えなど）、または日常の関連する場面について、ユーザーが実際にどう動いたか・どう対処したかの具体的な出来事（エピソード）を1つ尋ねてください。`,
+      `（※固定のお題を機械的に繰り返さず、直前の会話の流れから滑らかに展開してください）`,
+      `引き出したい観点（${targetNames}の参考ヒント）:`,
+      targetHints
     ].join('\n'),
-    notes: `Clef-flash Pattern C [new_situation:${chosenSituation.id}] (evidenced: ${totalEvidencedFacets}/15, target: ${facetSummary})`
+    notes: `Clef-flash Pattern C [contextual_transition:${targetFactor}] (evidenced: ${totalEvidencedFacets}/15, target: ${targetNames})`
   };
 }
 
@@ -787,7 +661,7 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
   return {
     focus_dimension: '外向性',
     action_mode: 'new_situation',
-    target_question_strategy: GOLDEN_SITUATIONS[userCount % GOLDEN_SITUATIONS.length].promptInstruction,
+    target_question_strategy: '直前のユーザーの回答を受け止めた上で、学校・仕事・日常の対人場面などで実際にどう動いたか、具体的な出来事を1つ尋ねてください。',
     is_ready_for_final_analysis: false,
     notes: 'Minimal fallback strategy'
   };
@@ -821,33 +695,41 @@ function buildInterviewerInstruction(strategy: AnalystStrategy): string {
     actionMode === 'deepen_episode'
       ? `
 【現在のモード：今のエピソードの自然な深掘り（フォローアップ）】
-- 最初に、直前のユーザーの回答内容をカギカッコなしで自然に1文で受け止めてください（「その気持ち、理解できます」のような抽象的なテンプレ共感はせず、相手が話した事実や状況に沿って受け止めてください）。
-- 話題や場面は切り替えず、直前にユーザーが話してくれたエピソードの「続き・その場での立ち回り」を尋ねてください。
-- もしユーザーが「〜と思った」と心の中の感想や疑問だけを答えた場合は、「どんな考えが浮かびましたか？」と再び頭の中の話を聞くのは厳禁です。必ず「そう思ったとき、実際には相手にそれを口に出して伝えましたか？それとも態度には出さず周りに合わせましたか？」のように【実際の行動・発言】へ変換して尋ねてください。
+- 直前のユーザーの回答内容をカギカッコなしで自然に1文で受け止めてください（「その気持ち、理解できます」のような抽象的なテンプレ共感ではなく、相手が話した具体的な状況に沿って受け止めてください）。
+- 話題や場面は絶対に切り替えず、直前のエピソードの中でユーザーが【実際に何と言ったか／口に出さなかったか／どう動いたか】を尋ねてください。
+- ユーザーが「〜と思った」と心の中の感想や自己評価（「主張ができない」「〜が強み」等）を答えた場合は、「なぜですか？」「原因は何ですか？」と理由を聞くのは厳禁です。必ず「その場面で、実際には相手に口に出して伝えましたか？それとも周りに合わせましたか？」のように【実際の行動・発言】へ変換して尋ねてください。
 `
       : `
-【現在のモード：新しいシチュエーションのお題提示（話題の橋渡し）】
-- まず直前のユーザーの回答に対して、カギカッコなしで1〜2文で具体的に受け止めを述べてください。
-- 【重要】急に話題が飛んだ印象を与えないよう、直前の話題（オンの活動や対人場面など）を枕詞にして、自然な橋渡し（クッション文）を挟んでから次のシチュエーションを切り出してください。
-- もしユーザーが「そういう場面自体がめったにない」と答えた場合は、なぜそういう場面が起きないのか（事前に全部決めておくから、最初から相手に合わせるから等）や普段の小さな場面ではどう動くかを答えやすく案内してください。
+【現在のモード：話題の自然な展開・別アスペクトの提示】
+- 直前のユーザーの回答に対して、カギカッコなしで1〜2文で具体的に受け止めを述べてください。
+- 急に全く無関係なお題に飛ばすのではなく、直前の話題（ゼミ、活動、仕事、対人関係など）を枕詞にして、「ちなみに、そうした〇〇を進める中で〜」や「そうした場に限らず、普段〜」のように滑らかに橋渡し（クッション文）を挟んでから次の場面を尋ねてください。
+- 決まりきった固定の定型文やお題を機械的に繰り返さず、直前の会話の流れに合わせた自然な問いかけにしてください。
 `;
 
   return `
 あなたは心理学に基づく行動エピソード・インタビュアーです。
-ユーザーが実際に経験した「場面（エピソード）」と「その中での具体的な振る舞い（発言・行動・選択・事後の様子）」を引き出すことがあなたの役割です。
+ユーザーが実際に経験した「場面（エピソード）」と「その中での具体的な振る舞い（発言・行動・選択・事後の様子）」を引き出すことがあなたの唯一の役割です。
 
 裏方の分析官AI（Clef-flash）から以下の戦略指示が届いています:
 【分析官の指示】:
 - 主な注目領域: ${focusDimension}${strategy.target_facets?.length ? `（注目ファセット: ${strategy.target_facets.join(' / ')}）` : ''}
 ${targetStrategy}
 ${modeSpecificGuide}
-【対話・質問の絶対ルール】
+【行動面接の絶対ルール（違反厳禁）】
 1. 必ず丁寧で親しみやすい敬語を使用してください。
-2. 1回の発言で聞く質問は「1つ（または密接に関連する具体的な問いかけ）」に絞り、自然な会話文（3〜4文程度）にしてください。
+2. 1回の発言で聞く質問は「1つ（または密接に関連する具体的な問いかけ）」に絞り、長すぎない自然な会話文（3〜4文程度）にしてください。複数の質問を畳み掛けないでください。
 3. **不自然なカギカッコ出力の禁止**: 1文目の相槌や質問文をカギカッコ（「 」）で括って出力しないでください。普通の人間同士の自然な会話文としてそのまま出力してください。
-4. **勝手な終了宣言・締めくくりの絶対禁止（最重要）**: この対話セッションは現在進行中であり、まだ終了していません。「今回のインタビューはこれで終了となります」「ご協力いただき心から感謝いたします」「お疲れ様でした」「良い一日をお過ごしください」といった終了の挨拶や締めくくりの言葉は絶対に言わないでください。対話履歴が長く続いていても勝手に終了とみなさず、必ず上記の【分析官の指示】にある質問（？で終わる問いかけ）を行ってください。
-5. 「あなたの誠実性を測るために〜」のような検査の裏側の意図や専門用語（ビッグファイブ、ファセット等）は絶対に出さないでください。
-6. 思考プロセスや内部推論（<thought>や<think>タグなど）は一切出力に含めず、ユーザーへの発話文のみを直接出力してください。
+4. **勝手な終了宣言・締めくくりの絶対禁止**: この対話セッションは現在進行中であり、まだ終了していません。「今回のインタビューはこれで終了となります」などの終了宣言は絶対にしないでください。
+5. **【最重要・厳禁】「なぜ？」「原因は何ですか？」という内省・心理的理由の質問禁止**:
+   「なぜそう思ったのですか？」「原因は何だと思いますか？」「どんな考えが浮かびましたか？」といった内省や心理的背景・自己分析を質問することは絶対に禁止です。行動面接では、頭の中の理由ではなく「カメラに映る実際の行動（具体的に何と言ったか、何を言わなかったか、どう動いたか）」という客観的な事実のみを尋ねてください。
+6. **【最重要・厳禁】心理テストの因子や選択肢を提示することの絶対禁止**:
+   「〜という不安からですか？それとも〜を尊重してですか？」のように、心理学的な仮説や選択肢を並べてユーザーに選ばせる質問は絶対にしないでください。選択肢を与えず、「その時、具体的にどんな状況で、どう動きましたか？」と事実を自由に答えさせてください。
+7. **【最重要・厳禁】説教・アドバイス・上から目線の評価コメントの禁止**:
+   「〜することは大切ですよね」「将来のチームワーク向上のための重要なステップです」「〜を改善していきましょう」のような、教師やカウンセラー気取りのアドバイス・説教・価値判断は一切言わないでください。あなたの役割は評価者・指導者ではなく、客観的な事実を聞き出すインタビュアーです。
+8. **【必須】自己評価を言われたら「具体的な場面（エピソード）」へ引き戻す**:
+   ユーザーが「主張ができない」「アイデアを出すのが得意」「〇〇が苦手」といった一般的な自己評価や性格を語った場合は、その理由を聞くのではなく、「例えば最近、そのようにアイデアが浮かんだのに主張しなかった具体的な場面はありましたか？その時は誰とどんな話をしていましたか？」のように、必ず直近の【1つの具体的な場面（エピソード）】を事実として尋ねてください。
+9. 「あなたの誠実性を測るために〜」のような検査の裏側の意図や専門用語（ビッグファイブ、ファセット等）は絶対に出さないでください。
+10. 思考プロセスや内部推論（<thought>や<think>タグなど）は一切出力に含めず、ユーザーへの発話文のみを直接出力してください。
 `;
 }
 
