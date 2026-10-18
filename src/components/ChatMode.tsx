@@ -17,11 +17,21 @@ const INITIAL_GREETING =
 function sanitizeMessage(text: string): string {
   if (!text) return '';
   return text
+    .replace(/<\|channel>thought[\s\S]*?<channel\|>/gi, '')
     .replace(/<thought>[\s\S]*?<\/thought>/gi, '')
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<\|channel>thought[\s\S]*$/gi, '')
     .replace(/<thought>[\s\S]*$/gi, '')
     .replace(/<think>[\s\S]*$/gi, '')
     .trim();
+}
+
+function isAssistantCompletionReply(text: string): boolean {
+  const clean = sanitizeMessage(text);
+  if (!clean) return false;
+  const endsWithQuestion = /[？?]\s*$/.test(clean);
+  if (endsWithQuestion) return false;
+  return /(インタビューは.*終了|対話セッションは.*完了|次のステップ.*質問紙|お話を聞かせていただき.*ありがとうございました)/.test(clean);
 }
 
 export const ChatMode: React.FC<ChatModeProps> = ({
@@ -50,14 +60,17 @@ export const ChatMode: React.FC<ChatModeProps> = ({
 
   const [isReady, setIsReady] = useState<boolean>(() => {
     try {
-      const savedReady = localStorage.getItem('llm5_chat_is_ready') === 'true';
-      if (!savedReady) return false;
       const savedMsgs = localStorage.getItem('llm5_chat_messages');
       if (savedMsgs) {
         const parsed = JSON.parse(savedMsgs);
         if (Array.isArray(parsed)) {
           const uCount = parsed.filter((m: ChatMessage) => m.role === 'user').length;
-          return uCount >= 6;
+          const lastAssistant = [...parsed].reverse().find((m: ChatMessage) => m.role === 'assistant');
+          if (lastAssistant && isAssistantCompletionReply(lastAssistant.content)) {
+            return true;
+          }
+          const savedReady = localStorage.getItem('llm5_chat_is_ready') === 'true';
+          if (savedReady && uCount >= 6) return true;
         }
       }
     } catch (_) {}
@@ -71,6 +84,10 @@ export const ChatMode: React.FC<ChatModeProps> = ({
     try {
       localStorage.setItem('llm5_chat_messages', JSON.stringify(messages));
     } catch (_) {}
+    const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
+    if (lastAssistant && isAssistantCompletionReply(lastAssistant.content)) {
+      setIsReady(true);
+    }
   }, [messages]);
 
   useEffect(() => {
@@ -86,10 +103,10 @@ export const ChatMode: React.FC<ChatModeProps> = ({
   }, [messages, isLoading, streamingText]);
 
   const userTurns = messages.filter(m => m.role === 'user').length;
-  // セクション1(対話)は全体進捗の10%〜50%として表示
+  // 対話セクションの進捗（0%〜100%：完了時に100%、対話中は最大8ターン基準で最大92%までスムーズに進行）
   const progressPercent = isReady
-    ? 50
-    : Math.min(48, 10 + Math.round((userTurns / 6) * 38));
+    ? 100
+    : Math.min(92, Math.round((userTurns / 7) * 88));
 
   const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -171,9 +188,12 @@ export const ChatMode: React.FC<ChatModeProps> = ({
         setMessages([...newMessages, { role: 'assistant', content: finalReply }]);
         setStreamingText('');
 
-        // ストリーミング完了後、かつ質問の途中（疑問符で終わっている状態）でないことを確認して完了ボタンを表示
         const endsWithQuestion = /[？?]\s*$/.test(finalReply);
-        if (readyFlagFromServer && !endsWithQuestion && nextUserTurns >= 6) {
+        if (
+          (readyFlagFromServer && !endsWithQuestion && nextUserTurns >= 6) ||
+          isAssistantCompletionReply(finalReply) ||
+          (nextUserTurns >= 8 && !endsWithQuestion)
+        ) {
           setIsReady(true);
         }
       } else {
@@ -181,7 +201,11 @@ export const ChatMode: React.FC<ChatModeProps> = ({
         const cleanReply = sanitizeMessage(data.response);
         setMessages([...newMessages, { role: 'assistant', content: cleanReply }]);
         const endsWithQuestion = /[？?]\s*$/.test(cleanReply);
-        if (data.is_ready_for_analysis && !endsWithQuestion && nextUserTurns >= 6) {
+        if (
+          (data.is_ready_for_analysis && !endsWithQuestion && nextUserTurns >= 6) ||
+          isAssistantCompletionReply(cleanReply) ||
+          (nextUserTurns >= 8 && !endsWithQuestion)
+        ) {
           setIsReady(true);
         }
       }

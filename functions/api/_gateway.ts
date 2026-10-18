@@ -83,10 +83,11 @@ const DEFAULT_GATEWAY_ID = 'llm5';
 
 /** 対話ターン数（ユーザー発話回数）の制御基準 */
 export const MIN_USER_TURNS = 6; // 最低ターン数（2〜3個のエピソードを深掘りして最低6ターン）
-/** Clef-flash noul確率で「具体的な行動エビデンスが十分に得られた」と判定する閾値（0.60だと曖昧な応答でも超えるため0.70に設定） */
-export const FACET_EVIDENCE_THRESHOLD = 0.70;
+export const MAX_USER_TURNS = 8; // 安全上限ターン数（8ターンに達したら必ず対話を完了して質問紙へ誘導）
+/** Clef-flash noul確率で「具体的な行動エビデンスが得られた」と判定する閾値 */
+export const FACET_EVIDENCE_THRESHOLD = 0.55;
 /** 「話題には触れたが、まだ具体的な発言・行動の深掘りが足りない（深掘りチャンス）」と判定する中間閾値 */
-export const FACET_PARTIAL_THRESHOLD = 0.50;
+export const FACET_PARTIAL_THRESHOLD = 0.30;
 
 /**
  * Cloudflare AI Gateway Dynamic Routing (OpenAI互換 compat) エンドポイントURLを取得
@@ -127,13 +128,15 @@ export function getGatewayHeaders(env: Env): Record<string, string> {
 }
 
 /**
- * 推論モデル（DeepSeek, Qwen Reasoning, Gemini Thinking等）が出力する思考プロセス（<thought>や<think>）を除去
+ * 推論モデル（DeepSeek, Qwen Reasoning, Gemini Thinking, Gemma 4等）が出力する思考プロセスを除去
  */
 export function cleanModelOutput(rawText: string): string {
   if (!rawText) return '';
   return rawText
+    .replace(/<\|channel>thought[\s\S]*?<channel\|>/gi, '')
     .replace(/<thought>[\s\S]*?<\/thought>/gi, '')
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<\|channel>thought[\s\S]*$/gi, '')
     .replace(/<thought>[\s\S]*$/gi, '') // 万一終了タグが欠落している場合
     .replace(/<think>[\s\S]*$/gi, '')
     .trim();
@@ -516,9 +519,9 @@ function parseClefPatternCDecision(
     totalEvidencedFacets += evidenced.length;
 
     // パターンC 因子充足条件:
-    // 3ファセット中2ファセット以上が >= 0.70、または 1ファセット以上が >= 0.70 かつ全3ファセットが >= 0.50（平均 >= 0.65）
+    // 3ファセット中2ファセット以上が >= 0.55、または 1ファセット以上が >= 0.55 かつ全3ファセットが >= 0.30（平均 >= 0.45）
     factorCovered[factor] =
-      evidenced.length >= 2 || (evidenced.length >= 1 && partial.length === 3 && meanProb >= 0.65);
+      evidenced.length >= 2 || (evidenced.length >= 1 && partial.length === 3 && meanProb >= 0.45);
   }
 
   const uncoveredFactors = allFactors.filter(f => !factorCovered[f]);
@@ -532,21 +535,26 @@ function parseClefPatternCDecision(
 
   const consecutiveDeepen = countConsecutiveDeepenTurns(messages);
   const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
+  const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant')?.content || '';
+  const assistantAlreadyEnded = /(インタビューは.*終了|対話セッションは.*完了|次のステップ.*質問紙)/.test(lastAssistantMsg);
   const userSaidNoEpisode = /(特にない|思いつかない|あまりない|覚えていない|わからない|ないです)/.test(lastUserMsg);
 
   // パターンC 完了判定:
-  // 1) 最低ターン数（6ターン）以上
-  // 2) 全5因子が充足（各2ファセット以上 >= 0.70）かつ10ファセット以上が >= 0.70
-  //    （または 9ターン以上で4因子以上充足 ＆ overallReadyProb >= 0.70）
-  const isAllFactorsSatisfied = uncoveredFactors.length === 0 && totalEvidencedFacets >= 10;
-  const isLongDialogueSatisfied = userCount >= 9 && uncoveredFactors.length <= 1 && overallReadyProb >= 0.70;
-  const isReady = userCount >= MIN_USER_TURNS && (isAllFactorsSatisfied || isLongDialogueSatisfied);
+  // 1) 安全上限ターン数（8ターン）に達した場合は無条件で完了
+  // 2) 直前のアシスタントが既に終了宣言を行っていた場合は即完了
+  // 3) 最低ターン数（6ターン）以上 かつ（4因子以上充足 または 8ファセット以上 >= 0.55 または overallReadyProb >= 0.55）
+  const isEnoughEvidenceAtMinTurns =
+    uncoveredFactors.length <= 1 || totalEvidencedFacets >= 8 || overallReadyProb >= 0.55;
+  const isReady =
+    userCount >= MAX_USER_TURNS ||
+    assistantAlreadyEnded ||
+    (userCount >= MIN_USER_TURNS && isEnoughEvidenceAtMinTurns);
 
   if (isReady) {
     return {
       focus_dimension: '完了',
       target_question_strategy:
-        'すべての質問が完了しました。新たな質問は一切行わず、直前の回答に温かく共感・感謝した上で、次の質問紙（BFI-2-S）へ進むよう案内してください。',
+        'すべての質問が完了しました。新たな質問は一切行わず、直前の回答に温かく共感・感謝した上で、画面下のボタンから次の質問紙（BFI-2-S）へ進むよう案内してください。',
       is_ready_for_final_analysis: true,
       action_mode: 'complete',
       evidenced_facets_count: totalEvidencedFacets,
@@ -554,13 +562,12 @@ function parseClefPatternCDecision(
     };
   }
 
-  // 「断片的ヒント（0.50 <= prob < 0.70）」が出ているファセット（あと1問深掘りすれば0.70を超える有望ファセット）
+  // 「断片的ヒント（0.30 <= prob < 0.55）」が出ているファセット（あと1問深掘りすれば0.55を超える有望ファセット）
   const partialFacets = FACET_DEFINITIONS.filter(
     f => (facetProbs[f.key] ?? 0) >= FACET_PARTIAL_THRESHOLD && (facetProbs[f.key] ?? 0) < FACET_EVIDENCE_THRESHOLD
   ).sort((a, b) => (facetProbs[b.key] ?? 0) - (facetProbs[a.key] ?? 0));
 
-  // 【深掘り用】まだ0.70に達していないファセットのうち、「今のエピソードの文脈に最も関連している順（確率が高い順 b - a）」にソート
-  // ※昇順（a - b）にしてしまうと、今の話題と一番無関係なファセット（トラブルや芸術など）が選ばれて不自然な質問になるのを防ぐ
+  // 【深掘り用】まだ0.55に達していないファセットのうち、「今のエピソードの文脈に最も関連している順（確率が高い順 b - a）」にソート
   const contextualMissingFacets = FACET_DEFINITIONS.filter(
     f => (facetProbs[f.key] ?? 0) < FACET_EVIDENCE_THRESHOLD
   ).sort((a, b) => {
@@ -570,8 +577,6 @@ function parseClefPatternCDecision(
   });
 
   // 深掘りモード vs 新シチュエーション提示モードの決定
-  // - 1ターン目から具体的な出来事・エピソードが語られた場合（または断片的ヒントがある場合）は、そのエピソードを2〜3往復深掘りする
-  // - 万一1ターン目で場所だけ（「職場です」等の極端に短い回答）だった場合は、その場所に関連づけて黄金シチュエーションを提示する
   const hasInitialEpisodeContent = userCount > 1 || lastUserMsg.trim().length >= 10;
   const shouldDeepen =
     userCount >= 1 &&
@@ -598,10 +603,10 @@ function parseClefPatternCDecision(
       is_ready_for_final_analysis: false,
       target_question_strategy: [
         `【現在のエピソードの自然な深掘り】`,
-        `ユーザーが直前に語ってくれたエピソード（場面）の話題は変えず、まずはその話に1文で温かく共感・相槌を打ってください。`,
-        `その上で、その場面に関連する以下の観点（${targetNames}）から、今の文脈に最も自然に繋がるものを1〜2個選び、ユーザーが実際にどう動いたか・周囲とどうやり取りしたかを尋ねてください：`,
-        targetHints,
-        `※注意：ユーザーが言及していない「予定外のトラブル」等を唐突に決め打ちで聞かないでください。まずは「その場で自分からどう動いたか・どんな役割や発言をしたか」など、誰でも必ず答えられる日常の振る舞いを自然な会話文で尋ねてください。`
+        `ユーザーが直前に語ってくれたエピソード（場面）の話題は変えず、まずはその内容をカギカッコなしで自然に受け止めてください。`,
+        `もしユーザーが「〜と思った」と心の中の感想だけを答えた場合は、「そう思ったとき、実際には相手にそれを口に出して伝えましたか？それとも態度には出さず周りに合わせましたか？」のように、必ず【実際の行動・発言】へ変換して尋ねてください。`,
+        `その場面に関連する以下の観点（${targetNames}）から、今の文脈に最も自然に繋がるものを1〜2個選び、ユーザーが実際にどう動いたか・周囲とどうやり取りしたかを尋ねてください：`,
+        targetHints
       ].join('\n'),
       notes: `Clef-flash Pattern C [deepen_episode] (evidenced: ${totalEvidencedFacets}/15, targets: ${targetNames})`
     };
@@ -822,16 +827,15 @@ function buildInterviewerInstruction(strategy: AnalystStrategy): string {
     actionMode === 'deepen_episode'
       ? `
 【現在のモード：今のエピソードの自然な深掘り（フォローアップ）】
-- 必ず最初に、直前のユーザーの回答に対して1文で自然な受け止め・相槌（例：「ゼミでグループワークをされたのですね。」など）を入れてください。いきなり質問から始めないでください。
+- 最初に、直前のユーザーの回答内容をカギカッコなしで自然に1文で受け止めてください（「その気持ち、理解できます」のような抽象的なテンプレ共感はせず、相手が話した事実や状況に沿って受け止めてください）。
 - 話題や場面は切り替えず、直前にユーザーが話してくれたエピソードの「続き・その場での立ち回り」を尋ねてください。
-- 抽象的な感想（「どう思いましたか？」）ではなく、その場で実際にどう動いたか（自分から話を進めたか、聞き役に回ったか、どんな点に注目したか、どう作業を進めたかなど）を自然な会話文で引き出してください。
-- ユーザーが言及していない「トラブル」や「対立」が起きたと決めつけるような聞き方は避け、どんな日常場面でも答えられる聞き方をしてください。
+- もしユーザーが「〜と思った」と心の中の感想や疑問だけを答えた場合は、「どんな考えが浮かびましたか？」と再び頭の中の話を聞くのは厳禁です。必ず「そう思ったとき、実際には相手にそれを口に出して伝えましたか？それとも態度には出さず周りに合わせましたか？」のように【実際の行動・発言】へ変換して尋ねてください。
 `
       : `
 【現在のモード：新しいシチュエーションのお題提示（話題の橋渡し）】
-- まず直前のユーザーの回答に対して、1〜2文で温かく具体的に共感・受け止めを述べてください。
-- 【重要】急に話題が飛んだ印象を与えないよう、直前の話題（オンの活動や対人場面など）を枕詞にして、「ちなみに、そういった〇〇の時間から離れて〜」「ところで、普段そうやって過ごす中で〜」のように**自然な橋渡し（クッション文）**を挟んでから次のシチュエーションを切り出してください。
-- もしユーザーが「そういう場面自体がめったにない」と答えた場合は、「なぜそういう場面が起きないのか（事前に全部決めておくから、最初から相手に合わせるから等）」や「普段の小さな場面ではどう動くか」を答えやすく案内してください。
+- まず直前のユーザーの回答に対して、カギカッコなしで1〜2文で具体的に受け止めを述べてください。
+- 【重要】急に話題が飛んだ印象を与えないよう、直前の話題（オンの活動や対人場面など）を枕詞にして、自然な橋渡し（クッション文）を挟んでから次のシチュエーションを切り出してください。
+- もしユーザーが「そういう場面自体がめったにない」と答えた場合は、なぜそういう場面が起きないのか（事前に全部決めておくから、最初から相手に合わせるから等）や普段の小さな場面ではどう動くかを答えやすく案内してください。
 `;
 
   return `
@@ -845,10 +849,11 @@ ${targetStrategy}
 ${modeSpecificGuide}
 【対話・質問の絶対ルール】
 1. 必ず丁寧で親しみやすい敬語を使用してください。
-2. 1回の発言で聞く質問は「1つ（または密接に関連する具体的な問いかけ）」に絞り、長すぎない自然な会話文（3〜4文程度）にしてください。
-3. **不自然なカギカッコ引用の禁止**: 「最初にどんな言葉を言い、その後どう対応しましたか？」のように質問文の一部をカギカッコ（「 」）で括ったり、一字一句のセリフを尋問調で強要したりしないでください。普通の人間同士の自然な会話文として質問してください。
-4. 「あなたの誠実性を測るために〜」のような検査の裏側の意図や専門用語（ビッグファイブ、ファセット等）は絶対に出さないでください。
-5. 思考プロセスや内部推論（<thought>や<think>タグなど）は一切出力に含めず、ユーザーへの発話文のみを直接出力してください。
+2. 1回の発言で聞く質問は「1つ（または密接に関連する具体的な問いかけ）」に絞り、自然な会話文（3〜4文程度）にしてください。
+3. **不自然なカギカッコ出力の禁止**: 1文目の相槌や質問文をカギカッコ（「 」）で括って出力しないでください。普通の人間同士の自然な会話文としてそのまま出力してください。
+4. **勝手な終了宣言の禁止**: まだ対話セッションは継続中です。「今回のインタビューはこれで終了となります」「ありがとうございました」などと勝手に終了宣言をしないでください。必ず最後にユーザーへの質問（？で終わる文）を1つ投げかけて終えてください。
+5. 「あなたの誠実性を測るために〜」のような検査の裏側の意図や専門用語（ビッグファイブ、ファセット等）は絶対に出さないでください。
+6. 思考プロセスや内部推論（<thought>や<think>タグなど）は一切出力に含めず、ユーザーへの発話文のみを直接出力してください。
 `;
 }
 
@@ -883,7 +888,10 @@ export async function runInterviewerStream(
         ...formattedMessages
       ],
       temperature: 0.7,
-      stream: true
+      stream: true,
+      chat_template_kwargs: {
+        enable_thinking: false
+      }
     })
   });
 
@@ -936,7 +944,7 @@ export async function runInterviewerStream(
               const parsed = JSON.parse(dataStr);
               const content = parsed.choices?.[0]?.delta?.content;
               if (content) {
-                // 思考タグ (<thought>, <think>) のリアルタイム除去
+                // 思考タグ (<thought>, <think>, <|channel>thought) のリアルタイム除去
                 let cleanChunk = '';
                 for (let i = 0; i < content.length; i++) {
                   const char = content[i];
@@ -945,8 +953,16 @@ export async function runInterviewerStream(
                       tagBuffer = '<';
                     } else if (tagBuffer.length > 0) {
                       tagBuffer += char;
-                      if ('<think>'.startsWith(tagBuffer) || '<thought>'.startsWith(tagBuffer)) {
-                        if (tagBuffer === '<think>' || tagBuffer === '<thought>') {
+                      if (
+                        '<think>'.startsWith(tagBuffer) ||
+                        '<thought>'.startsWith(tagBuffer) ||
+                        '<|channel>thought'.startsWith(tagBuffer)
+                      ) {
+                        if (
+                          tagBuffer === '<think>' ||
+                          tagBuffer === '<thought>' ||
+                          tagBuffer === '<|channel>thought'
+                        ) {
                           isInsideThinking = true;
                           tagBuffer = '';
                         }
@@ -962,12 +978,24 @@ export async function runInterviewerStream(
                       tagBuffer = '<';
                     } else if (tagBuffer.length > 0) {
                       tagBuffer += char;
-                      if ('</think>'.startsWith(tagBuffer) || '</thought>'.startsWith(tagBuffer)) {
-                        if (tagBuffer === '</think>' || tagBuffer === '</thought>') {
+                      if (
+                        '</think>'.startsWith(tagBuffer) ||
+                        '</thought>'.startsWith(tagBuffer) ||
+                        '<channel|>'.startsWith(tagBuffer)
+                      ) {
+                        if (
+                          tagBuffer === '</think>' ||
+                          tagBuffer === '</thought>' ||
+                          tagBuffer === '<channel|>'
+                        ) {
                           isInsideThinking = false;
                           tagBuffer = '';
                         }
-                      } else if (!tagBuffer.startsWith('</think>') && !tagBuffer.startsWith('</thought>')) {
+                      } else if (
+                        !tagBuffer.startsWith('</think>') &&
+                        !tagBuffer.startsWith('</thought>') &&
+                        !tagBuffer.startsWith('<channel|>')
+                      ) {
                         tagBuffer = '';
                       }
                     }
@@ -989,7 +1017,13 @@ export async function runInterviewerStream(
         const errEvent = JSON.stringify({ type: 'error', error: err.message || 'Stream error' });
         controller.enqueue(encoder.encode(`data: ${errEvent}\n\n`));
       } finally {
-        if (!isInsideThinking && tagBuffer.length > 0 && !tagBuffer.startsWith('<think') && !tagBuffer.startsWith('<thought')) {
+        if (
+          !isInsideThinking &&
+          tagBuffer.length > 0 &&
+          !tagBuffer.startsWith('<think') &&
+          !tagBuffer.startsWith('<thought') &&
+          !tagBuffer.startsWith('<|channel>thought')
+        ) {
           const chunkEvent = JSON.stringify({ type: 'chunk', text: tagBuffer });
           controller.enqueue(encoder.encode(`data: ${chunkEvent}\n\n`));
         }
@@ -1039,7 +1073,10 @@ export async function runInterviewer(
           { role: 'system', content: interviewerInstruction },
           ...formattedMessages
         ],
-        temperature: 0.7
+        temperature: 0.7,
+        chat_template_kwargs: {
+          enable_thinking: false
+        }
       })
     });
 
