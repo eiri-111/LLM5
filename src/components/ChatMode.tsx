@@ -191,8 +191,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
         const endsWithQuestion = /[？?]\s*$/.test(finalReply);
         if (
           (readyFlagFromServer && !endsWithQuestion && nextUserTurns >= 6) ||
-          isAssistantCompletionReply(finalReply) ||
-          (nextUserTurns >= 8 && !endsWithQuestion)
+          isAssistantCompletionReply(finalReply)
         ) {
           setIsReady(true);
         }
@@ -203,8 +202,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
         const endsWithQuestion = /[？?]\s*$/.test(cleanReply);
         if (
           (data.is_ready_for_analysis && !endsWithQuestion && nextUserTurns >= 6) ||
-          isAssistantCompletionReply(cleanReply) ||
-          (nextUserTurns >= 8 && !endsWithQuestion)
+          isAssistantCompletionReply(cleanReply)
         ) {
           setIsReady(true);
         }

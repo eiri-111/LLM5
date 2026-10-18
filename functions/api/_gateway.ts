@@ -83,11 +83,10 @@ const DEFAULT_GATEWAY_ID = 'llm5';
 
 /** 対話ターン数（ユーザー発話回数）の制御基準 */
 export const MIN_USER_TURNS = 6; // 最低ターン数（2〜3個のエピソードを深掘りして最低6ターン）
-export const MAX_USER_TURNS = 8; // 安全上限ターン数（8ターンに達したら必ず対話を完了して質問紙へ誘導）
-/** Clef-flash noul確率で「具体的な行動エビデンスが得られた」と判定する閾値 */
-export const FACET_EVIDENCE_THRESHOLD = 0.55;
+/** Clef-flash noul確率で「具体的な行動エビデンスが十分に得られた」と判定する閾値 */
+export const FACET_EVIDENCE_THRESHOLD = 0.70;
 /** 「話題には触れたが、まだ具体的な発言・行動の深掘りが足りない（深掘りチャンス）」と判定する中間閾値 */
-export const FACET_PARTIAL_THRESHOLD = 0.30;
+export const FACET_PARTIAL_THRESHOLD = 0.50;
 
 /**
  * Cloudflare AI Gateway Dynamic Routing (OpenAI互換 compat) エンドポイントURLを取得
@@ -519,9 +518,9 @@ function parseClefPatternCDecision(
     totalEvidencedFacets += evidenced.length;
 
     // パターンC 因子充足条件:
-    // 3ファセット中2ファセット以上が >= 0.55、または 1ファセット以上が >= 0.55 かつ全3ファセットが >= 0.30（平均 >= 0.45）
+    // 3ファセット中2ファセット以上が >= 0.70、または 1ファセット以上が >= 0.70 かつ全3ファセットが >= 0.50（平均 >= 0.65）
     factorCovered[factor] =
-      evidenced.length >= 2 || (evidenced.length >= 1 && partial.length === 3 && meanProb >= 0.45);
+      evidenced.length >= 2 || (evidenced.length >= 1 && partial.length === 3 && meanProb >= 0.65);
   }
 
   const uncoveredFactors = allFactors.filter(f => !factorCovered[f]);
@@ -535,20 +534,15 @@ function parseClefPatternCDecision(
 
   const consecutiveDeepen = countConsecutiveDeepenTurns(messages);
   const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
-  const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant')?.content || '';
-  const assistantAlreadyEnded = /(インタビューは.*終了|対話セッションは.*完了|次のステップ.*質問紙)/.test(lastAssistantMsg);
   const userSaidNoEpisode = /(特にない|思いつかない|あまりない|覚えていない|わからない|ないです)/.test(lastUserMsg);
 
   // パターンC 完了判定:
-  // 1) 安全上限ターン数（8ターン）に達した場合は無条件で完了
-  // 2) 直前のアシスタントが既に終了宣言を行っていた場合は即完了
-  // 3) 最低ターン数（6ターン）以上 かつ（4因子以上充足 または 8ファセット以上 >= 0.55 または overallReadyProb >= 0.55）
-  const isEnoughEvidenceAtMinTurns =
-    uncoveredFactors.length <= 1 || totalEvidencedFacets >= 8 || overallReadyProb >= 0.55;
-  const isReady =
-    userCount >= MAX_USER_TURNS ||
-    assistantAlreadyEnded ||
-    (userCount >= MIN_USER_TURNS && isEnoughEvidenceAtMinTurns);
+  // 1) 最低ターン数（6ターン）以上
+  // 2) 全5因子が充足（各2ファセット以上 >= 0.70）かつ10ファセット以上が >= 0.70
+  //    （または 9ターン以上で4因子以上充足 ＆ overallReadyProb >= 0.70）
+  const isAllFactorsSatisfied = uncoveredFactors.length === 0 && totalEvidencedFacets >= 10;
+  const isLongDialogueSatisfied = userCount >= 9 && uncoveredFactors.length <= 1 && overallReadyProb >= 0.70;
+  const isReady = userCount >= MIN_USER_TURNS && (isAllFactorsSatisfied || isLongDialogueSatisfied);
 
   if (isReady) {
     return {
@@ -562,12 +556,12 @@ function parseClefPatternCDecision(
     };
   }
 
-  // 「断片的ヒント（0.30 <= prob < 0.55）」が出ているファセット（あと1問深掘りすれば0.55を超える有望ファセット）
+  // 「断片的ヒント（0.50 <= prob < 0.70）」が出ているファセット（あと1問深掘りすれば0.70を超える有望ファセット）
   const partialFacets = FACET_DEFINITIONS.filter(
     f => (facetProbs[f.key] ?? 0) >= FACET_PARTIAL_THRESHOLD && (facetProbs[f.key] ?? 0) < FACET_EVIDENCE_THRESHOLD
   ).sort((a, b) => (facetProbs[b.key] ?? 0) - (facetProbs[a.key] ?? 0));
 
-  // 【深掘り用】まだ0.55に達していないファセットのうち、「今のエピソードの文脈に最も関連している順（確率が高い順 b - a）」にソート
+  // 【深掘り用】まだ0.70に達していないファセットのうち、「今のエピソードの文脈に最も関連している順（確率が高い順 b - a）」にソート
   const contextualMissingFacets = FACET_DEFINITIONS.filter(
     f => (facetProbs[f.key] ?? 0) < FACET_EVIDENCE_THRESHOLD
   ).sort((a, b) => {
@@ -851,7 +845,7 @@ ${modeSpecificGuide}
 1. 必ず丁寧で親しみやすい敬語を使用してください。
 2. 1回の発言で聞く質問は「1つ（または密接に関連する具体的な問いかけ）」に絞り、自然な会話文（3〜4文程度）にしてください。
 3. **不自然なカギカッコ出力の禁止**: 1文目の相槌や質問文をカギカッコ（「 」）で括って出力しないでください。普通の人間同士の自然な会話文としてそのまま出力してください。
-4. **勝手な終了宣言の禁止**: まだ対話セッションは継続中です。「今回のインタビューはこれで終了となります」「ありがとうございました」などと勝手に終了宣言をしないでください。必ず最後にユーザーへの質問（？で終わる文）を1つ投げかけて終えてください。
+4. **勝手な終了宣言・締めくくりの絶対禁止（最重要）**: この対話セッションは現在進行中であり、まだ終了していません。「今回のインタビューはこれで終了となります」「ご協力いただき心から感謝いたします」「お疲れ様でした」「良い一日をお過ごしください」といった終了の挨拶や締めくくりの言葉は絶対に言わないでください。対話履歴が長く続いていても勝手に終了とみなさず、必ず上記の【分析官の指示】にある質問（？で終わる問いかけ）を行ってください。
 5. 「あなたの誠実性を測るために〜」のような検査の裏側の意図や専門用語（ビッグファイブ、ファセット等）は絶対に出さないでください。
 6. 思考プロセスや内部推論（<thought>や<think>タグなど）は一切出力に含めず、ユーザーへの発話文のみを直接出力してください。
 `;
