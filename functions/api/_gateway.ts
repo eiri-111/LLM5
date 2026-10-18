@@ -882,6 +882,7 @@ export async function runInterviewerStream(
         ...formattedMessages
       ],
       temperature: 0.7,
+      reasoning_effort: 'low',
       stream: true
     })
   });
@@ -1064,7 +1065,8 @@ export async function runInterviewer(
           { role: 'system', content: interviewerInstruction },
           ...formattedMessages
         ],
-        temperature: 0.7
+        temperature: 0.7,
+        reasoning_effort: 'low'
       })
     });
 
