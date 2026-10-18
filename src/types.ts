@@ -111,6 +111,9 @@ export interface AdminSessionRecord {
   survey_agreeableness?: number | null;
   survey_neuroticism?: number | null;
   survey_completed_at?: string | null;
+  r2_saved?: boolean | number;
+  r2_key?: string | null;
+  data_source?: 'r2' | 'd1';
   chat_messages?: string | null;
   ai_full_result?: string | null;
   survey_raw_answers?: string | null;

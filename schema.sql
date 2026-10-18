@@ -32,9 +32,14 @@ CREATE TABLE IF NOT EXISTS assessment_sessions (
   survey_extraversion REAL,                   -- 尺度スコア 外向性 (0〜100正規化)
   survey_agreeableness REAL,                  -- 尺度スコア 協調性 (0〜100正規化)
   survey_neuroticism REAL,                    -- 尺度スコア 情緒不安定性/神経症傾向 (0〜100正規化)
-  survey_completed_at TEXT                    -- 質問紙完了日時 (ISO8601)
+  survey_completed_at TEXT,                   -- 質問紙完了日時 (ISO8601)
+
+  -- ストレージ管理 (R2連携)
+  r2_saved INTEGER DEFAULT 0,                 -- R2保存フラグ (0: 未保存, 1: 保存済)
+  r2_key TEXT                                 -- R2オブジェクトキー (sessions/{session_id}.json)
 );
 
 CREATE INDEX IF NOT EXISTS idx_student_id ON assessment_sessions(student_id);
 CREATE INDEX IF NOT EXISTS idx_created_at ON assessment_sessions(created_at);
 CREATE INDEX IF NOT EXISTS idx_survey_scale ON assessment_sessions(survey_scale_type);
+CREATE INDEX IF NOT EXISTS idx_r2_saved ON assessment_sessions(r2_saved);

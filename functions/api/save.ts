@@ -49,7 +49,55 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const savedTargets: string[] = [];
     const timestamp = new Date().toISOString();
 
-    // 1. Cloudflare D1 保存処理
+    // 1. Cloudflare R2 保存処理 (大容量完全ログ・オブジェクトストレージ)
+    const r2Bucket = env.BUCKET || env.R2;
+    let r2Saved = 0;
+    const r2Key = `sessions/${session_id}.json`;
+
+    if (r2Bucket) {
+      try {
+        const fullPayload = {
+          version: '2.0',
+          session_id,
+          user_profile: {
+            student_id: effectiveStudentId,
+            age: effectiveAge,
+            gender: effectiveGender
+          },
+          dialogue_turns: messages.filter(m => m.role === 'user').length,
+          messages,
+          ai_result,
+          survey_result,
+          saved_at: timestamp
+        };
+
+        // 標準キーで保存 (sessions/{session_id}.json)
+        await r2Bucket.put(r2Key, JSON.stringify(fullPayload, null, 2), {
+          httpMetadata: { contentType: 'application/json' },
+          customMetadata: {
+            studentId: effectiveStudentId,
+            savedAt: timestamp
+          }
+        });
+
+        // 過去バージョン互換キーも書き込み (student_id付き)
+        const legacyKey = `sessions/${effectiveStudentId}_${session_id}.json`;
+        if (legacyKey !== r2Key) {
+          try {
+            await r2Bucket.put(legacyKey, JSON.stringify(fullPayload, null, 2), {
+              httpMetadata: { contentType: 'application/json' }
+            });
+          } catch (_) {}
+        }
+
+        r2Saved = 1;
+        savedTargets.push('R2');
+      } catch (r2Err: any) {
+        console.error('R2 save error:', r2Err);
+      }
+    }
+
+    // 2. Cloudflare D1 保存処理 (高速検索メタデータ & インデックス)
     if (env.DB) {
       try {
         // テーブルが存在しない場合に備えて自動作成 (Auto-Migration)
@@ -79,9 +127,19 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             survey_extraversion REAL,
             survey_agreeableness REAL,
             survey_neuroticism REAL,
-            survey_completed_at TEXT
+            survey_completed_at TEXT,
+            r2_saved INTEGER DEFAULT 0,
+            r2_key TEXT
           )
         `).run();
+
+        // 既存テーブルに新カラムが無い場合の安全マイグレーション
+        try {
+          await env.DB.prepare(`ALTER TABLE assessment_sessions ADD COLUMN r2_saved INTEGER DEFAULT 0`).run();
+        } catch (_) {}
+        try {
+          await env.DB.prepare(`ALTER TABLE assessment_sessions ADD COLUMN r2_key TEXT`).run();
+        } catch (_) {}
 
         const userCount = messages.filter(m => m.role === 'user').length;
         
@@ -94,8 +152,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             ai_full_result,
             survey_scale_type, survey_scale_name, survey_raw_answers,
             survey_openness, survey_conscientiousness, survey_extraversion, survey_agreeableness, survey_neuroticism,
-            survey_completed_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            survey_completed_at,
+            r2_saved, r2_key
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(id) DO UPDATE SET
             dialogue_turns = COALESCE(excluded.dialogue_turns, assessment_sessions.dialogue_turns),
             chat_messages = COALESCE(excluded.chat_messages, assessment_sessions.chat_messages),
@@ -116,7 +175,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             survey_extraversion = COALESCE(excluded.survey_extraversion, assessment_sessions.survey_extraversion),
             survey_agreeableness = COALESCE(excluded.survey_agreeableness, assessment_sessions.survey_agreeableness),
             survey_neuroticism = COALESCE(excluded.survey_neuroticism, assessment_sessions.survey_neuroticism),
-            survey_completed_at = COALESCE(excluded.survey_completed_at, assessment_sessions.survey_completed_at)
+            survey_completed_at = COALESCE(excluded.survey_completed_at, assessment_sessions.survey_completed_at),
+            r2_saved = CASE WHEN excluded.r2_saved = 1 THEN 1 ELSE assessment_sessions.r2_saved END,
+            r2_key = COALESCE(excluded.r2_key, assessment_sessions.r2_key)
         `).bind(
           session_id,
           effectiveStudentId,
@@ -142,40 +203,14 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
           survey_result?.scores?.extraversion?.normalizedScore ?? null,
           survey_result?.scores?.agreeableness?.normalizedScore ?? null,
           survey_result?.scores?.neuroticism?.normalizedScore ?? null,
-          survey_result?.completedAt || null
+          survey_result?.completedAt || null,
+          r2Saved,
+          r2Saved ? r2Key : null
         ).run();
 
         savedTargets.push('D1');
       } catch (dbErr: any) {
         console.error('D1 save error:', dbErr);
-      }
-    }
-
-    // 2. Cloudflare R2 保存処理 (BUCKET または R2 バインディング)
-    const r2Bucket = env.BUCKET || env.R2;
-    if (r2Bucket) {
-      try {
-        const fullPayload = {
-          session_id,
-          user_profile: {
-            student_id: effectiveStudentId,
-            age: effectiveAge,
-            gender: effectiveGender
-          },
-          messages,
-          ai_result,
-          survey_result,
-          saved_at: timestamp
-        };
-
-        const key = `sessions/${effectiveStudentId}_${session_id}.json`;
-        await r2Bucket.put(key, JSON.stringify(fullPayload, null, 2), {
-          httpMetadata: { contentType: 'application/json' }
-        });
-
-        savedTargets.push('R2');
-      } catch (r2Err: any) {
-        console.error('R2 save error:', r2Err);
       }
     }
 

@@ -33,6 +33,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         survey_scale_type, survey_scale_name,
         survey_openness, survey_conscientiousness, survey_extraversion, survey_agreeableness, survey_neuroticism,
         survey_completed_at,
+        COALESCE(r2_saved, 0) AS r2_saved, r2_key,
         chat_messages, ai_full_result, survey_raw_answers
       FROM assessment_sessions
       ORDER BY created_at DESC
@@ -99,6 +100,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       'survey_extraversion',
       'survey_agreeableness',
       'survey_neuroticism',
+      'r2_saved',
+      'r2_key',
       'clef_facets_json',
       'survey_raw_answers',
       'chat_messages'
