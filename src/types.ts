@@ -5,6 +5,8 @@ export interface BigFiveDimension {
   description: string;
   traits: string[];
   analysis_reasoning?: string; // 対話からなぜこのスコアと判定されたかの根拠
+  confidence?: 'high' | 'moderate' | 'insufficient'; // 行動エビデンスの充足度・測定確信度
+  evidenced_facet_count?: number; // 3ファセット中エビデンスが得られた数 (0〜3)
 }
 
 export interface BigFiveScores {
@@ -28,6 +30,8 @@ export interface ClefScoringBreakdown {
     agreeableness: { compassion: number; respect: number; trust: number };
     neuroticism: { anxiety: number; depression: number; volatility: number };
   };
+  /** ファセット別エビデンス充足確信度 ('high': 明確な行動事実あり, 'moderate': 言及あり, 'insufficient': 未言及/欠測) */
+  facet_confidences?: Record<string, 'high' | 'moderate' | 'insufficient'>;
   source: string;
 }
 
@@ -48,6 +52,11 @@ export interface AnalysisResult {
     gender?: string | null;
   };
   clef_scoring_data?: ClefScoringBreakdown; // Clef-flashによる20問同時採点データ（案1・案2比較検証用）
+  verbosity_stats?: {
+    total_user_characters: number;
+    total_user_turns: number;
+    avg_characters_per_turn: number;
+  };
 }
 
 export interface ChatMessage {

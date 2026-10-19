@@ -35,6 +35,8 @@ export interface BigFiveDimension {
   description: string;
   traits: string[];
   analysis_reasoning?: string;
+  confidence?: 'high' | 'moderate' | 'insufficient';
+  evidenced_facet_count?: number;
 }
 
 export interface ClefScoringBreakdown {
@@ -50,6 +52,7 @@ export interface ClefScoringBreakdown {
     agreeableness: { compassion: number; respect: number; trust: number };
     neuroticism: { anxiety: number; depression: number; volatility: number };
   };
+  facet_confidences?: Record<string, 'high' | 'moderate' | 'insufficient'>;
   source: string;
 }
 
@@ -76,6 +79,11 @@ export interface AnalysisResult {
     gender?: string | null;
   };
   clef_scoring_data?: ClefScoringBreakdown;
+  verbosity_stats?: {
+    total_user_characters: number;
+    total_user_turns: number;
+    avg_characters_per_turn: number;
+  };
 }
 
 const DEFAULT_ACCOUNT_ID = 'e809b1129ec4b6f69520858ac79b2095';
@@ -886,7 +894,8 @@ ${targetStrategy}
 5. カギカッコ（「 」）で全体を括らず、普通の人間同士の自然な会話文として出力してください。
 6. 勝手な終了宣言や説教・アドバイスはしないでください。
 7. 「あなたの誠実性を測るために〜」等の検査用語・因子名は絶対に出さないでください。
-8. 思考プロセスやタグ（<think>等）は含めず、ユーザーへの発話文のみを直接出力してください。
+8. **【STAR法行動事実の深掘り】自由な世間話や雑談に脱線せず、ユーザーの「具体的な発言（何と言ったか）」「実際の振る舞い（どう動いたか）」「結果への対処（どう切り替えたか）」の客観的事実の深掘りに集中してください。一度に複数の質問を重ねて投げず、問いかけは必ず1つ（末尾は『？』）に絞ってください。**
+9. 思考プロセスやタグ（<think>等）は含めず、ユーザーへの発話文のみを直接出力してください。
 `;
 }
 
@@ -1234,6 +1243,31 @@ function parseClefScoringResponse(rawObj: any, sourceLabel: string): ClefScoring
     neuroticism: d_n ?? facetMeanScores.neuroticism
   };
 
+  const toConfidence = (val: number | null): 'high' | 'moderate' | 'insufficient' => {
+    if (val === null) return 'insufficient';
+    if (val >= 70) return 'high';
+    if (val >= 45) return 'moderate';
+    return 'insufficient';
+  };
+
+  const facetConfidences: Record<string, 'high' | 'moderate' | 'insufficient'> = {
+    openness_intellectual: toConfidence(o_int),
+    openness_aesthetic: toConfidence(o_aes),
+    openness_creative: toConfidence(o_cre),
+    conscientiousness_organization: toConfidence(c_org),
+    conscientiousness_productiveness: toConfidence(c_prd),
+    conscientiousness_responsibility: toConfidence(c_res),
+    extraversion_sociability: toConfidence(e_soc),
+    extraversion_assertiveness: toConfidence(e_ass),
+    extraversion_activity: toConfidence(e_act),
+    agreeableness_compassion: toConfidence(a_com),
+    agreeableness_respect: toConfidence(a_rsp),
+    agreeableness_trust: toConfidence(a_trs),
+    neuroticism_anxiety: toConfidence(n_anx),
+    neuroticism_depression: toConfidence(n_dep),
+    neuroticism_volatility: toConfidence(n_vol)
+  };
+
   return {
     facet_mean_scores: facetMeanScores,
     direct_scores: directScores,
@@ -1264,6 +1298,7 @@ function parseClefScoringResponse(rawObj: any, sourceLabel: string): ClefScoring
         volatility: n_vol ?? facetMeanScores.neuroticism
       }
     },
+    facet_confidences: facetConfidences,
     source: sourceLabel
   };
 }
@@ -1278,78 +1313,78 @@ export async function runClefScoring(
   env: Env,
   dialogueHistory: string
 ): Promise<ClefScoringBreakdown | null> {
-  const scoringState = `【対話履歴】\n${dialogueHistory}\n\n上記の対話履歴におけるユーザーの具体的な行動事実・エピソード・発言スタイルから、BFI-2-S（ビッグファイブ尺度）の各下位ファセットおよび5因子を客観的に評価してください。`;
+  const scoringState = `【対話履歴】\n${dialogueHistory}\n\n上記の対話履歴から、行動アンカー評定尺度（BARS / BOS）に基づき、各性格ファセットに対応する「客観的な具体的行動事実・発言」が実際に確認できるかを厳密に判定・評価してください。単なる印象や言葉遣いの丁寧さではなく、実際に語られた振る舞いを根拠としてください。`;
 
   const scoringQuestions: Record<string, { type: 'noul'; instructions: string }> = {
-    // === 案1: BFI-2-S 15ファセット（5因子 × 3ファセット = 15問） ===
+    // === 案1: BFI-2-S 15ファセット（BARS客観的行動事実判定 = 15問） ===
     // 1. 開放性 (Openness)
     facet_openness_intellectual: {
       type: 'noul',
-      instructions: '【開放性 - 知的好奇心】対話から、このユーザーは抽象的な知識や概念に関心があり、物事を複雑かつ深く考える（知的好奇心が高い）人物だと評価できますか？'
+      instructions: '【開放性 - 知的好奇心（BARS行動判定）】対話内に、未知の概念や抽象的な仕組みに対して自ら調べたり深く考察したりした『客観的な具体的行動事実』が確認できますか？'
     },
     facet_openness_aesthetic: {
       type: 'noul',
-      instructions: '【開放性 - 美的好奇心】対話から、このユーザーは芸術や音楽、文学、デザイン、美的・文化的な体験に強い魅力や関心を感じる（美的好奇心が高い）人物だと評価できますか？'
+      instructions: '【開放性 - 美的好奇心（BARS行動判定）】対話内に、デザイン・芸術・音楽・自然の美しさや文化的な体験に能動的に浸ったり鑑賞したりした『客観的な具体的行動事実』が確認できますか？'
     },
     facet_openness_creative: {
       type: 'noul',
-      instructions: '【開放性 - 創造力】対話から、このユーザーは独創的で、新しいアイデアや独自の工夫を思いついて実践する（創造力が高い）人物だと評価できますか？'
+      instructions: '【開放性 - 創造力（BARS行動判定）】対話内に、前例通りのやり方に固執せず独自の工夫や新しいアプローチを試した『客観的な具体的行動事実』が確認できますか？'
     },
 
     // 2. 誠実性 (Conscientiousness)
     facet_conscientiousness_organization: {
       type: 'noul',
-      instructions: '【誠実性 - 組織化】対話から、このユーザーは行き当たりばったりではなく、物事をきちんと整理整頓し計画的・段取りよく進める（組織化が高い）人物だと評価できますか？'
+      instructions: '【誠実性 - 組織化（BARS行動判定）】対話内に、予定の狂いやタスク逼迫時に優先順位を整理し、段取りやスケジュールを具体的に組み立て直した『客観的な行動事実』が確認できますか？'
     },
     facet_conscientiousness_productiveness: {
       type: 'noul',
-      instructions: '【誠実性 - 生産性】対話から、このユーザーは怠けたり途中で投げ出したりせず、やるべき物事を最後までやり通す（生産性・継続力が高い）人物だと評価できますか？'
+      instructions: '【誠実性 - 生産性（BARS行動判定）】対話内に、途中で投げ出したり先送りにせず、決めたタスクや役割を最後までやり遂げた・リカバリーを実行した『客観的な行動事実』が確認できますか？'
     },
     facet_conscientiousness_responsibility: {
       type: 'noul',
-      instructions: '【誠実性 - 責任感】対話から、このユーザーは周囲から信頼されて頼りになり、自分の役割や課題を効率的かつ着実にこなす（責任感が高い）人物だと評価できますか？'
+      instructions: '【誠実性 - 責任感（BARS行動判定）】対話内に、約束を守るため事前に連絡・相談を入れたり、自分の役割を全うしようと誠実に行動した『客観的な行動事実』が確認できますか？'
     },
 
     // 3. 外向性 (Extraversion)
     facet_extraversion_sociability: {
       type: 'noul',
-      instructions: '【外向性 - 社交性】対話から、このユーザーは無口で引っ込み思案ではなく、人と関わったり会話したりすることに積極的で社交的な（社交性が高い）人物だと評価できますか？'
+      instructions: '【外向性 - 社交性（BARS行動判定）】対話内に、集まりや沈黙の場で自ら進んで他者に話しかけたり、会話の口火を切ってコミュニケーションを取った『客観的な行動事実』が確認できますか？'
     },
     facet_extraversion_assertiveness: {
       type: 'noul',
-      instructions: '【外向性 - 主張性】対話から、このユーザーは堂々としていて自己主張ができ、集団やチームの中で他人をリードするのが得意な（主張性が高い）人物だと評価できますか？'
+      instructions: '【外向性 - 主張性（BARS行動判定）】対話内に、周囲に流されるだけでなく自分の意見や提案を堂々と表明し、全体の意思決定をリードしようとした『客観的な行動事実』が確認できますか？'
     },
     facet_extraversion_activity: {
       type: 'noul',
-      instructions: '【外向性 - 活動性】対話から、このユーザーは控えめで大人しいタイプではなく、いつもエネルギーに満ちて活発に行動している（活動性が高い）人物だと評価できますか？'
+      instructions: '【外向性 - 活動性（BARS行動判定）】対話内に、静止・受動的に過ごすだけでなく能動的に出かけたり、活発に動いてエネルギーを行動に移した『客観的な行動事実』が確認できますか？'
     },
 
     // 4. 協調性 (Agreeableness)
     facet_agreeableness_compassion: {
       type: 'noul',
-      instructions: '【協調性 - 思いやり】対話から、このユーザーは冷淡ではなく、他人への思いやりがあり親身で優しい（思いやりが高い）人物だと評価できますか？'
+      instructions: '【協調性 - 思いやり（BARS行動判定）】対話内に、他者の負担や感情に寄り添い、相手を助けたり気遣う配慮の行動・声かけを行った『客観的な行動事実』が確認できますか？'
     },
     facet_agreeableness_respect: {
       type: 'noul',
-      instructions: '【協調性 - 敬意】対話から、このユーザーは他人と対立や揉め事を起こさず、誰に対しても礼儀正しく敬意を払って穏やかに接する（敬意が高い）人物だと評価できますか？'
+      instructions: '【協調性 - 敬意（BARS行動判定）】対話内に、意見対立時やトラブル時にも相手を頭ごなしに怒ったり攻撃せず、敬意を払い穏やかに接した『客観的な行動事実』が確認できますか？'
     },
     facet_agreeableness_trust: {
       type: 'noul',
-      instructions: '【協調性 - 信頼】対話から、このユーザーは他人を疑ったり冷たく無関心になったりせず、周囲の人を信頼して好意的に関わる（信頼が高い）人物だと評価できますか？'
+      instructions: '【協調性 - 信頼（BARS行動判定）】対話内に、周囲の人を疑わず好意的に受け止めて協調・協力して進めようとした『客観的な行動事実』が確認できますか？'
     },
 
     // 5. 情緒安定性 (Emotional Stability / 逆転済みのNeuroticism)
     facet_neuroticism_anxiety: {
       type: 'noul',
-      instructions: '【情緒安定性 - 不安の低さ・ストレス対処】対話から、このユーザーは多くの悩みごとを抱え込まず、リラックスしていてストレスやプレッシャーにうまく対処できている人物だと評価できますか？'
+      instructions: '【情緒安定性 - 不安の低さ（BARS行動判定）】対話内に、プレッシャーや不測の事態に直面した際、パニックにならず冷静に自分を落ち着かせた『客観的な行動事実』が確認できますか？'
     },
     facet_neuroticism_depression: {
       type: 'noul',
-      instructions: '【情緒安定性 - 抑うつの低さ・気分の安定】対話から、このユーザーは落ち込んだり憂鬱になったりしにくく、気分の浮き沈みが少なく安定している人物だと評価できますか？'
+      instructions: '【情緒安定性 - 気分の安定（BARS行動判定）】対話内に、トラブルや不本意な出来事の後、過度に落ち込み続けず前向きに気持ちを切り替えた『客観的な行動事実』が確認できますか？'
     },
     facet_neuroticism_volatility: {
       type: 'noul',
-      instructions: '【情緒安定性 - 感情変動の低さ・冷静さ】対話から、このユーザーは過度な不安や緊張を感じにくく、トラブル時でも情緒が安定していて動じにくい冷静な人物だと評価できますか？'
+      instructions: '【情緒安定性 - 動じにくさ（BARS行動判定）】対話内に、突発的なアクシデントや他人の手違いに対して感情的にならず、冷静に対処策を実行した『客観的な行動事実』が確認できますか？'
     },
 
     // === 案2: 5因子直接採点（比較検証用 = 5問） ===
@@ -1612,6 +1647,17 @@ ${confirmedScoresBlock}
   try {
     const parsedResult: AnalysisResult = JSON.parse(jsonStr);
 
+    // 発話量統計（Verbosity指標）の算出（言語表現力バイアスの相殺・学術分析用）
+    const userMessages = messages.filter(m => m.role === 'user');
+    const totalChars = userMessages.reduce((sum, m) => sum + m.content.length, 0);
+    const totalTurns = userMessages.length;
+    const avgChars = totalTurns > 0 ? Math.round(totalChars / totalTurns) : 0;
+    parsedResult.verbosity_stats = {
+      total_user_characters: totalChars,
+      total_user_turns: totalTurns,
+      avg_characters_per_turn: avgChars
+    };
+
     // Clef-flashの確定スコア（案1：3ファセット平均）をプログラム側で厳密に保証し、
     // 比較検証用データ（案1の15ファセット＆平均スコア＋案2の5因子直接スコア）を同梱する
     if (clefScores && parsedResult.scores) {
@@ -1623,6 +1669,17 @@ ${confirmedScoresBlock}
           const confirmedScore = clefScores.facet_mean_scores[dim];
           parsedResult.scores[dim].score = confirmedScore;
           parsedResult.scores[dim].level = scoreToLevelLabel(confirmedScore);
+
+          // ファセット単位の確信度集約 (3ファセット中 high の数)
+          const facetKeys = Object.keys(clefScores.facets[dim]) as Array<keyof typeof clefScores.facets[typeof dim]>;
+          const confidences = facetKeys.map(fk => clefScores.facet_confidences?.[`${dim}_${String(fk)}`] || 'moderate');
+          const highCount = confidences.filter(c => c === 'high').length;
+          const insufficientCount = confidences.filter(c => c === 'insufficient').length;
+
+          parsedResult.scores[dim].evidenced_facet_count = highCount;
+          parsedResult.scores[dim].confidence = highCount >= 2
+            ? 'high'
+            : (insufficientCount >= 2 ? 'insufficient' : 'moderate');
         }
       }
       parsedResult.clef_scoring_data = clefScores;

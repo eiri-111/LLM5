@@ -61,6 +61,129 @@ export function getDetailedScenarioForFactor(factor?: string, age?: number): Sce
 }
 
 /**
+ * 行動アンカー評定尺度（BARS / BOS）に基づく客観的行動評価ルーブリック
+ */
+export interface BARSBehaviorCriteria {
+  facetKey: string;
+  factor: string;
+  facetName: string;
+  positiveBehavior: string; // 該当した場合に行動エビデンスとして評価される具体的行動事実
+  negativeBehavior?: string; // 逆転傾向を示す行動事実
+}
+
+export const BARS_RUBRICS: BARSBehaviorCriteria[] = [
+  // 開放性 (Openness)
+  {
+    facetKey: 'facet_openness_intellectual',
+    factor: '開放性',
+    facetName: '知的好奇心',
+    positiveBehavior: '未知の概念や抽象的な仕組みに対して、自ら背景・理由を調べたり深く考察したりする行動を取った事実があるか'
+  },
+  {
+    facetKey: 'facet_openness_aesthetic',
+    factor: '開放性',
+    facetName: '美的好奇心',
+    positiveBehavior: 'デザイン・芸術・音楽・自然の美しさや雰囲気・文化的な体験に能動的に浸ったり鑑賞したりする行動を取った事実があるか'
+  },
+  {
+    facetKey: 'facet_openness_creative',
+    factor: '開放性',
+    facetName: '創造力',
+    positiveBehavior: '前例通りのやり方に固執せず、独自の工夫や新しいアプローチ・オリジナルの解決策を試した行動事実があるか'
+  },
+
+  // 誠実性 (Conscientiousness)
+  {
+    facetKey: 'facet_conscientiousness_organization',
+    factor: '誠実性',
+    facetName: '組織化',
+    positiveBehavior: '予定が狂ったりタスクが逼迫した際、優先順位を整理し直し、段取り・スケジュールを具体的に組み立て直した行動事実があるか'
+  },
+  {
+    facetKey: 'facet_conscientiousness_productiveness',
+    factor: '誠実性',
+    facetName: '生産性',
+    positiveBehavior: '途中で投げ出したり先送りにせず、決めたタスクや役割を最後までやり遂げる・リカバリーを実行した行動事実があるか'
+  },
+  {
+    facetKey: 'facet_conscientiousness_responsibility',
+    factor: '誠実性',
+    facetName: '責任感',
+    positiveBehavior: '他者や締め切りとの約束を守るため、事前に連絡・相談を入れたり、自分の役割を全うしようと誠実に行動した事実があるか'
+  },
+
+  // 外向性 (Extraversion)
+  {
+    facetKey: 'facet_extraversion_sociability',
+    factor: '外向性',
+    facetName: '社交性',
+    positiveBehavior: '沈黙や集まりの場で、自ら進んで他者に話しかけたり、会話の口火を切ってコミュニケーションを取った行動事実があるか'
+  },
+  {
+    facetKey: 'facet_extraversion_assertiveness',
+    factor: '外向性',
+    facetName: '主張性',
+    positiveBehavior: '周りに流されるだけでなく、自分の意見・希望・提案を堂々と表明し、全体の意思決定をリードしようとした行動事実があるか'
+  },
+  {
+    facetKey: 'facet_extraversion_activity',
+    factor: '外向性',
+    facetName: '活動性',
+    positiveBehavior: 'インドアで静止するだけでなく、能動的に外に出かけたり、活発に動き回ってエネルギーを行動に移した事実があるか'
+  },
+
+  // 協調性 (Agreeableness)
+  {
+    facetKey: 'facet_agreeableness_compassion',
+    factor: '協調性',
+    facetName: '思いやり',
+    positiveBehavior: '他者の負担や立場・感情に寄り添い、相手を助けたり気遣う配慮の行動・声かけを行った事実があるか'
+  },
+  {
+    facetKey: 'facet_agreeableness_respect',
+    factor: '協調性',
+    facetName: '敬意',
+    positiveBehavior: '意見が対立したり相手がミスした際にも、頭ごなしに怒ったり攻撃せず、相手に敬意を払い穏やかに接した行動事実があるか'
+  },
+  {
+    facetKey: 'facet_agreeableness_trust',
+    factor: '協調性',
+    facetName: '信頼',
+    positiveBehavior: '周囲の人を過剰に疑わず、好意的に受け止めて協調・協力して進めようとした行動事実があるか'
+  },
+
+  // 情緒安定性 (Neuroticism 逆転 / Emotional Stability)
+  {
+    facetKey: 'facet_neuroticism_anxiety',
+    factor: '情緒安定性',
+    facetName: '不安の低さ・ストレス対処',
+    positiveBehavior: 'プレッシャーや不測の事態に直面した際、パニックにならず深呼吸や気分転換を行い、冷静に自分を落ち着かせた行動事実があるか'
+  },
+  {
+    facetKey: 'facet_neuroticism_depression',
+    factor: '情緒安定性',
+    facetName: '抑うつの低さ・気分の安定',
+    positiveBehavior: 'トラブルや不本意な出来事の後、過度に落ち込み続けたり自責の念に囚われず、気持ちを前向きに切り替えた行動事実があるか'
+  },
+  {
+    facetKey: 'facet_neuroticism_volatility',
+    factor: '情緒安定性',
+    facetName: '感情変動の低さ・動じにくさ',
+    positiveBehavior: '突発的なアクシデントや他人の手違いに対して、感情的にならず冷静に対処策を実行した行動事実があるか'
+  }
+];
+
+/**
+ * STAR法（Situation, Task, Action, Result）に基づく深掘りプロービングプロンプトの指針
+ */
+export const STAR_PROBING_GUIDE = `
+【STAR法に基づく構造化行動プロービングの鉄則】
+1. S/T（状況・課題）はすでにシナリオで共有されているため、ユーザーの「A（実際の行動・具体的なセリフ）」と「R（その結果や気持ちの切り替え）」に焦点を絞ってください。
+2. 抽象的な一般論（「普段から気をつけています」「話し合います」等）に対しては、必ず「その時、具体的に相手に何と声をかけましたか？」「具体的にどのような手順で動きましたか？」と1手だけ客観的行動を掘り下げてください。
+3. 一度に複数の質問を投げず、必ず1つの明確な問い（末尾は『？』）で終えてください。
+`;
+
+/**
  * ユーザープロファイル（年齢）に応じた最初の対話メッセージ（SJTシナリオ）を生成
  */
 export function buildInitialGreeting(userProfile?: UserProfile | null): string {

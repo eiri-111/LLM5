@@ -205,7 +205,19 @@ export const ResultReport: React.FC<ResultReportProps> = ({
                   <span className="dim-avatar" style={{ backgroundColor: d.color }}>{d.badge}</span>
                   <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1b2432' }}>{d.name}</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {dimData.confidence && (
+                    <span style={{
+                      fontSize: '0.68rem',
+                      fontWeight: 600,
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      backgroundColor: dimData.confidence === 'high' ? '#e6f4ea' : (dimData.confidence === 'moderate' ? '#fef7e0' : '#f1f3f4'),
+                      color: dimData.confidence === 'high' ? '#137333' : (dimData.confidence === 'moderate' ? '#b06000' : '#5f6368')
+                    }}>
+                      {dimData.confidence === 'high' ? 'エビデンス十分' : (dimData.confidence === 'moderate' ? 'エビデンス中程度' : '言及少・参考値')}
+                    </span>
+                  )}
                   <span className="dim-score-badge" style={{ color: d.color }}>{dimData.score}</span>
                   <span style={{ fontSize: '0.75rem', color: '#5c6878', fontWeight: 600 }}>/ 100 ({dimData.level})</span>
                 </div>
