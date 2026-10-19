@@ -52,7 +52,21 @@ export interface ClefScoringBreakdown {
     agreeableness: { compassion: number; respect: number; trust: number };
     neuroticism: { anxiety: number; depression: number; volatility: number };
   };
+  /** ファセット別エビデンス充足確信度 ('high': 明確な行動事実あり, 'moderate': 言及あり, 'insufficient': 未言及/欠測) */
   facet_confidences?: Record<string, 'high' | 'moderate' | 'insufficient'>;
+  /** 多方向（両極・具体性・妥当性メタ指標）評価データ (55問同時採点) */
+  multidirectional?: {
+    positive_probs: Record<string, number>; // 15ファセットの高特性行動確率 (0.00〜1.00)
+    negative_probs: Record<string, number>; // 15ファセットの低特性行動確率 (0.00〜1.00)
+    concreteness_probs: Record<string, number>; // 15ファセットの具体的行動エビデンス確率 (0.00〜1.00)
+    validity_checks: {
+      social_desirability: number; // 建前・社会的望ましさ偏重度 (0.00〜1.00)
+      mock_or_careless: number; // ふざけ・不真面目・無作為回答度 (0.00〜1.00)
+      concrete_detail: number; // エピソードの具体性・客観描写度 (0.00〜1.00)
+      defensiveness: number; // 防衛的・自己開示拒否度 (0.00〜1.00)
+      emotional_expressiveness: number; // 感情・素直さの表出度 (0.00〜1.00)
+    };
+  };
   source: string;
 }
 
@@ -1161,20 +1175,28 @@ export async function runInterviewer(
 }
 
 /**
- * Clef-flashの type: "noul" 出力から 0〜100 の整数スコアを抽出
+ * Clef-flashの type: "noul" 出力から 0.00〜1.00 の確率値を抽出
  */
-function extractClefNoulScore(item: any): number | null {
+function extractClefNoulProb(item: any): number | null {
   if (item === undefined || item === null) return null;
   const prob = typeof item === 'number'
-    ? item
+    ? (item <= 1.0 ? item : item / 100)
     : (typeof item?.noul === 'number'
       ? item.noul
       : (typeof item?.probability === 'number'
         ? item.probability
         : (typeof item?.yes_probability === 'number' ? item.yes_probability : null)));
   if (prob === null || isNaN(prob)) return null;
-  const scaled = prob <= 1.0 ? prob * 100 : prob;
-  return Math.min(100, Math.max(0, Math.round(scaled)));
+  return Math.min(1.0, Math.max(0.0, prob));
+}
+
+/**
+ * Clef-flashの type: "noul" 出力から 0〜100 の整数スコアを抽出（後方互換用）
+ */
+function extractClefNoulScore(item: any): number | null {
+  const prob = extractClefNoulProb(item);
+  if (prob === null) return null;
+  return Math.min(100, Math.max(0, Math.round(prob * 100)));
 }
 
 function scoreToLevelLabel(score: number): string {
@@ -1183,56 +1205,239 @@ function scoreToLevelLabel(score: number): string {
   return '控えめ';
 }
 
+/** 15ファセットの多方向評価定義リスト（ポジティブ高特性・ネガティブ低特性・具体性エビデンス） */
+interface MultidirectionalFacetConfig {
+  key: string;
+  factor: 'openness' | 'conscientiousness' | 'extraversion' | 'agreeableness' | 'neuroticism';
+  facetName: string;
+  positiveInstruction: string;
+  negativeInstruction: string;
+  concretenessInstruction: string;
+}
+
+const MULTIDIRECTIONAL_FACET_CONFIGS: MultidirectionalFacetConfig[] = [
+  // 1. 開放性 (Openness)
+  {
+    key: 'openness_intellectual',
+    factor: 'openness',
+    facetName: '知的好奇心',
+    positiveInstruction: '対話内に、未知の概念や抽象的な仕組みに対して自ら調べたり深く考察したりした『客観的な具体的行動事実』が確認できますか？',
+    negativeInstruction: '対話内に、複雑な理論や未知の仕組みに深入りせず、実践的・実用的な情報や手近な定番の事柄だけにとどめた『行動事実』が確認できますか？',
+    concretenessInstruction: '知的好奇心に関して、調べた対象や思考プロセスについての具体的描写・客観的エピソードが語られていますか？'
+  },
+  {
+    key: 'openness_aesthetic',
+    factor: 'openness',
+    facetName: '美的好奇心',
+    positiveInstruction: '対話内に、デザイン・芸術・音楽・自然の美しさや文化的な体験に能動的に浸ったり鑑賞したりした『客観的な具体的行動事実』が確認できますか？',
+    negativeInstruction: '対話内に、芸術・美的体験や情緒的な鑑賞に特別な関心を払わず、機能性・実利性を優先した『行動事実』が確認できますか？',
+    concretenessInstruction: '美的好奇心に関して、実際に触れた作品や場所・鑑賞行動についての具体的描写が語られていますか？'
+  },
+  {
+    key: 'openness_creative',
+    factor: 'openness',
+    facetName: '創造力',
+    positiveInstruction: '対話内に、前例通りのやり方に固執せず独自の工夫や新しいアプローチ・オリジナルの解決策を試した『客観的な具体的行動事実』が確認できますか？',
+    negativeInstruction: '対話内に、自己流の工夫を避け、確立された手順や過去の実績・定番マニュアル通りのやり方を忠実に選んだ『行動事実』が確認できますか？',
+    concretenessInstruction: '創造力に関して、試した工夫やアプローチの具体的な内容・手順が語られていますか？'
+  },
+
+  // 2. 誠実性 (Conscientiousness)
+  {
+    key: 'conscientiousness_organization',
+    factor: 'conscientiousness',
+    facetName: '組織化',
+    positiveInstruction: '対話内に、予定の狂いやタスク逼迫時に優先順位を整理し、段取りやスケジュールを具体的に組み立て直した『客観的な行動事実』が確認できますか？',
+    negativeInstruction: '対話内に、計画の厳密な組み直しを行わず、その場の思いつきや成り行き任せで柔軟・即興的に対応した『行動事実』が確認できますか？',
+    concretenessInstruction: '組織化に関して、優先順位の付け方やスケジュールの組み直し手順が具体的に語られていますか？'
+  },
+  {
+    key: 'conscientiousness_productiveness',
+    factor: 'conscientiousness',
+    facetName: '生産性',
+    positiveInstruction: '対話内に、途中で投げ出したり先送りにせず、決めたタスクや役割を最後までやり遂げた・リカバリーを実行した『客観的な行動事実』が確認できますか？',
+    negativeInstruction: '対話内に、無理にやり遂げようとせず、途中で諦めて寝る・先送りする・最低限の放棄を選んだ『行動事実』が確認できますか？',
+    concretenessInstruction: '生産性に関して、タスクへの取り組み方やリカバリーの具体的な実行内容が語られていますか？'
+  },
+  {
+    key: 'conscientiousness_responsibility',
+    factor: 'conscientiousness',
+    facetName: '責任感',
+    positiveInstruction: '対話内に、他者や締め切りとの約束を守るため事前に連絡・相談を入れたり、自分の役割を全うしようと誠実に行動した『客観的な行動事実』が確認できますか？',
+    negativeInstruction: '対話内に、相手への事前連絡や相談を怠ったり、連絡を後回しにして事態を放置した『行動事実』が確認できますか？',
+    concretenessInstruction: '責任感に関して、連絡のタイミングや伝えた内容など、責任ある行動の具体的事実が語られていますか？'
+  },
+
+  // 3. 外向性 (Extraversion)
+  {
+    key: 'extraversion_sociability',
+    factor: 'extraversion',
+    facetName: '社交性',
+    positiveInstruction: '対話内に、集まりや沈黙の場で自ら進んで他者に話しかけたり、会話の口火を切ってコミュニケーションを取った『客観的な行動事実』が確認できますか？',
+    negativeInstruction: '対話内に、自ら話しかけることを控え、沈黙を保つ・一人で静かに過ごす・他者からの話しかけを待つ『客観的な行動事実』が確認できますか？',
+    concretenessInstruction: '社交性に関して、声かけの有無や対人コミュニケーションの実際の様子が具体的に語られていますか？'
+  },
+  {
+    key: 'extraversion_assertiveness',
+    factor: 'extraversion',
+    facetName: '主張性',
+    positiveInstruction: '対話内に、周囲に流されるだけでなく自分の意見や希望・提案を堂々と表明し、全体の意思決定をリードしようとした『客観的な行動事実』が確認できますか？',
+    negativeInstruction: '対話内に、自分の希望や主張を押し出さず、他者の意見に同調する・決定を周囲に完全に任せて従った『客観的な行動事実』が確認できますか？',
+    concretenessInstruction: '主張性に関して、提案した内容や意思表明の具体的なセリフ・立ち回りが語られていますか？'
+  },
+  {
+    key: 'extraversion_activity',
+    factor: 'extraversion',
+    facetName: '活動性',
+    positiveInstruction: '対話内に、静止・受動的に過ごすだけでなく能動的に出かけたり、活発に動いてエネルギーを行動に移した『客観的な行動事実』が確認できますか？',
+    negativeInstruction: '対話内に、活発な移動や外出を避け、自宅や自室で静かにリラックスして省エネに過ごした『客観的な行動事実』が確認できますか？',
+    concretenessInstruction: '活動性に関して、過ごし方や外出・行動の活動量に関する具体的エピソードが語られていますか？'
+  },
+
+  // 4. 協調性 (Agreeableness)
+  {
+    key: 'agreeableness_compassion',
+    factor: 'agreeableness',
+    facetName: '思いやり',
+    positiveInstruction: '対話内に、他者の負担や感情に寄り添い、相手を助けたり気遣う配慮の行動・声かけを行った『客観的な行動事実』が確認できますか？',
+    negativeInstruction: '対話内に、他者の感情や事情に深入りせず、自分の都合や利害・効率を最優先した『客観的な行動事実』が確認できますか？',
+    concretenessInstruction: '思いやりに関して、相手への配慮や声かけの具体的な振る舞いが語られていますか？'
+  },
+  {
+    key: 'agreeableness_respect',
+    factor: 'agreeableness',
+    facetName: '敬意',
+    positiveInstruction: '対話内に、意見対立時や他人のミス時にも相手を頭ごなしに攻撃せず、敬意を払い穏やかに接した『客観的な行動事実』が確認できますか？',
+    negativeInstruction: '対話内に、相手のミスや対立に対して不満や苛立ちを露わにする、または批判的・冷淡な態度を取った『行動事実』が確認できますか？',
+    concretenessInstruction: '敬意に関して、対立やミス発生時の実際の口調・接し方の具体的事実が語られていますか？'
+  },
+  {
+    key: 'agreeableness_trust',
+    factor: 'agreeableness',
+    facetName: '信頼',
+    positiveInstruction: '対話内に、周囲の人を疑わず好意的に受け止めて協調・協力して進めようとした『客観的な行動事実』が確認できますか？',
+    negativeInstruction: '対話内に、他者の意図や能力に疑念を抱き、警戒して自分一人で抱え込む・距離を置いた『行動事実』が確認できますか？',
+    concretenessInstruction: '信頼に関して、他者との協力体制や信頼に関する具体的姿勢が語られていますか？'
+  },
+
+  // 5. 情緒安定性 (Emotional Stability)
+  {
+    key: 'neuroticism_anxiety',
+    factor: 'neuroticism',
+    facetName: '不安の低さ・ストレス対処',
+    positiveInstruction: '対話内に、プレッシャーや不測の事態に直面した際、パニックにならず冷静に自分を落ち着かせた『客観的な行動事実』が確認できますか？',
+    negativeInstruction: '対話内に、突発的なトラブルや切迫に対して強い焦りや動揺・不安を感じて取り乱した『行動事実』が確認できますか？',
+    concretenessInstruction: 'ストレス対処に関して、プレッシャー直面時の心理状態と対処行動の具体性が語られていますか？'
+  },
+  {
+    key: 'neuroticism_depression',
+    factor: 'neuroticism',
+    facetName: '気分の安定',
+    positiveInstruction: '対話内に、トラブルや不本意な出来事の後、過度に落ち込み続けず前向きに気持ちを切り替えた『客観的な行動事実』が確認できますか？',
+    negativeInstruction: '対話内に、嫌な出来事やミスを長く引きずり、落ち込んだりモヤモヤした気分から抜け出せなかった『行動事実』が確認できますか？',
+    concretenessInstruction: '気分の安定に関して、気分の切り替えにかかった時間や事後の過ごし方の具体的事実が語られていますか？'
+  },
+  {
+    key: 'neuroticism_volatility',
+    factor: 'neuroticism',
+    facetName: '動じにくさ',
+    positiveInstruction: '対話内に、突発的なアクシデントや他人の手違いに対して感情的にならず、冷静に対処策を実行した『客観的な行動事実』が確認できますか？',
+    negativeInstruction: '対話内に、予期せぬ変更やトラブルに対して感情の起伏が激しくなり、苛立ちや落胆を行動・態度に出した『事実』が確認できますか？',
+    concretenessInstruction: '動じにくさに関して、アクシデント発生時の瞬間的なリアクションの具体性が語られていますか？'
+  }
+];
+
 function parseClefScoringResponse(rawObj: any, sourceLabel: string): ClefScoringBreakdown | null {
   if (!rawObj) return null;
   const target = rawObj.answers || rawObj.result || rawObj;
   if (!target || typeof target !== 'object') return null;
 
-  // 案1: 15ファセット (5因子 × 3ファセット)
-  const o_int = extractClefNoulScore(target.facet_openness_intellectual);
-  const o_aes = extractClefNoulScore(target.facet_openness_aesthetic);
-  const o_cre = extractClefNoulScore(target.facet_openness_creative);
+  // 15ファセットそれぞれの生確率・スコア・確信度を算出
+  const positiveProbs: Record<string, number> = {};
+  const negativeProbs: Record<string, number> = {};
+  const concretenessProbs: Record<string, number> = {};
+  const facetScores: Record<string, number> = {};
+  const facetConfidences: Record<string, 'high' | 'moderate' | 'insufficient'> = {};
 
-  const c_org = extractClefNoulScore(target.facet_conscientiousness_organization);
-  const c_prd = extractClefNoulScore(target.facet_conscientiousness_productiveness);
-  const c_res = extractClefNoulScore(target.facet_conscientiousness_responsibility);
+  let hasAnyValidScore = false;
 
-  const e_soc = extractClefNoulScore(target.facet_extraversion_sociability);
-  const e_ass = extractClefNoulScore(target.facet_extraversion_assertiveness);
-  const e_act = extractClefNoulScore(target.facet_extraversion_activity);
+  for (const cfg of MULTIDIRECTIONAL_FACET_CONFIGS) {
+    // 55問多方向キー（新）または 20問キー（旧互換）から確率を取得
+    const pPos = extractClefNoulProb(target[`facet_pos_${cfg.key}`] ?? target[`facet_${cfg.key}`]);
+    const pNeg = extractClefNoulProb(target[`facet_neg_${cfg.key}`]);
+    const pCon = extractClefNoulProb(target[`facet_con_${cfg.key}`]);
 
-  const a_com = extractClefNoulScore(target.facet_agreeableness_compassion);
-  const a_rsp = extractClefNoulScore(target.facet_agreeableness_respect);
-  const a_trs = extractClefNoulScore(target.facet_agreeableness_trust);
+    if (pPos !== null) {
+      hasAnyValidScore = true;
+      positiveProbs[cfg.key] = pPos;
+    }
+    if (pNeg !== null) negativeProbs[cfg.key] = pNeg;
+    if (pCon !== null) concretenessProbs[cfg.key] = pCon;
 
-  const n_anx = extractClefNoulScore(target.facet_neuroticism_anxiety);
-  const n_dep = extractClefNoulScore(target.facet_neuroticism_depression);
-  const n_vol = extractClefNoulScore(target.facet_neuroticism_volatility);
+    // スコア算出ロジック:
+    // 両極（ポジティブ・ネガティブ）の差分 Delta (-1.00 〜 +1.00) を 0 〜 100 に正規化
+    let score = 50;
+    if (pPos !== null && pNeg !== null) {
+      const delta = pPos - pNeg;
+      score = Math.min(100, Math.max(0, Math.round(50 + delta * 50)));
+    } else if (pPos !== null) {
+      score = Math.min(100, Math.max(0, Math.round(pPos * 100)));
+    }
+    facetScores[cfg.key] = score;
 
-  // 案2: 5因子直接採点
+    // 確信度（行動エビデンス充実度）判定:
+    // 具体性確率 (pCon) を最優先、未取得時はポジティブ/ネガティブの極端度で判定
+    if (pCon !== null) {
+      if (pCon >= 0.65) {
+        facetConfidences[cfg.key] = 'high';
+      } else if (pCon >= 0.40) {
+        facetConfidences[cfg.key] = 'moderate';
+      } else {
+        facetConfidences[cfg.key] = 'insufficient';
+      }
+    } else {
+      if (score >= 70 || score <= 30) {
+        facetConfidences[cfg.key] = 'high';
+      } else if (score >= 42 && score <= 58) {
+        facetConfidences[cfg.key] = 'insufficient';
+      } else {
+        facetConfidences[cfg.key] = 'moderate';
+      }
+    }
+  }
+
+  // 案2: 5因子直接採点 (0-100)
   const d_o = extractClefNoulScore(target.direct_openness);
   const d_c = extractClefNoulScore(target.direct_conscientiousness);
   const d_e = extractClefNoulScore(target.direct_extraversion);
   const d_a = extractClefNoulScore(target.direct_agreeableness);
   const d_n = extractClefNoulScore(target.direct_neuroticism);
 
-  // 少なくとも主要ファセットまたは直接スコアが取得できているか検証
-  if (o_int === null && d_o === null) {
+  if (!hasAnyValidScore && d_o === null) {
     return null;
   }
 
-  const avg3 = (v1: number | null, v2: number | null, v3: number | null, fallback: number): number => {
-    const valid = [v1, v2, v3].filter((v): v is number => v !== null);
+  // 受検態度・妥当性メタチェック（5問）の抽出
+  const validityChecks = {
+    social_desirability: extractClefNoulProb(target.val_social_desirability) ?? 0.35,
+    mock_or_careless: extractClefNoulProb(target.val_mock_or_careless) ?? 0.05,
+    concrete_detail: extractClefNoulProb(target.val_concrete_detail) ?? 0.65,
+    defensiveness: extractClefNoulProb(target.val_defensiveness) ?? 0.20,
+    emotional_expressiveness: extractClefNoulProb(target.val_emotional_expressiveness) ?? 0.70
+  };
+
+  const avg3 = (v1: number | undefined, v2: number | undefined, v3: number | undefined, fallback: number): number => {
+    const valid = [v1, v2, v3].filter((v): v is number => typeof v === 'number');
     if (valid.length === 0) return fallback;
     return Math.round(valid.reduce((sum, v) => sum + v, 0) / valid.length);
   };
 
   const facetMeanScores = {
-    openness: avg3(o_int, o_aes, o_cre, d_o ?? 50),
-    conscientiousness: avg3(c_org, c_prd, c_res, d_c ?? 50),
-    extraversion: avg3(e_soc, e_ass, e_act, d_e ?? 50),
-    agreeableness: avg3(a_com, a_rsp, a_trs, d_a ?? 50),
-    neuroticism: avg3(n_anx, n_dep, n_vol, d_n ?? 50)
+    openness: avg3(facetScores.openness_intellectual, facetScores.openness_aesthetic, facetScores.openness_creative, d_o ?? 50),
+    conscientiousness: avg3(facetScores.conscientiousness_organization, facetScores.conscientiousness_productiveness, facetScores.conscientiousness_responsibility, d_c ?? 50),
+    extraversion: avg3(facetScores.extraversion_sociability, facetScores.extraversion_assertiveness, facetScores.extraversion_activity, d_e ?? 50),
+    agreeableness: avg3(facetScores.agreeableness_compassion, facetScores.agreeableness_respect, facetScores.agreeableness_trust, d_a ?? 50),
+    neuroticism: avg3(facetScores.neuroticism_anxiety, facetScores.neuroticism_depression, facetScores.neuroticism_volatility, d_n ?? 50)
   };
 
   const directScores = {
@@ -1243,71 +1448,57 @@ function parseClefScoringResponse(rawObj: any, sourceLabel: string): ClefScoring
     neuroticism: d_n ?? facetMeanScores.neuroticism
   };
 
-  const toConfidence = (val: number | null): 'high' | 'moderate' | 'insufficient' => {
-    if (val === null) return 'insufficient';
-    if (val >= 70) return 'high';
-    if (val >= 45) return 'moderate';
-    return 'insufficient';
-  };
-
-  const facetConfidences: Record<string, 'high' | 'moderate' | 'insufficient'> = {
-    openness_intellectual: toConfidence(o_int),
-    openness_aesthetic: toConfidence(o_aes),
-    openness_creative: toConfidence(o_cre),
-    conscientiousness_organization: toConfidence(c_org),
-    conscientiousness_productiveness: toConfidence(c_prd),
-    conscientiousness_responsibility: toConfidence(c_res),
-    extraversion_sociability: toConfidence(e_soc),
-    extraversion_assertiveness: toConfidence(e_ass),
-    extraversion_activity: toConfidence(e_act),
-    agreeableness_compassion: toConfidence(a_com),
-    agreeableness_respect: toConfidence(a_rsp),
-    agreeableness_trust: toConfidence(a_trs),
-    neuroticism_anxiety: toConfidence(n_anx),
-    neuroticism_depression: toConfidence(n_dep),
-    neuroticism_volatility: toConfidence(n_vol)
-  };
-
   return {
     facet_mean_scores: facetMeanScores,
     direct_scores: directScores,
     facets: {
       openness: {
-        intellectual: o_int ?? facetMeanScores.openness,
-        aesthetic: o_aes ?? facetMeanScores.openness,
-        creative: o_cre ?? facetMeanScores.openness
+        intellectual: facetScores.openness_intellectual ?? facetMeanScores.openness,
+        aesthetic: facetScores.openness_aesthetic ?? facetMeanScores.openness,
+        creative: facetScores.openness_creative ?? facetMeanScores.openness
       },
       conscientiousness: {
-        organization: c_org ?? facetMeanScores.conscientiousness,
-        productiveness: c_prd ?? facetMeanScores.conscientiousness,
-        responsibility: c_res ?? facetMeanScores.conscientiousness
+        organization: facetScores.conscientiousness_organization ?? facetMeanScores.conscientiousness,
+        productiveness: facetScores.conscientiousness_productiveness ?? facetMeanScores.conscientiousness,
+        responsibility: facetScores.conscientiousness_responsibility ?? facetMeanScores.conscientiousness
       },
       extraversion: {
-        sociability: e_soc ?? facetMeanScores.extraversion,
-        assertiveness: e_ass ?? facetMeanScores.extraversion,
-        activity: e_act ?? facetMeanScores.extraversion
+        sociability: facetScores.extraversion_sociability ?? facetMeanScores.extraversion,
+        assertiveness: facetScores.extraversion_assertiveness ?? facetMeanScores.extraversion,
+        activity: facetScores.extraversion_activity ?? facetMeanScores.extraversion
       },
       agreeableness: {
-        compassion: a_com ?? facetMeanScores.agreeableness,
-        respect: a_rsp ?? facetMeanScores.agreeableness,
-        trust: a_trs ?? facetMeanScores.agreeableness
+        compassion: facetScores.agreeableness_compassion ?? facetMeanScores.agreeableness,
+        respect: facetScores.agreeableness_respect ?? facetMeanScores.agreeableness,
+        trust: facetScores.agreeableness_trust ?? facetMeanScores.agreeableness
       },
       neuroticism: {
-        anxiety: n_anx ?? facetMeanScores.neuroticism,
-        depression: n_dep ?? facetMeanScores.neuroticism,
-        volatility: n_vol ?? facetMeanScores.neuroticism
+        anxiety: facetScores.neuroticism_anxiety ?? facetMeanScores.neuroticism,
+        depression: facetScores.neuroticism_depression ?? facetMeanScores.neuroticism,
+        volatility: facetScores.neuroticism_volatility ?? facetMeanScores.neuroticism
       }
     },
     facet_confidences: facetConfidences,
+    multidirectional: {
+      positive_probs: positiveProbs,
+      negative_probs: negativeProbs,
+      concreteness_probs: concretenessProbs,
+      validity_checks: validityChecks
+    },
     source: sourceLabel
   };
 }
 
 /**
- * ステップ3-A: Clef-flash (@cf/cloudflare/clef-flash) による20問同時スコアリング
- * 1回のAPIリクエストで「案1: BFI-2-Sの15ファセット（15問）」と「案2: 5因子直接質問（5問）」の計20問を同時数値化する。
- * - メイン採用スコア: 案1（各因子3ファセットの平均×100）
- * - バックグラウンド検証用記録: 案2（5因子直接採点×100）および15ファセット個別得点
+ * ステップ3-A: Clef-flash (@cf/cloudflare/clef-flash) による55問多方向スコアリング
+ * 1回のリクエストで最大64問の並列推論能力を活用し、以下の計55問を一括評価する:
+ * 1. 15ファセット × ポジティブ高特性行動事実 (15問)
+ * 2. 15ファセット × ネガティブ低特性行動事実（内向性・柔軟性・静観等） (15問)
+ * 3. 15ファセット × 具体性・客観エビデンス充足度 (15問)
+ * 4. 5因子直接判定 (5問)
+ * 5. 受検態度・妥当性メタチェック（社会的望ましさ・不真面目・具体性等） (5問)
+ *
+ * スコアは両極差分 (P(pos) - P(neg)) から算出され、内向的な行動事実も正当に加算される。
  */
 export async function runClefScoring(
   env: Env,
@@ -1315,99 +1506,74 @@ export async function runClefScoring(
 ): Promise<ClefScoringBreakdown | null> {
   const scoringState = `【対話履歴】\n${dialogueHistory}\n\n上記の対話履歴から、行動アンカー評定尺度（BARS / BOS）に基づき、各性格ファセットに対応する「客観的な具体的行動事実・発言」が実際に確認できるかを厳密に判定・評価してください。単なる印象や言葉遣いの丁寧さではなく、実際に語られた振る舞いを根拠としてください。`;
 
-  const scoringQuestions: Record<string, { type: 'noul'; instructions: string }> = {
-    // === 案1: BFI-2-S 15ファセット（BARS客観的行動事実判定 = 15問） ===
-    // 1. 開放性 (Openness)
-    facet_openness_intellectual: {
-      type: 'noul',
-      instructions: '【開放性 - 知的好奇心（BARS行動判定）】対話内に、未知の概念や抽象的な仕組みに対して自ら調べたり深く考察したりした『客観的な具体的行動事実』が確認できますか？'
-    },
-    facet_openness_aesthetic: {
-      type: 'noul',
-      instructions: '【開放性 - 美的好奇心（BARS行動判定）】対話内に、デザイン・芸術・音楽・自然の美しさや文化的な体験に能動的に浸ったり鑑賞したりした『客観的な具体的行動事実』が確認できますか？'
-    },
-    facet_openness_creative: {
-      type: 'noul',
-      instructions: '【開放性 - 創造力（BARS行動判定）】対話内に、前例通りのやり方に固執せず独自の工夫や新しいアプローチを試した『客観的な具体的行動事実』が確認できますか？'
-    },
+  const scoringQuestions: Record<string, { type: 'noul'; instructions: string }> = {};
 
-    // 2. 誠実性 (Conscientiousness)
-    facet_conscientiousness_organization: {
+  // 1. 15ファセット × ポジティブ高特性行動事実 (15問)
+  for (const cfg of MULTIDIRECTIONAL_FACET_CONFIGS) {
+    scoringQuestions[`facet_pos_${cfg.key}`] = {
       type: 'noul',
-      instructions: '【誠実性 - 組織化（BARS行動判定）】対話内に、予定の狂いやタスク逼迫時に優先順位を整理し、段取りやスケジュールを具体的に組み立て直した『客観的な行動事実』が確認できますか？'
-    },
-    facet_conscientiousness_productiveness: {
-      type: 'noul',
-      instructions: '【誠実性 - 生産性（BARS行動判定）】対話内に、途中で投げ出したり先送りにせず、決めたタスクや役割を最後までやり遂げた・リカバリーを実行した『客観的な行動事実』が確認できますか？'
-    },
-    facet_conscientiousness_responsibility: {
-      type: 'noul',
-      instructions: '【誠実性 - 責任感（BARS行動判定）】対話内に、約束を守るため事前に連絡・相談を入れたり、自分の役割を全うしようと誠実に行動した『客観的な行動事実』が確認できますか？'
-    },
+      instructions: `【${cfg.facetName}（ポジティブ行動判定）】${cfg.positiveInstruction}`
+    };
+  }
 
-    // 3. 外向性 (Extraversion)
-    facet_extraversion_sociability: {
+  // 2. 15ファセット × ネガティブ低特性行動事実 (15問)
+  for (const cfg of MULTIDIRECTIONAL_FACET_CONFIGS) {
+    scoringQuestions[`facet_neg_${cfg.key}`] = {
       type: 'noul',
-      instructions: '【外向性 - 社交性（BARS行動判定）】対話内に、集まりや沈黙の場で自ら進んで他者に話しかけたり、会話の口火を切ってコミュニケーションを取った『客観的な行動事実』が確認できますか？'
-    },
-    facet_extraversion_assertiveness: {
-      type: 'noul',
-      instructions: '【外向性 - 主張性（BARS行動判定）】対話内に、周囲に流されるだけでなく自分の意見や提案を堂々と表明し、全体の意思決定をリードしようとした『客観的な行動事実』が確認できますか？'
-    },
-    facet_extraversion_activity: {
-      type: 'noul',
-      instructions: '【外向性 - 活動性（BARS行動判定）】対話内に、静止・受動的に過ごすだけでなく能動的に出かけたり、活発に動いてエネルギーを行動に移した『客観的な行動事実』が確認できますか？'
-    },
+      instructions: `【${cfg.facetName}（低特性・内向的・受動的行動判定）】${cfg.negativeInstruction}`
+    };
+  }
 
-    // 4. 協調性 (Agreeableness)
-    facet_agreeableness_compassion: {
+  // 3. 15ファセット × 具体性・客観エビデンス充実度 (15問)
+  for (const cfg of MULTIDIRECTIONAL_FACET_CONFIGS) {
+    scoringQuestions[`facet_con_${cfg.key}`] = {
       type: 'noul',
-      instructions: '【協調性 - 思いやり（BARS行動判定）】対話内に、他者の負担や感情に寄り添い、相手を助けたり気遣う配慮の行動・声かけを行った『客観的な行動事実』が確認できますか？'
-    },
-    facet_agreeableness_respect: {
-      type: 'noul',
-      instructions: '【協調性 - 敬意（BARS行動判定）】対話内に、意見対立時やトラブル時にも相手を頭ごなしに怒ったり攻撃せず、敬意を払い穏やかに接した『客観的な行動事実』が確認できますか？'
-    },
-    facet_agreeableness_trust: {
-      type: 'noul',
-      instructions: '【協調性 - 信頼（BARS行動判定）】対話内に、周囲の人を疑わず好意的に受け止めて協調・協力して進めようとした『客観的な行動事実』が確認できますか？'
-    },
+      instructions: `【${cfg.facetName}（具体的エビデンス充実度）】${cfg.concretenessInstruction}`
+    };
+  }
 
-    // 5. 情緒安定性 (Emotional Stability / 逆転済みのNeuroticism)
-    facet_neuroticism_anxiety: {
-      type: 'noul',
-      instructions: '【情緒安定性 - 不安の低さ（BARS行動判定）】対話内に、プレッシャーや不測の事態に直面した際、パニックにならず冷静に自分を落ち着かせた『客観的な行動事実』が確認できますか？'
-    },
-    facet_neuroticism_depression: {
-      type: 'noul',
-      instructions: '【情緒安定性 - 気分の安定（BARS行動判定）】対話内に、トラブルや不本意な出来事の後、過度に落ち込み続けず前向きに気持ちを切り替えた『客観的な行動事実』が確認できますか？'
-    },
-    facet_neuroticism_volatility: {
-      type: 'noul',
-      instructions: '【情緒安定性 - 動じにくさ（BARS行動判定）】対話内に、突発的なアクシデントや他人の手違いに対して感情的にならず、冷静に対処策を実行した『客観的な行動事実』が確認できますか？'
-    },
+  // 4. 5因子直接採点 (5問)
+  scoringQuestions.direct_openness = {
+    type: 'noul',
+    instructions: '【5因子直接評価 - 開放性】対話全体から、このユーザーの『開放性（知的好奇心・美的好奇心・創造力）』は総合的に見て高いと評価できますか？'
+  };
+  scoringQuestions.direct_conscientiousness = {
+    type: 'noul',
+    instructions: '【5因子直接評価 - 誠実性】対話全体から、このユーザーの『誠実性（組織化・生産性・責任感）』は総合的に見て高いと評価できますか？'
+  };
+  scoringQuestions.direct_extraversion = {
+    type: 'noul',
+    instructions: '【5因子直接評価 - 外向性】対話全体から、このユーザーの『外向性（社交性・主張性・活動性）』は総合的に見て高いと評価できますか？'
+  };
+  scoringQuestions.direct_agreeableness = {
+    type: 'noul',
+    instructions: '【5因子直接評価 - 協調性】対話全体から、このユーザーの『協調性（思いやり・敬意・信頼）』は総合的に見て高いと評価できますか？'
+  };
+  scoringQuestions.direct_neuroticism = {
+    type: 'noul',
+    instructions: '【5因子直接評価 - 情緒安定性】対話全体から、このユーザーの『情緒安定性（ストレス耐性・気分の安定・動じにくさ）』は総合的に見て高いと評価できますか？'
+  };
 
-    // === 案2: 5因子直接採点（比較検証用 = 5問） ===
-    direct_openness: {
-      type: 'noul',
-      instructions: '【5因子直接評価 - 開放性】対話全体から、このユーザーの『開放性（知的好奇心・美的好奇心・創造力）』は総合的に見て高いと評価できますか？'
-    },
-    direct_conscientiousness: {
-      type: 'noul',
-      instructions: '【5因子直接評価 - 誠実性】対話全体から、このユーザーの『誠実性（組織化・生産性・責任感）』は総合的に見て高いと評価できますか？'
-    },
-    direct_extraversion: {
-      type: 'noul',
-      instructions: '【5因子直接評価 - 外向性】対話全体から、このユーザーの『外向性（社交性・主張性・活動性）』は総合的に見て高いと評価できますか？'
-    },
-    direct_agreeableness: {
-      type: 'noul',
-      instructions: '【5因子直接評価 - 協調性】対話全体から、このユーザーの『協調性（思いやり・敬意・信頼）』は総合的に見て高いと評価できますか？'
-    },
-    direct_neuroticism: {
-      type: 'noul',
-      instructions: '【5因子直接評価 - 情緒安定性】対話全体から、このユーザーの『情緒安定性（ストレス耐性・気分の安定・動じにくさ）』は総合的に見て高いと評価できますか？'
-    }
+  // 5. 受検態度・妥当性メタチェック (5問)
+  scoringQuestions.val_social_desirability = {
+    type: 'noul',
+    instructions: '【受検妥当性 - 建前・社会的望ましさ】対話全体において、ユーザーの発言は一般的な模範解答や建前・お行儀の良い回答ばかりで、素の具体的行動が隠されている傾向が見られますか？'
+  };
+  scoringQuestions.val_mock_or_careless = {
+    type: 'noul',
+    instructions: '【受検妥当性 - 冗談・不真面目】対話全体において、ふざけ、からかい、あからさまな虚偽・矛盾、または無作為で不誠実な回答傾向が見られますか？'
+  };
+  scoringQuestions.val_concrete_detail = {
+    type: 'noul',
+    instructions: '【受検妥当性 - 具体描写度】対話全体において、実際のセリフ・手順・周囲の反応など、客観的で具体的な描写が豊富に含まれていますか？'
+  };
+  scoringQuestions.val_defensiveness = {
+    type: 'noul',
+    instructions: '【受検妥当性 - 防衛的姿勢】対話全体において、質問の核心を避けたり、自己開示を頑なに拒絶する防衛的な傾向が見られますか？'
+  };
+  scoringQuestions.val_emotional_expressiveness = {
+    type: 'noul',
+    instructions: '【受検妥当性 - 素直な感情表出】対話全体において、取り繕わずに自分の本音・素直な感情や弱みを率直に開示して語っていますか？'
   };
 
   // 1. Workers AI バインディング (env.AI) を優先使用
@@ -1426,7 +1592,7 @@ export async function runClefScoring(
           }
         }
       );
-      const parsed = parseClefScoringResponse(aiRes, 'clef-flash [env.AI binding]');
+      const parsed = parseClefScoringResponse(aiRes, 'clef-flash [55-question multidirectional / env.AI binding]');
       if (parsed) return parsed;
     } catch (aiErr: any) {
       console.warn('[runClefScoring] env.AI.run warning, falling back to HTTP fetch:', aiErr?.message || aiErr);
@@ -1448,7 +1614,7 @@ export async function runClefScoring(
 
     if (res.ok) {
       const data: any = await res.json();
-      const parsed = parseClefScoringResponse(data, 'clef-flash [HTTP Gateway]');
+      const parsed = parseClefScoringResponse(data, 'clef-flash [55-question multidirectional / HTTP Gateway]');
       if (parsed) return parsed;
     } else {
       const errText = await res.text();

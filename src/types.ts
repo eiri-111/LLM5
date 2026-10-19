@@ -32,6 +32,19 @@ export interface ClefScoringBreakdown {
   };
   /** ファセット別エビデンス充足確信度 ('high': 明確な行動事実あり, 'moderate': 言及あり, 'insufficient': 未言及/欠測) */
   facet_confidences?: Record<string, 'high' | 'moderate' | 'insufficient'>;
+  /** 多方向（両極・具体性・妥当性メタ指標）評価データ (55問同時採点) */
+  multidirectional?: {
+    positive_probs: Record<string, number>; // 15ファセットの高特性行動確率 (0.00〜1.00)
+    negative_probs: Record<string, number>; // 15ファセットの低特性行動確率 (0.00〜1.00)
+    concreteness_probs: Record<string, number>; // 15ファセットの具体的行動エビデンス確率 (0.00〜1.00)
+    validity_checks: {
+      social_desirability: number; // 建前・社会的望ましさ偏重度 (0.00〜1.00)
+      mock_or_careless: number; // ふざけ・不真面目・無作為回答度 (0.00〜1.00)
+      concrete_detail: number; // エピソードの具体性・客観描写度 (0.00〜1.00)
+      defensiveness: number; // 防衛的・自己開示拒否度 (0.00〜1.00)
+      emotional_expressiveness: number; // 感情・素直さの表出度 (0.00〜1.00)
+    };
+  };
   source: string;
 }
 

@@ -67,8 +67,9 @@ export interface BARSBehaviorCriteria {
   facetKey: string;
   factor: string;
   facetName: string;
-  positiveBehavior: string; // 該当した場合に行動エビデンスとして評価される具体的行動事実
-  negativeBehavior?: string; // 逆転傾向を示す行動事実
+  positiveBehavior: string; // 該当した場合に高特性として評価される具体的行動事実
+  negativeBehavior: string; // 該当した場合に低特性（内向性・柔軟性・静観等）として評価される具体的行動事実
+  concretenessCriteria: string; // 単なる一般論・抽象論ではなく客観的行動エビデンスが語られたか
 }
 
 export const BARS_RUBRICS: BARSBehaviorCriteria[] = [
@@ -77,19 +78,25 @@ export const BARS_RUBRICS: BARSBehaviorCriteria[] = [
     facetKey: 'facet_openness_intellectual',
     factor: '開放性',
     facetName: '知的好奇心',
-    positiveBehavior: '未知の概念や抽象的な仕組みに対して、自ら背景・理由を調べたり深く考察したりする行動を取った事実があるか'
+    positiveBehavior: '未知の概念や抽象的な仕組みに対して、自ら背景・理由を調べたり深く考察したりする行動を取った事実があるか',
+    negativeBehavior: '複雑な理論や未知の仕組みに深入りせず、実践的・実用的な情報や手近な定番の事柄だけにとどめる行動事実があるか',
+    concretenessCriteria: '調べた対象や思考プロセスに関する具体的・客観的なエピソードが語られているか'
   },
   {
     facetKey: 'facet_openness_aesthetic',
     factor: '開放性',
     facetName: '美的好奇心',
-    positiveBehavior: 'デザイン・芸術・音楽・自然の美しさや雰囲気・文化的な体験に能動的に浸ったり鑑賞したりする行動を取った事実があるか'
+    positiveBehavior: 'デザイン・芸術・音楽・自然の美しさや雰囲気・文化的な体験に能動的に浸ったり鑑賞したりする行動を取った事実があるか',
+    negativeBehavior: '芸術・美的体験や情緒的な鑑賞に特別な関心を払わず、機能性・実利性を優先する行動事実があるか',
+    concretenessCriteria: '実際に触れた作品や場所・鑑賞行動についての具体的描写があるか'
   },
   {
     facetKey: 'facet_openness_creative',
     factor: '開放性',
     facetName: '創造力',
-    positiveBehavior: '前例通りのやり方に固執せず、独自の工夫や新しいアプローチ・オリジナルの解決策を試した行動事実があるか'
+    positiveBehavior: '前例通りのやり方に固執せず、独自の工夫や新しいアプローチ・オリジナルの解決策を試した行動事実があるか',
+    negativeBehavior: '自己流の工夫を避け、確立された手順や過去の実績・マニュアル通りの定番のやり方を忠実に選んだ行動事実があるか',
+    concretenessCriteria: '試した工夫やアプローチの具体的な内容・手順が述べられているか'
   },
 
   // 誠実性 (Conscientiousness)
@@ -97,19 +104,25 @@ export const BARS_RUBRICS: BARSBehaviorCriteria[] = [
     facetKey: 'facet_conscientiousness_organization',
     factor: '誠実性',
     facetName: '組織化',
-    positiveBehavior: '予定が狂ったりタスクが逼迫した際、優先順位を整理し直し、段取り・スケジュールを具体的に組み立て直した行動事実があるか'
+    positiveBehavior: '予定が狂ったりタスクが逼迫した際、優先順位を整理し直し、段取り・スケジュールを具体的に組み立て直した行動事実があるか',
+    negativeBehavior: '計画の厳密な組み直しを行わず、その場の思いつきや成り行き任せで柔軟・即興的に対応した行動事実があるか',
+    concretenessCriteria: '優先順位の付け方やスケジュールの組み直し手順が具体的に語られているか'
   },
   {
     facetKey: 'facet_conscientiousness_productiveness',
     factor: '誠実性',
     facetName: '生産性',
-    positiveBehavior: '途中で投げ出したり先送りにせず、決めたタスクや役割を最後までやり遂げる・リカバリーを実行した行動事実があるか'
+    positiveBehavior: '途中で投げ出したり先送りにせず、決めたタスクや役割を最後までやり遂げる・リカバリーを実行した行動事実があるか',
+    negativeBehavior: '無理にやり遂げようとせず、途中で諦めて寝る・先送りする・最低限の放棄を選んだ行動事実があるか',
+    concretenessCriteria: 'タスクへの取り組み方やリカバリーの具体的な実行内容が語られているか'
   },
   {
     facetKey: 'facet_conscientiousness_responsibility',
     factor: '誠実性',
     facetName: '責任感',
-    positiveBehavior: '他者や締め切りとの約束を守るため、事前に連絡・相談を入れたり、自分の役割を全うしようと誠実に行動した事実があるか'
+    positiveBehavior: '他者や締め切りとの約束を守るため、事前に連絡・相談を入れたり、自分の役割を全うしようと誠実に行動した事実があるか',
+    negativeBehavior: '相手への事前連絡や相談を怠ったり、連絡を後回しにして事態を放置した行動事実があるか',
+    concretenessCriteria: '連絡のタイミングや伝えた内容など、責任ある行動の具体的事実が語られているか'
   },
 
   // 外向性 (Extraversion)
@@ -117,19 +130,25 @@ export const BARS_RUBRICS: BARSBehaviorCriteria[] = [
     facetKey: 'facet_extraversion_sociability',
     factor: '外向性',
     facetName: '社交性',
-    positiveBehavior: '沈黙や集まりの場で、自ら進んで他者に話しかけたり、会話の口火を切ってコミュニケーションを取った行動事実があるか'
+    positiveBehavior: '沈黙や集まりの場で、自ら進んで他者に話しかけたり、会話の口火を切ってコミュニケーションを取った行動事実があるか',
+    negativeBehavior: '自ら話しかけることを控え、沈黙を保つ・一人で静かに過ごす・他者からの話しかけを待つ行動事実があるか',
+    concretenessCriteria: '声かけの有無や対人コミュニケーションの実際の様子が具体的に語られているか'
   },
   {
     facetKey: 'facet_extraversion_assertiveness',
     factor: '外向性',
     facetName: '主張性',
-    positiveBehavior: '周りに流されるだけでなく、自分の意見・希望・提案を堂々と表明し、全体の意思決定をリードしようとした行動事実があるか'
+    positiveBehavior: '周りに流されるだけでなく、自分の意見・希望・提案を堂々と表明し、全体の意思決定をリードしようとした行動事実があるか',
+    negativeBehavior: '自分の希望や主張を押し出さず、他者の意見に同調する・決定を周囲に完全に任せて従った行動事実があるか',
+    concretenessCriteria: '提案した内容や意思表明の具体的なセリフ・立ち回りが語られているか'
   },
   {
     facetKey: 'facet_extraversion_activity',
     factor: '外向性',
     facetName: '活動性',
-    positiveBehavior: 'インドアで静止するだけでなく、能動的に外に出かけたり、活発に動き回ってエネルギーを行動に移した事実があるか'
+    positiveBehavior: 'インドアで静止するだけでなく、能動的に外に出かけたり、活発に動き回ってエネルギーを行動に移した事実があるか',
+    negativeBehavior: '活発な移動や外出を避け、自宅や部屋で静かにリラックスして省エネに過ごした行動事実があるか',
+    concretenessCriteria: '過ごし方や外出・行動の活動量に関する具体的エピソードが語られているか'
   },
 
   // 協調性 (Agreeableness)
@@ -137,19 +156,25 @@ export const BARS_RUBRICS: BARSBehaviorCriteria[] = [
     facetKey: 'facet_agreeableness_compassion',
     factor: '協調性',
     facetName: '思いやり',
-    positiveBehavior: '他者の負担や立場・感情に寄り添い、相手を助けたり気遣う配慮の行動・声かけを行った事実があるか'
+    positiveBehavior: '他者の負担や立場・感情に寄り添い、相手を助けたり気遣う配慮の行動・声かけを行った事実があるか',
+    negativeBehavior: '他者の感情や事情に深入りせず、自分の都合や利害・効率を最優先した行動事実があるか',
+    concretenessCriteria: '相手への配慮や声かけの具体的な振る舞いが語られているか'
   },
   {
     facetKey: 'facet_agreeableness_respect',
     factor: '協調性',
     facetName: '敬意',
-    positiveBehavior: '意見が対立したり相手がミスした際にも、頭ごなしに怒ったり攻撃せず、相手に敬意を払い穏やかに接した行動事実があるか'
+    positiveBehavior: '意見が対立したり相手がミスした際にも、頭ごなしに怒ったり攻撃せず、相手に敬意を払い穏やかに接した行動事実があるか',
+    negativeBehavior: '相手のミスや対立に対して不満や苛立ちを露わにする、または批判的・冷淡な態度を取った行動事実があるか',
+    concretenessCriteria: '対立やミス発生時の実際の口調・接し方の具体的事実が語られているか'
   },
   {
     facetKey: 'facet_agreeableness_trust',
     factor: '協調性',
     facetName: '信頼',
-    positiveBehavior: '周囲の人を過剰に疑わず、好意的に受け止めて協調・協力して進めようとした行動事実があるか'
+    positiveBehavior: '周囲の人を過剰に疑わず、好意的に受け止めて協調・協力して進めようとした行動事実があるか',
+    negativeBehavior: '他者の意図や能力に疑念を抱き、警戒して自分一人で抱え込む・距離を置いた行動事実があるか',
+    concretenessCriteria: '他者との協力体制や信頼に関する具体的姿勢が語られているか'
   },
 
   // 情緒安定性 (Neuroticism 逆転 / Emotional Stability)
@@ -157,21 +182,38 @@ export const BARS_RUBRICS: BARSBehaviorCriteria[] = [
     facetKey: 'facet_neuroticism_anxiety',
     factor: '情緒安定性',
     facetName: '不安の低さ・ストレス対処',
-    positiveBehavior: 'プレッシャーや不測の事態に直面した際、パニックにならず深呼吸や気分転換を行い、冷静に自分を落ち着かせた行動事実があるか'
+    positiveBehavior: 'プレッシャーや不測の事態に直面した際、パニックにならず深呼吸や気分転換を行い、冷静に自分を落ち着かせた行動事実があるか',
+    negativeBehavior: '突発的なトラブルや切迫に対して強い焦りや動揺・不安を感じて取り乱した行動事実があるか',
+    concretenessCriteria: 'プレッシャー直面時の心理状態と対処行動の具体性が語られているか'
   },
   {
     facetKey: 'facet_neuroticism_depression',
     factor: '情緒安定性',
     facetName: '抑うつの低さ・気分の安定',
-    positiveBehavior: 'トラブルや不本意な出来事の後、過度に落ち込み続けたり自責の念に囚われず、気持ちを前向きに切り替えた行動事実があるか'
+    positiveBehavior: 'トラブルや不本意な出来事の後、過度に落ち込み続けたり自責の念に囚われず、気持ちを前向きに切り替えた行動事実があるか',
+    negativeBehavior: '嫌な出来事やミスを長く引きずり、落ち込んだりモヤモヤした気分から抜け出せなかった行動事実があるか',
+    concretenessCriteria: '気分の切り替えにかかった時間や事後の過ごし方の具体的事実が語られているか'
   },
   {
     facetKey: 'facet_neuroticism_volatility',
     factor: '情緒安定性',
     facetName: '感情変動の低さ・動じにくさ',
-    positiveBehavior: '突発的なアクシデントや他人の手違いに対して、感情的にならず冷静に対処策を実行した行動事実があるか'
+    positiveBehavior: '突発的なアクシデントや他人の手違いに対して、感情的にならず冷静に対処策を実行した行動事実があるか',
+    negativeBehavior: '予期せぬ変更やトラブルに対して感情の起伏が激しくなり、苛立ちや落胆を行動・態度に出した事実があるか',
+    concretenessCriteria: 'アクシデント発生時の瞬間的なリアクションの具体性が語られているか'
   }
 ];
+
+/**
+ * 受検態度・妥当性メタチェック（5問）の基準
+ */
+export const VALIDITY_CRITERIA = {
+  social_desirability: '回答が一般的な「こうあるべき」という模範解答・建前ばかりで構成され、本人の生々しい行動が隠されている傾向があるか',
+  mock_or_careless: '冗談、からかい、あからさまな矛盾、または無作為・不真面目な回答傾向が見られるか',
+  concrete_detail: '発言内に具体的な状況・他者との会話セリフ・取った行動の手順などの客観的描写が豊富に含まれているか',
+  defensiveness: '質問に対して直接答えず話題を逸らす、または自己開示を意図的に拒絶・防衛する傾向があるか',
+  emotional_expressiveness: '取り繕わず、自分の素直な感情や弱み・ありのままの反応を率直に開示して語っているか'
+};
 
 /**
  * STAR法（Situation, Task, Action, Result）に基づく深掘りプロービングプロンプトの指針

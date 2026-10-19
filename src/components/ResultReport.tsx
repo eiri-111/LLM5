@@ -306,6 +306,47 @@ export const ResultReport: React.FC<ResultReportProps> = ({
         </p>
       </div>
 
+      {/* Multidirectional Validity Insights */}
+      {result.clef_scoring_data?.multidirectional?.validity_checks && (
+        <div className="insight-block" style={{ borderLeft: '4px solid #4285f4', backgroundColor: '#f8fafd' }}>
+          <h3 className="card-section-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>9. 対話データ測定妥当性インサイト（Clef多方向検証）</span>
+            <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#1a73e8', backgroundColor: '#e8f0fe', padding: '2px 8px', borderRadius: 12 }}>
+              55問同時検証
+            </span>
+          </h3>
+          <p style={{ fontSize: '0.82rem', color: '#5f6368', marginBottom: '0.75rem' }}>
+            回答者の発話から、建前バイアスの有無や具体的行動事実の描写度を多面的にリアルタイム判定した学術検証指標です。
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.5rem' }}>
+            <div style={{ padding: '0.5rem 0.65rem', backgroundColor: '#ffffff', borderRadius: '6px', border: '1px solid #e0e5eb' }}>
+              <div style={{ fontSize: '0.72rem', color: '#5f6368' }}>行動具体性（エビデンス度）</div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#137333', marginTop: 2 }}>
+                {Math.round(result.clef_scoring_data.multidirectional.validity_checks.concrete_detail * 100)}%
+              </div>
+            </div>
+            <div style={{ padding: '0.5rem 0.65rem', backgroundColor: '#ffffff', borderRadius: '6px', border: '1px solid #e0e5eb' }}>
+              <div style={{ fontSize: '0.72rem', color: '#5f6368' }}>素直な感情開示度</div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1a73e8', marginTop: 2 }}>
+                {Math.round(result.clef_scoring_data.multidirectional.validity_checks.emotional_expressiveness * 100)}%
+              </div>
+            </div>
+            <div style={{ padding: '0.5rem 0.65rem', backgroundColor: '#ffffff', borderRadius: '6px', border: '1px solid #e0e5eb' }}>
+              <div style={{ fontSize: '0.72rem', color: '#5f6368' }}>建前・社会的望ましさ</div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: result.clef_scoring_data.multidirectional.validity_checks.social_desirability > 0.6 ? '#b06000' : '#5f6368', marginTop: 2 }}>
+                {Math.round(result.clef_scoring_data.multidirectional.validity_checks.social_desirability * 100)}%
+              </div>
+            </div>
+            <div style={{ padding: '0.5rem 0.65rem', backgroundColor: '#ffffff', borderRadius: '6px', border: '1px solid #e0e5eb' }}>
+              <div style={{ fontSize: '0.72rem', color: '#5f6368' }}>不真面目・無作為傾向</div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: result.clef_scoring_data.multidirectional.validity_checks.mock_or_careless > 0.3 ? '#d93025' : '#137333', marginTop: 2 }}>
+                {Math.round(result.clef_scoring_data.multidirectional.validity_checks.mock_or_careless * 100)}%
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Share & Actions */}
       <div className="actions-section">
         <h3 className="card-section-title" style={{ fontSize: '0.92rem' }}>
