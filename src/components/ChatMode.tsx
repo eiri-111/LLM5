@@ -148,6 +148,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
         let accumulatedText = '';
         let buffer = '';
         let readyFlagFromServer = false;
+        let streamError: string | null = null;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -174,7 +175,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
                   readyFlagFromServer = true;
                 }
               } else if (event.type === 'error') {
-                throw new Error(event.error);
+                streamError = event.error || 'ストリーム通信エラーが発生しました';
               }
             } catch (err: any) {
               if (err.message && !err.message.includes('JSON')) {
@@ -182,9 +183,20 @@ export const ChatMode: React.FC<ChatModeProps> = ({
               }
             }
           }
+          if (streamError) break;
         }
 
-        const finalReply = sanitizeMessage(accumulatedText) || 'ご回答ありがとうございます。';
+        if (streamError) {
+          throw new Error(streamError);
+        }
+
+        let finalReply = sanitizeMessage(accumulatedText);
+        if (!finalReply) {
+          finalReply = 'お答えいただきありがとうございます！\n少し場面を変えて、例えば最近、友人や誰かと何かを一緒に決めたり話したりした時の出来事について伺えますか？その時、具体的にどんな状況でしたか？';
+        } else if (!readyFlagFromServer && !isAssistantCompletionReply(finalReply) && !finalReply.includes('？') && !finalReply.includes('?')) {
+          finalReply += '\n\nちなみに、最近の学校や日常の生活の中で、誰かと一緒に何かをしたり話したりした場面は何かありましたか？';
+        }
+
         setMessages([...newMessages, { role: 'assistant', content: finalReply }]);
         setStreamingText('');
 
@@ -197,7 +209,13 @@ export const ChatMode: React.FC<ChatModeProps> = ({
         }
       } else {
         const data: any = await res.json();
-        const cleanReply = sanitizeMessage(data.response);
+        let cleanReply = sanitizeMessage(data.response);
+        if (!cleanReply) {
+          cleanReply = 'お答えいただきありがとうございます！\n少し場面を変えて、例えば最近、友人や誰かと何かを一緒に決めたり話したりした時の出来事について伺えますか？その時、具体的にどんな状況でしたか？';
+        } else if (!data.is_ready_for_analysis && !isAssistantCompletionReply(cleanReply) && !cleanReply.includes('？') && !cleanReply.includes('?')) {
+          cleanReply += '\n\nちなみに、最近の学校や日常の生活の中で、誰かと一緒に何かをしたり話したりした場面は何かありましたか？';
+        }
+
         setMessages([...newMessages, { role: 'assistant', content: cleanReply }]);
         const endsWithQuestion = /[？?]\s*$/.test(cleanReply);
         if (

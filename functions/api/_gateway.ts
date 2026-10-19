@@ -309,6 +309,43 @@ export const FACET_DEFINITIONS: FacetDefinition[] = [
 
 
 
+export const FACTOR_TRIGGER_PROMPTS: Record<FactorNameJP, string> = {
+  '開放性': '最近ふと気になってスマホやPC・本で詳しく調べたことや、新しく見始めた作品・ゲーム・動画、あるいは普段行かない場所やお店に行った時の出来事',
+  '誠実性': '学校の課題・レポートやテスト勉強、あるいはバイトや用事・約束など、「少し面倒だけど期日までにやらなければならなかったこと」にどう取り組んだか（いつ着手したか、準備や段取り）の出来事',
+  '外向性': '最近、友人・家族・同僚・知り合いなど「誰かと一緒に何かをしたり話したりした時」の出来事（自分から声をかけたか、どんな話で盛り上がったか）',
+  '協調性': '周囲の人と意見や考えが食い違った時や、誰かが困っていた時、あるいは何かを頼まれた時の出来事（角を立てずにどう伝えたか、どう手助けしたか）',
+  '情緒安定性': '予定通りに進まなかったハプニングや、ちょっとしたトラブル・嫌なことが起きた最近の出来事（その場でどう対処し、その後どう気分を切り替えたか）'
+};
+
+/**
+ * ユーザーの発言が袋小路（否定、メタ動作、短文のみ）に陥っているかを厳密に判定
+ */
+export function isStuckOrNegativeResponse(messages: ChatMessage[]): boolean {
+  const userMessages = messages.filter(m => m.role === 'user');
+  if (userMessages.length === 0) return false;
+  const lastUserMsg = userMessages[userMessages.length - 1].content.trim();
+
+  // 1. 否定的な短い返答（「ない」「なかった」「とくになにも」「いつもと一緒」「動いてない」等）
+  const negativeRegex = /^(特に|とくに)?(ない|なかった|なにも|何もない|何も|ないです|なかったです|ないよ|ないけど|特になし|なし|普通|ふつう|いつもと一緒|いつも通り|同じ|動いてない|してない|準備してない|連絡してない|そんなことない|そんなことなかった|わからない|覚えてない)[。！!?？\s]*$/i;
+  if (negativeRegex.test(lastUserMsg)) return true;
+
+  // 2. アンケート回答のメタ動作（「質問に答えてる」「スマホしか見てない」「画面」「両手で」「人差し指」「送信ボタン」等）
+  const metaRegex = /(質問に答|回答に答|これをしてる|スマホしか|文字入力|キーボード|送信ボタン|タップ|アプリ|指で|両手で|人差し指|寝る姿勢|クライ)/;
+  if (metaRegex.test(lastUserMsg)) return true;
+
+  // 3. 直近2ターンのユーザー発言がいずれも極小（10文字以下）
+  if (userMessages.length >= 2) {
+    const prevUserMsg = userMessages[userMessages.length - 2].content.trim();
+    if (lastUserMsg.length <= 8 && prevUserMsg.length <= 8) {
+      if (/^(？|\?|はい|いいえ|それだけ？|おわり？)$/.test(lastUserMsg) || /^(？|\?|はい|いいえ)$/.test(prevUserMsg)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 /**
  * 対話履歴から各ビッグファイブ因子の進捗を解析（ルールベース・フォールバック兼用）
  * ユーザーの実際の発言内容（エピソード）から15ファセットの言及を複数同時に検出する
@@ -432,8 +469,12 @@ function parseClefPatternCDecision(
     target.episode_depth_status?.choice ||
     (typeof target.episode_depth_status === 'string' ? target.episode_depth_status : null);
 
-  const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
-  const userSaidNoEpisode = /(特にない|思いつかない|あまりない|覚えていない|わからない|ないです)/.test(lastUserMsg);
+  const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content.trim() || '';
+  const userSaidNoEpisode =
+    /(特に(ない|なかった|なにも|何もない)|とくに(ない|なかった|なにも|何もない)|思いつかない|あまりない|覚えていない|覚えてない|わからない|ないです|なかったです|ないですね|いつもと一緒|いつも通り|してない|準備してない|動いてない|そんなことなかった)/.test(lastUserMsg) ||
+    /^(ない|なかった|特になし|なし|ないよ)[。！!?？\s]*$/.test(lastUserMsg);
+
+  const isStuck = isStuckOrNegativeResponse(messages);
 
   // パターンC 完了判定:
   // 1) 最低ターン数（6ターン）以上
@@ -470,13 +511,14 @@ function parseClefPatternCDecision(
   });
 
   // 深掘りモード vs 新展開モードの決定:
-  // ユーザーがエピソードを話し、Clef-flashが「深掘りが必要（needs_behavioral_probe）」と判定、
-  // または部分ヒント（partialFacets）がある限り、機械的な回数制限（consecutiveDeepen）なしで丁寧に深掘りする
-  const hasInitialEpisodeContent = userCount > 1 || lastUserMsg.trim().length >= 8;
+  // ユーザーがエピソードを話し、Clef-flashが「深掘りが必要（needs_behavioral_probe）」と判定し、
+  // かつ手詰まり・否定回答・メタ回答ではない場合のみ丁寧に深掘りする
+  const hasInitialEpisodeContent = userCount > 1 || lastUserMsg.length >= 8;
   const shouldDeepen =
     userCount >= 1 &&
     hasInitialEpisodeContent &&
     !userSaidNoEpisode &&
+    !isStuck &&
     (episodeDepthChoice === 'needs_behavioral_probe' || partialFacets.length > 0 || userCount === 1);
 
   if (shouldDeepen) {
@@ -497,9 +539,9 @@ function parseClefPatternCDecision(
       is_ready_for_final_analysis: false,
       target_question_strategy: [
         `【現在のエピソードの自然な深掘り】`,
-        `ユーザーが直前に語ってくれたエピソード（場面・出来事）の話題は絶対に変えず、まずはその内容をカギカッコなしで自然に受け止めてください。`,
-        `その場面の中で、ユーザーが【具体的に何と言ったか／口に出さなかったか／どう動いたか】という客観的な事実（カメラに映る振る舞い）を1つ尋ねてください。`,
-        `（※「なぜそう思ったのか」「どんな原因があるか」といった内省・心理的理由を聞くことは厳禁です。事実・振る舞いを尋ねてください）`,
+        `ユーザーが直前に語ってくれたエピソード（場面・出来事）の話題は変えず、まずはその内容をカギカッコなしで自然に1文で受け止めてください。`,
+        `その場面の中で、ユーザーが【具体的に何と言ったか／どう動いたか／どう対処したか】という客観的な事実（振る舞い）を1つ尋ねてください。`,
+        `（※架空の前提を作ったり、「なぜそう思ったのか」という内省を聞くことは厳禁です。事実を尋ねてください）`,
         `今の文脈に自然に繋がる観点（${targetNames}の参考ヒント）:`,
         targetHints
       ].join('\n'),
@@ -507,15 +549,15 @@ function parseClefPatternCDecision(
     };
   }
 
-  // 話題の自然な展開・新場面の提示モード（固定シチュエーションを廃止し、直前の文脈を活かした動的展開）
-  // まだエビデンスが足りない未充足因子・ファセットを特定
+  // 話題の完全切り替え・新シチュエーション提示モード
+  // まだエビデンスが足りない未充足因子・ファセットを最優先で特定
   const targetFactor = uncoveredFactors[0] || '誠実性';
   const missingFacetsInFactor = FACET_DEFINITIONS.filter(
     f => f.factor === targetFactor && (facetProbs[f.key] ?? 0) < FACET_EVIDENCE_THRESHOLD
   );
   const targetFacets = (missingFacetsInFactor.length > 0 ? missingFacetsInFactor : contextualMissingFacets).slice(0, 3);
   const targetNames = targetFacets.map(f => `${f.factor}［${f.name}］`).join('・');
-  const targetHints = targetFacets.map(f => `・${f.factor}（${f.name}）: ${f.probeHint}`).join('\n');
+  const triggerPrompt = FACTOR_TRIGGER_PROMPTS[targetFactor] || '誰かと一緒に何かをしたり話したりした最近の出来事';
 
   return {
     focus_dimension: targetFactor,
@@ -524,14 +566,16 @@ function parseClefPatternCDecision(
     evidenced_facets_count: totalEvidencedFacets,
     is_ready_for_final_analysis: false,
     target_question_strategy: [
-      `【話題の自然な展開・別場面の提示（狙い: ${targetNames}）】`,
-      `直前までのユーザーの話（学校・ゼミ・仕事・対人関係など）を温かく受け止めた上で、急に機械的なお題を投げずに、自然な会話の橋渡し文（クッション）を挟んでください。`,
-      `直前の文脈の別のアスペクト（例: その場面での準備や段取り、予期せぬトラブル時の対応、その後の気分の切り替えなど）、または日常の関連する場面について、ユーザーが実際にどう動いたか・どう対処したかの具体的な出来事（エピソード）を1つ尋ねてください。`,
-      `（※固定のお題を機械的に繰り返さず、直前の会話の流れから滑らかに展開してください）`,
-      `引き出したい観点（${targetNames}の参考ヒント）:`,
-      targetHints
+      `【話題の完全切り替え・新しい日常場面の提示（狙い: ${targetFactor} / ${targetNames}）】`,
+      `ユーザーの直前の発言を「お答えいただきありがとうございます！」と1文でさらりと受け止めてください。`,
+      `【最重要・深掘り禁止】：直前の話題（家でのゲーム、スマホの操作、部屋の様子、否定回答など）は完全に終了し、これ以上絶対に引きずらないでください。`,
+      `代わりに、未充足の性格特性【${targetFactor}】の行動エピソードを引き出すため、以下の新しい日常シチュエーションを具体的に提示して、最近の出来事（エピソード）を1つ尋ねてください。`,
+      `▼提示する新しい場面テーマ:`,
+      `「${triggerPrompt}」`,
+      `問いかけの例: 「お答えいただきありがとうございます！では少し場面を変えて、例えば【${triggerPrompt}】について伺えますか？その時、具体的にどんな状況でしたか？」`,
+      `（※必ず上記の具体的な日常場面をユーザーに提示し、末尾は必ず『？』で終わる質問にしてください。今いる部屋の様子やスマホ操作などを聞くことは絶対に禁止です）`
     ].join('\n'),
-    notes: `Clef-flash Pattern C [contextual_transition:${targetFactor}] (evidenced: ${totalEvidencedFacets}/15, target: ${targetNames})`
+    notes: `Clef-flash Pattern C [reset_to_new_situation:${targetFactor}] (evidenced: ${totalEvidencedFacets}/15, target: ${targetNames})`
   };
 }
 
@@ -668,9 +712,47 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
 }
 
 /**
+ * 質問係AIに渡す対話履歴をフォーマット
+ * 直近のやり取りを重視し、「ご回答ありがとうございます。」「はい」「？」等の無意味なスタック・ループを除去・圧縮
+ */
+export function formatInterviewerMessages(messages: ChatMessage[]): { role: string; content: string }[] {
+  // 直近最大12メッセージ（6往復）を取り出す
+  const recent = messages.slice(-12);
+  const formatted: { role: string; content: string }[] = [];
+
+  for (let i = 0; i < recent.length; i++) {
+    const m = recent[i];
+    const role = m.role === 'assistant' ? 'assistant' : 'user';
+    const content = m.content.trim();
+
+    // 「ご回答ありがとうございます。」単体で質問が含まれないメッセージは、モデルがそれを真似してループするためスキップ
+    if (role === 'assistant' && /^(ご回答ありがとうございます[。！!]*|承知いたしました[。！!]*)$/.test(content)) {
+      continue;
+    }
+    // 直前の同一ロールの重複を避ける
+    if (formatted.length > 0 && formatted[formatted.length - 1].role === role) {
+      formatted[formatted.length - 1].content += `\n${content}`;
+    } else {
+      formatted.push({ role, content });
+    }
+  }
+
+  // もし空になった場合は最新の1件を入れる
+  if (formatted.length === 0 && messages.length > 0) {
+    const last = messages[messages.length - 1];
+    formatted.push({
+      role: last.role === 'assistant' ? 'assistant' : 'user',
+      content: last.content
+    });
+  }
+
+  return formatted;
+}
+
+/**
  * インタビュアーAI用のシステムプロンプトを生成
- * パターンC: 「同一エピソードの2〜3往復深掘り（カメラに映る行動・発言の引き出し）」と
- * 「複数因子が活性化する新シチュエーション提示」を明確に制御する
+ * パターンC: 「同一エピソードの2〜3往復深掘り（行動・発言の引き出し）」と
+ * 「未充足因子に応じた新シチュエーション提示」を明確に制御する
  */
 function buildInterviewerInstruction(strategy: AnalystStrategy): string {
   const isReady = strategy.is_ready_for_final_analysis;
@@ -695,20 +777,19 @@ function buildInterviewerInstruction(strategy: AnalystStrategy): string {
     actionMode === 'deepen_episode'
       ? `
 【現在のモード：今のエピソードの自然な深掘り（フォローアップ）】
-- 直前のユーザーの回答内容をカギカッコなしで自然に1文で受け止めてください（「その気持ち、理解できます」のような抽象的なテンプレ共感ではなく、相手が話した具体的な状況に沿って受け止めてください）。
-- 話題や場面は絶対に切り替えず、直前のエピソードの中でユーザーが【実際に何と言ったか／口に出さなかったか／どう動いたか】を尋ねてください。
-- ユーザーが「〜と思った」と心の中の感想や自己評価（「主張ができない」「〜が強み」等）を答えた場合は、「なぜですか？」「原因は何ですか？」と理由を聞くのは厳禁です。必ず「その場面で、実際には相手に口に出して伝えましたか？それとも周りに合わせましたか？」のように【実際の行動・発言】へ変換して尋ねてください。
+- 直前のユーザーの回答内容をカギカッコなしで自然に1文で受け止めてください。
+- 話題や場面は絶対に切り替えず、直前のエピソードの中でユーザーが【実際に何と言ったか／どう動いたか／どう対処したか】という事実を尋ねてください。
+- ユーザーが話していない架空の行動（「布団に入った」「翌日の準備をした」等）を勝手に作って質問することは厳禁です。
 `
       : `
-【現在のモード：話題の自然な展開・別アスペクトの提示】
-- 直前のユーザーの回答に対して、カギカッコなしで1〜2文で具体的に受け止めを述べてください。
-- 急に全く無関係なお題に飛ばすのではなく、直前の話題（ゼミ、活動、仕事、対人関係など）を枕詞にして、「ちなみに、そうした〇〇を進める中で〜」や「そうした場に限らず、普段〜」のように滑らかに橋渡し（クッション文）を挟んでから次の場面を尋ねてください。
-- 決まりきった固定の定型文やお題を機械的に繰り返さず、直前の会話の流れに合わせた自然な問いかけにしてください。
+【現在のモード：新しい日常場面の提示（未充足因子の収集）】
+- 直前のユーザーの回答に対して、「お答えいただきありがとうございます！」と1文でさらりと受け止めてください。
+- 【最重要】：直前の話題（部屋での過ごし方やスマホ操作など）は完全に終了し、未充足の性格因子【${focusDimension}】を引き出すため、分析官の指示にある【新しい日常場面テーマ】を具体的に提示して次のエピソードを尋ねてください。
 `;
 
   return `
 あなたは心理学に基づく行動エピソード・インタビュアーです。
-ユーザーが実際に経験した「場面（エピソード）」と「その中での具体的な振る舞い（発言・行動・選択・事後の様子）」を引き出すことがあなたの唯一の役割です。
+ユーザーが実際に経験した「日常生活の場面（エピソード）」と「その中での具体的な振る舞い（発言・行動・選択・事後の様子）」を引き出すことがあなたの唯一の役割です。
 
 裏方の分析官AI（Clef-flash）から以下の戦略指示が届いています:
 【分析官の指示】:
@@ -717,19 +798,23 @@ ${targetStrategy}
 ${modeSpecificGuide}
 【行動面接の絶対ルール（違反厳禁）】
 1. 必ず丁寧で親しみやすい敬語を使用してください。
-2. 1回の発言で聞く質問は「1つ（または密接に関連する具体的な問いかけ）」に絞り、長すぎない自然な会話文（3〜4文程度）にしてください。複数の質問を畳み掛けないでください。
-3. **不自然なカギカッコ出力の禁止**: 1文目の相槌や質問文をカギカッコ（「 」）で括って出力しないでください。普通の人間同士の自然な会話文としてそのまま出力してください。
-4. **勝手な終了宣言・締めくくりの絶対禁止**: この対話セッションは現在進行中であり、まだ終了していません。「今回のインタビューはこれで終了となります」などの終了宣言は絶対にしないでください。
-5. **【最重要・厳禁】「なぜ？」「原因は何ですか？」という内省・心理的理由の質問禁止**:
-   「なぜそう思ったのですか？」「原因は何だと思いますか？」「どんな考えが浮かびましたか？」といった内省や心理的背景・自己分析を質問することは絶対に禁止です。行動面接では、頭の中の理由ではなく「カメラに映る実際の行動（具体的に何と言ったか、何を言わなかったか、どう動いたか）」という客観的な事実のみを尋ねてください。
-6. **【最重要・厳禁】心理テストの因子や選択肢を提示することの絶対禁止**:
+2. **【必須・出力構成】必ず［相手の回答への短い受け止め（1文）］＋［次の具体的な質問（1〜2文、必ず『？』で終わる）］を1つのメッセージとして出力してください。「ご回答ありがとうございます。」などの相槌だけで発言を終えることは絶対に禁止です。**
+3. **【最重要・厳禁】アンケート回答中のメタ動作・物理環境の質問の絶対禁止**:
+   「今スマホをどう持っているか」「どの指で入力しているか」「キーボードのどこをタッチしたか」「部屋の明るさや周囲の音」「画面のどこを押したか」等、アンケート回答中そのものの端末操作や部屋の物理環境についての質問は絶対に禁止です。質問は必ず、日常生活・社会生活における過去や最近の具体的なエピソード（学校・仕事・友人・家族・趣味・課題・トラブル等の場面）を対象にしてください。
+4. **【最重要・厳禁】ユーザーが言っていない架空の前提・捏造（ハルシネーション）の禁止**:
+   ユーザーが言っていない事実（例：「布団に入った」「カバンの準備をした」「友達から連絡が来た」など）を勝手に作って質問してはいけません。ユーザーが実際に言及した事実だけを前提としてください。
+5. **不自然なカギカッコ出力の禁止**: 1文目の相槌や質問文をカギカッコ（「 」）で括って出力しないでください。普通の人間同士の自然な会話文としてそのまま出力してください。
+6. **勝手な終了宣言・締めくくりの絶対禁止**: この対話セッションは現在進行中であり、まだ終了していません。「今回のインタビューはこれで終了となります」などの終了宣言は絶対にしないでください。
+7. **【最重要・厳禁】「なぜ？」「原因は何ですか？」という内省・心理的理由の質問禁止**:
+   「なぜそう思ったのですか？」「原因は何だと思いますか？」「どんな考えが浮かびましたか？」といった内省や心理的背景・自己分析を質問することは絶対に禁止です。頭の中の理由ではなく「カメラに映る実際の行動（具体的に何と言ったか、何を言わなかったか、どう動いたか）」という客観的な事実のみを尋ねてください。
+8. **【最重要・厳禁】心理テストの因子や選択肢を提示することの絶対禁止**:
    「〜という不安からですか？それとも〜を尊重してですか？」のように、心理学的な仮説や選択肢を並べてユーザーに選ばせる質問は絶対にしないでください。選択肢を与えず、「その時、具体的にどんな状況で、どう動きましたか？」と事実を自由に答えさせてください。
-7. **【最重要・厳禁】説教・アドバイス・上から目線の評価コメントの禁止**:
-   「〜することは大切ですよね」「将来のチームワーク向上のための重要なステップです」「〜を改善していきましょう」のような、教師やカウンセラー気取りのアドバイス・説教・価値判断は一切言わないでください。あなたの役割は評価者・指導者ではなく、客観的な事実を聞き出すインタビュアーです。
-8. **【必須】自己評価を言われたら「具体的な場面（エピソード）」へ引き戻す**:
-   ユーザーが「主張ができない」「アイデアを出すのが得意」「〇〇が苦手」といった一般的な自己評価や性格を語った場合は、その理由を聞くのではなく、「例えば最近、そのようにアイデアが浮かんだのに主張しなかった具体的な場面はありましたか？その時は誰とどんな話をしていましたか？」のように、必ず直近の【1つの具体的な場面（エピソード）】を事実として尋ねてください。
-9. 「あなたの誠実性を測るために〜」のような検査の裏側の意図や専門用語（ビッグファイブ、ファセット等）は絶対に出さないでください。
-10. 思考プロセスや内部推論（<thought>や<think>タグなど）は一切出力に含めず、ユーザーへの発話文のみを直接出力してください。
+9. **【最重要・厳禁】説教・アドバイス・上から目線の評価コメントの禁止**:
+   「〜することは大切ですよね」「将来のチームワーク向上のための重要なステップです」「〜を改善していきましょう」のような、教師やカウンセラー気取りのアドバイス・説教・価値判断は一切言わないでください。
+10. **【必須】手詰まり・否定回答時の対応**:
+    ユーザーが「特にない」「いつもと一緒」「何もしなかった」等の否定・消極的な回答をした場合、その話題に固執して細部を聞き出そうとするのを直ちにやめ、「承知いたしました！」とサラッと受け止めた上で、指示された新しい日常のシチュエーション（課題、友人関係、ハプニングなど）を提示して別のエピソードを尋ねてください。
+11. 「あなたの誠実性を測るために〜」のような検査の裏側の意図や専門用語（ビッグファイブ、ファセット等）は絶対に出さないでください。
+12. 思考プロセスや内部推論（<thought>や<think>タグなど）は一切出力に含めず、ユーザーへの発話文のみを直接出力してください。
 `;
 }
 
@@ -748,11 +833,7 @@ export async function runInterviewerStream(
   const isReady = strategy.is_ready_for_final_analysis;
   const targetModel = modelName || 'dynamic/llm5';
   const interviewerInstruction = buildInterviewerInstruction(strategy);
-
-  const formattedMessages = messages.map(m => ({
-    role: m.role === 'assistant' ? 'assistant' : 'user',
-    content: m.content
-  }));
+  const formattedMessages = formatInterviewerMessages(messages);
 
   const res = await fetch(endpoint, {
     method: 'POST',
@@ -796,6 +877,8 @@ export async function runInterviewerStream(
       let buffer = '';
       let isInsideThinking = false;
       let tagBuffer = '';
+      let rawAccumulatedText = '';
+      let cleanAccumulatedText = '';
 
       try {
         while (true) {
@@ -817,6 +900,8 @@ export async function runInterviewerStream(
               const parsed = JSON.parse(dataStr);
               const content = parsed.choices?.[0]?.delta?.content;
               if (content) {
+                rawAccumulatedText += content;
+
                 // 思考タグ (<thought>, <think>, <|channel>thought) のリアルタイム除去
                 let cleanChunk = '';
                 for (let i = 0; i < content.length; i++) {
@@ -876,6 +961,7 @@ export async function runInterviewerStream(
                 }
 
                 if (cleanChunk) {
+                  cleanAccumulatedText += cleanChunk;
                   const chunkEvent = JSON.stringify({ type: 'chunk', text: cleanChunk });
                   controller.enqueue(encoder.encode(`data: ${chunkEvent}\n\n`));
                 }
@@ -897,8 +983,30 @@ export async function runInterviewerStream(
           !tagBuffer.startsWith('<thought') &&
           !tagBuffer.startsWith('<|channel>thought')
         ) {
+          cleanAccumulatedText += tagBuffer;
           const chunkEvent = JSON.stringify({ type: 'chunk', text: tagBuffer });
           controller.enqueue(encoder.encode(`data: ${chunkEvent}\n\n`));
+        }
+
+        // 思考タグがリアルタイムで解けなかった場合の救済フォールバック
+        if (!cleanAccumulatedText && rawAccumulatedText) {
+          const fallbackClean = cleanModelOutput(rawAccumulatedText);
+          if (fallbackClean) {
+            cleanAccumulatedText = fallbackClean;
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'chunk', text: fallbackClean })}\n\n`));
+          }
+        }
+
+        // 完了モード以外で、万一テキストが空、または質問記号（？）が含まれていない場合の自動補完
+        if (!isReady && strategy.action_mode !== 'complete') {
+          const triggerPrompt = FACTOR_TRIGGER_PROMPTS[strategy.focus_dimension as FactorNameJP] || '普段の生活や最近の出来事の中で、誰かと一緒に何かをしたり話したりしたこと';
+          if (!cleanAccumulatedText.trim()) {
+            const fallbackReply = `お答えいただきありがとうございます！\n少し場面を変えて、例えば【${triggerPrompt}】について伺えますか？その時、具体的にどんな状況でしたか？`;
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'chunk', text: fallbackReply })}\n\n`));
+          } else if (!cleanAccumulatedText.includes('？') && !cleanAccumulatedText.includes('?')) {
+            const followUpQuestion = `\n\nちなみに、例えば【${triggerPrompt}】について、具体的にどう動いたか教えていただけますか？`;
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'chunk', text: followUpQuestion })}\n\n`));
+          }
         }
 
         const doneEvent = JSON.stringify({
@@ -930,11 +1038,7 @@ export async function runInterviewer(
   const isReady = strategy.is_ready_for_final_analysis;
   const targetModel = modelName || 'dynamic/llm5';
   const interviewerInstruction = buildInterviewerInstruction(strategy);
-
-  const formattedMessages = messages.map(m => ({
-    role: m.role === 'assistant' ? 'assistant' : 'user',
-    content: m.content
-  }));
+  const formattedMessages = formatInterviewerMessages(messages);
 
   try {
     const res = await fetch(endpoint, {
@@ -952,7 +1056,14 @@ export async function runInterviewer(
 
     if (res.ok) {
       const data = await res.json();
-      const reply = extractResponseText(data) || 'お答えいただきありがとうございます！';
+      let reply = extractResponseText(data);
+      if (!reply.trim()) {
+        const triggerPrompt = FACTOR_TRIGGER_PROMPTS[strategy.focus_dimension as FactorNameJP] || '普段の生活や最近の出来事';
+        reply = `お答えいただきありがとうございます！少し場面を変えて、例えば【${triggerPrompt}】について伺えますか？その時、具体的にどんな状況でしたか？`;
+      } else if (!isReady && strategy.action_mode !== 'complete' && !reply.includes('？') && !reply.includes('?')) {
+        const triggerPrompt = FACTOR_TRIGGER_PROMPTS[strategy.focus_dimension as FactorNameJP] || '普段の生活や最近の出来事';
+        reply += `\n\nちなみに、例えば【${triggerPrompt}】について、具体的にどう動いたか教えていただけますか？`;
+      }
       return { reply, isReady };
     } else {
       const errText = await res.text();
