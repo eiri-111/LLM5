@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { ChatMessage, UserProfile } from '../types';
+import { buildInitialGreeting } from '../data/scenarios';
 
 interface ChatModeProps {
   userProfile: UserProfile | null;
@@ -10,9 +11,6 @@ interface ChatModeProps {
   onSkipToResult?: () => void;
   showToast: (msg: string) => void;
 }
-
-const INITIAL_GREETING =
-  "本調査へのご協力ありがとうございます。\nこれより、実際の日常の場面の中であなたがどのように振る舞っているかを伺います。\n\n「自分はこういう性格だ」と難しく考えず、その場面を思い浮かべて「実際に何と言ったか・どう動いたか」を、普段通りの言葉でお気軽にお話しください。\n\nはじめに、あなたが普段よく過ごしていて「自分らしさ（素）」が出やすい場面（職場、学校、友人や家族との時間、趣味の場など）での、最近のちょっとした出来事を1つ教えてください。\n（例：誰かと何かを決めた、予定外のハプニングが起きた、少し面倒なことに取り組んだ 等）\n\nその時どんな状況で、あなたが実際にどう動いたか（何と言ったか）を教えていただけますか？";
 
 function sanitizeMessage(text: string): string {
   if (!text) return '';
@@ -42,17 +40,41 @@ export const ChatMode: React.FC<ChatModeProps> = ({
   showToast,
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    const greeting = buildInitialGreeting(userProfile);
     try {
       const saved = localStorage.getItem('llm5_chat_messages');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
+          // 旧固定文または初期挨拶1件のみの場合は最新の年齢適応シナリオに置換
+          const isSingleAssistant = parsed.length === 1 && parsed[0].role === 'assistant';
+          const isLegacyBEIGreeting = parsed[0]?.content?.includes('自分らしさ（素）が出やすい場面') ||
+                                     parsed[0]?.content?.includes('最近のちょっとした出来事');
+          if (isSingleAssistant || isLegacyBEIGreeting) {
+            return [{ role: 'assistant', content: greeting }];
+          }
           return parsed;
         }
       }
     } catch (_) {}
-    return [{ role: 'assistant', content: INITIAL_GREETING }];
+    return [{ role: 'assistant', content: greeting }];
   });
+
+  // userProfile の年齢確定時に、まだユーザーが発言していなければ初期シナリオを即座に更新
+  useEffect(() => {
+    const freshGreeting = buildInitialGreeting(userProfile);
+    setMessages((prev) => {
+      if (prev.length === 1 && prev[0].role === 'assistant') {
+        if (prev[0].content !== freshGreeting) {
+          try {
+            localStorage.setItem('llm5_chat_messages', JSON.stringify([{ role: 'assistant', content: freshGreeting }]));
+          } catch (_) {}
+          return [{ role: 'assistant', content: freshGreeting }];
+        }
+      }
+      return prev;
+    });
+  }, [userProfile]);
 
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);

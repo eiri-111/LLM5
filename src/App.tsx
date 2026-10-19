@@ -187,6 +187,7 @@ export const App: React.FC = () => {
     try {
       localStorage.setItem('llm5_has_consented', 'true');
       localStorage.setItem('llm5_user_profile', JSON.stringify(profile));
+      localStorage.removeItem('llm5_chat_messages');
     } catch (_) {}
     showToast('研究へのご協力ありがとうございます。対話診断を開始します。');
   };
