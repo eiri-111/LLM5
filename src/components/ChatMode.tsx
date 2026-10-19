@@ -384,7 +384,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="こちらに回答を入力してください（Enterで送信 / Shift+Enterで改行）..."
+            placeholder="こちらに回答を入力してください..."
             disabled={isLoading}
           />
           <button
