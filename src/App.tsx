@@ -75,11 +75,15 @@ export const App: React.FC = () => {
     return [];
   });
 
-  // 画面フェーズ: 'chat' | 'survey' | 'result'
+  // 画面フェーズ: 'chat' (/chat) | 'survey' (/survey) | 'result' (/result)
   const [phase, setPhase] = useState<AppPhase>(() => {
     if (typeof window !== 'undefined') {
+      const path = window.location.pathname.toLowerCase();
       const search = window.location.search;
-      if (search.includes('sample')) return 'result';
+      const hash = window.location.hash.toLowerCase();
+      if (search.includes('sample') || path === '/result' || hash === '#result') return 'result';
+      if (path === '/survey' || hash === '#survey') return 'survey';
+      if (path === '/chat' || hash === '#chat') return 'chat';
       try {
         const saved = localStorage.getItem('llm5_current_phase') as AppPhase;
         if (saved && ['chat', 'survey', 'result'].includes(saved)) {
@@ -124,19 +128,30 @@ export const App: React.FC = () => {
     }, 3500);
   };
 
-  // URL変更検知 (/admin へのルーティング対応)
+  // URL変更検知 (/admin, /chat, /survey, /result へのブラウザ戻る・進むルーティング対応)
   useEffect(() => {
     const handleLocationChange = () => {
-      const path = window.location.pathname;
+      const path = window.location.pathname.toLowerCase();
       const search = window.location.search;
-      const hash = window.location.hash;
-      setIsAdminView(path === '/admin' || path.startsWith('/admin/') || search.includes('admin') || hash === '#admin');
+      const hash = window.location.hash.toLowerCase();
+      const admin = path === '/admin' || path.startsWith('/admin/') || search.includes('admin') || hash === '#admin';
+      setIsAdminView(admin);
+
+      if (!admin) {
+        if (path === '/result' || hash === '#result' || search.includes('sample')) {
+          setPhase('result');
+        } else if (path === '/survey' || hash === '#survey') {
+          setPhase('survey');
+        } else if (path === '/chat' || path === '/' || hash === '#chat') {
+          setPhase('chat');
+        }
+      }
     };
     window.addEventListener('popstate', handleLocationChange);
     return () => window.removeEventListener('popstate', handleLocationChange);
   }, []);
 
-  // 画面フェーズ・セッション・結果の自動保存 & フェーズ遷移時のスクロールトップ
+  // 画面フェーズ・セッション・結果の自動保存 & フェーズ遷移時のスクロールトップ & URL同期
   useEffect(() => {
     try {
       localStorage.setItem('llm5_current_phase', phase);
@@ -148,7 +163,15 @@ export const App: React.FC = () => {
     if (appContainer) {
       appContainer.scrollTop = 0;
     }
-  }, [phase]);
+
+    // URLの自動更新 (AI対話: /chat, 質問紙: /survey, 結果: /result)
+    if (typeof window !== 'undefined' && !isAdminView) {
+      const targetPath = phase === 'chat' ? '/chat' : `/${phase}`;
+      if (window.location.pathname !== targetPath) {
+        window.history.pushState({ phase }, '', targetPath + window.location.search);
+      }
+    }
+  }, [phase, isAdminView]);
 
   useEffect(() => {
     try {
@@ -499,7 +522,8 @@ export const App: React.FC = () => {
         onBackToApp={() => {
           setIsAdminView(false);
           if (window.history?.pushState) {
-            window.history.pushState(null, '', '/');
+            const targetPath = phase === 'chat' ? '/chat' : `/${phase}`;
+            window.history.pushState(null, '', targetPath);
           }
         }}
       />
