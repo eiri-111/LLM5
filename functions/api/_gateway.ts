@@ -309,13 +309,91 @@ export const FACET_DEFINITIONS: FacetDefinition[] = [
 
 
 
-export const FACTOR_TRIGGER_PROMPTS: Record<FactorNameJP, string> = {
-  '開放性': '最近ふと気になってスマホやPC・本で詳しく調べたことや、新しく見始めた作品・ゲーム・動画、あるいは普段行かない場所やお店に行った時の出来事',
-  '誠実性': '学校の課題・レポートやテスト勉強、あるいはバイトや用事・約束など、「少し面倒だけど期日までにやらなければならなかったこと」にどう取り組んだか（いつ着手したか、準備や段取り）の出来事',
-  '外向性': '最近、友人・家族・同僚・知り合いなど「誰かと一緒に何かをしたり話したりした時」の出来事（自分から声をかけたか、どんな話で盛り上がったか）',
-  '協調性': '周囲の人と意見や考えが食い違った時や、誰かが困っていた時、あるいは何かを頼まれた時の出来事（角を立てずにどう伝えたか、どう手助けしたか）',
-  '情緒安定性': '予定通りに進まなかったハプニングや、ちょっとしたトラブル・嫌なことが起きた最近の出来事（その場でどう対処し、その後どう気分を切り替えたか）'
-};
+export interface UserProfileDemographics {
+  age?: number | string;
+  gender?: string;
+  student_id?: string;
+}
+
+/**
+ * 因子と年齢層に応じた、再現性のある詳細な架空場面（SJTシナリオ）を生成
+ */
+export function getDetailedScenarioForFactor(factor?: string, age?: number): {
+  scenarioTitle: string;
+  situationText: string;
+  questionText: string;
+} {
+  const isStudent = typeof age === 'number' && age >= 15 && age <= 23;
+  const isYoungAdult = typeof age === 'number' && age >= 24 && age <= 35;
+
+  switch (factor) {
+    case '誠実性':
+      return {
+        scenarioTitle: '締切・計画の破綻とスケジュール再構築',
+        situationText: isStudent
+          ? '数日後に提出が必要な大学のレポートや課題（または大事な用事）があり、今日中に半分終わらせる計画だったとします。ところが急な予定が入ったり集中が切れたりして、全く手をつかないまま夜遅くになってしまいました。明日は朝から講義が詰まっています。'
+          : isYoungAdult
+          ? '数日後に提出が必要な仕事の重要書類や企画書（またはプライベートの大事な手続き）があり、今日中に半分仕上げる計画だったとします。ところが急な業務や突発的なトラブル対応が入り、手をつかないまま夜遅くになってしまいました。明日は朝から予定が詰まっています。'
+          : '期日までに必ず提出・準備しなければいけない大事な用事や書類があり、今日中に半分終わらせる計画だったとします。ところが急な予定や用事が入って後回しになり、気づけば夜遅くになってしまいました。明日は朝から外せない予定があります。',
+        questionText:
+          'この状況になったとき、あなたなら今夜から翌朝にかけて具体的にどう動きますか？（徹夜してでも意地で仕上げる、諦めて寝て朝早起きする、相手に期限の猶予や相談の連絡を入れる、優先度をつけて最低限だけ終わらせるなど、あなたの素の行動手順や、その時の焦り・気持ちの落ち着かせ方を教えてください）'
+      };
+
+    case '外向性':
+    case '協調性':
+      return {
+        scenarioTitle: '集まりの計画・意見対立と意思決定',
+        situationText: isStudent
+          ? '友人やサークル・ゼミ仲間など3〜4人で、週末の集まり（食事の店選びや遊びの行き先など）を決めている場面を想像してください。相談している最中、メンバーの意見が「遠出して新しい場所に行きたい派」と「近場でゆっくりしたい派」に真っ二つに分かれ、議論が平行線のまま気まずい沈黙が流れて決まらなくなってしまいました。'
+          : isYoungAdult
+          ? '同僚や友人、パートナーなど3〜4人で、集まりの行き先や食事の店などを決めている場面を想像してください。相談している最中、意見が真っ二つに分かれて議論が平行線になり、気まずい沈黙が流れて決まらなくなってしまいました。'
+          : '友人や知人、家族など3〜4人で、集まりや予定（出かける場所や食事の店など）を決めている場面を想像してください。相談している最中、意見が真っ二つに分かれて平行線になり、気まずい沈黙が流れて決まらなくなってしまいました。',
+        questionText:
+          'このとき、あなたはその場のメンバーに対して、具体的にどんなタイミングで何と声をかけますか？（自分から妥協案を出して引っ張る、誰かの意見に同調して決める、場を和ませる雑談を挟む、周りの様子を見て決定に任せるなど、あなたが実際に取る発言や立ち回りを教えてください）'
+      };
+
+    case '開放性':
+      return {
+        scenarioTitle: '休日の過ごし方・新しい刺激 vs いつもの定番',
+        situationText:
+          '休日に、誰とも約束がなく丸一日フリーな時間ができたとします。部屋で過ごしていて、ふと「何か普段とは違う面白いことや、新しい刺激に触れてみたい」という気分になりました。',
+        questionText:
+          'このとき、あなたは普段行かない新しいお店や場所に出かけたり、今まで触れたことのないジャンルの作品（動画・映画・音楽・ゲーム・本など）を、具体的にどのように探して試しますか？それとも、少し探したものの結局いつもの慣れ親しんだお気に入り（いつも通りの過ごし方・知っている作品）を選びますか？実際の探し方や選ぶ基準を教えてください。'
+      };
+
+    case '情緒安定性':
+    default:
+      return {
+        scenarioTitle: '予定外のトラブル・他人のミスと気分の切り替え',
+        situationText:
+          '誰かと一緒に予定を進めている最中（または待ち合わせなど）に、相手のうっかりミスや手違いで、予定が大きく狂ったり、自分にも余計な手間がかかるトラブルが発生してしまった状況を想像してください。',
+        questionText:
+          'その瞬間、あなたはその相手に対してどのような口調や態度で接しますか？また、その出来事のあと、イライラや嫌な気分をどのように切り替えますか？どれくらい引きずるか、実際のあなたの反応やその後の過ごし方を教えてください。'
+      };
+  }
+}
+
+/**
+ * これまでのユーザー発言から生活キーワード（大学、ゲーム、バイト等）を抽出し、
+ * 「前話したこと」を忘れない文脈ブリッジ文を生成
+ */
+export function buildContextBridge(messages: ChatMessage[]): string {
+  const userText = messages
+    .filter(m => m.role === 'user')
+    .map(m => m.content)
+    .join(' ');
+
+  if (userText.includes('大学') && (userText.includes('休') || userText.includes('ゲーム'))) {
+    return '先ほど、今日は大学をお休みされてご自宅でゲームをしながらリラックスして過ごされていたとお話ししてくださいましたね。普段の過ごし方がよく分かりました、ありがとうございます！そうした普段の学生生活や日常に関連して、例えばこんな場面を想像してみてほしいのですが……';
+  }
+  if (userText.includes('大学') || userText.includes('学校')) {
+    return '先ほど、学校や大学について教えていただきありがとうございました！そうした日常に関連して、例えばこんな場面を想像してみてほしいのですが……';
+  }
+  if (userText.includes('仕事') || userText.includes('会社') || userText.includes('バイト')) {
+    return '先ほど教えていただいた普段の生活やお仕事の様子、ありがとうございます！そうした日常に関連して、例えばこんな場面を想像してみてほしいのですが……';
+  }
+  return 'これまでの普段の過ごし方について教えていただきありがとうございます！そうした日常に関連して、例えばこんな場面を想像してみてほしいのですが……';
+}
 
 /**
  * ユーザーの発言が袋小路（否定、メタ動作、短文のみ）に陥っているかを厳密に判定
@@ -388,12 +466,13 @@ export function analyzeDimensionCoverage(messages: ChatMessage[]): {
 
 /**
  * Clef-flashの15ファセット同時評価レスポンス（パターンC）を解析し、
- * 「同じエピソードの2〜3往復深掘り」または「未充足ファセットを狙う新シチュエーション提示」を決定する
+ * 「同じエピソードの深掘り」または「未充足因子に応じた年齢別SJTシナリオ提示」を決定する
  */
 function parseClefPatternCDecision(
   resObj: any,
   messages: ChatMessage[],
-  userCount: number
+  userCount: number,
+  userProfile?: UserProfileDemographics
 ): AnalystStrategy | null {
   if (!resObj) return null;
   const target = resObj.answers || resObj.result || resObj;
@@ -510,6 +589,15 @@ function parseClefPatternCDecision(
     return scoreB - scoreA;
   });
 
+  // 年齢の数値化
+  let parsedAge: number | undefined = undefined;
+  if (typeof userProfile?.age === 'number' && userProfile.age > 0) {
+    parsedAge = userProfile.age;
+  } else if (typeof userProfile?.age === 'string') {
+    const p = parseInt(userProfile.age, 10);
+    if (!isNaN(p) && p > 0) parsedAge = p;
+  }
+
   // 深掘りモード vs 新展開モードの決定:
   // ユーザーがエピソードを話し、Clef-flashが「深掘りが必要（needs_behavioral_probe）」と判定し、
   // かつ手詰まり・否定回答・メタ回答ではない場合のみ丁寧に深掘りする
@@ -549,7 +637,7 @@ function parseClefPatternCDecision(
     };
   }
 
-  // 話題の完全切り替え・新シチュエーション提示モード
+  // 話題の完全切り替え・再現性架空シナリオ（SJT）提示モード
   // まだエビデンスが足りない未充足因子・ファセットを最優先で特定
   const targetFactor = uncoveredFactors[0] || '誠実性';
   const missingFacetsInFactor = FACET_DEFINITIONS.filter(
@@ -557,7 +645,10 @@ function parseClefPatternCDecision(
   );
   const targetFacets = (missingFacetsInFactor.length > 0 ? missingFacetsInFactor : contextualMissingFacets).slice(0, 3);
   const targetNames = targetFacets.map(f => `${f.factor}［${f.name}］`).join('・');
-  const triggerPrompt = FACTOR_TRIGGER_PROMPTS[targetFactor] || '誰かと一緒に何かをしたり話したりした最近の出来事';
+
+  // 年齢に適応した詳細シナリオと文脈ブリッジを取得
+  const scenario = getDetailedScenarioForFactor(targetFactor, parsedAge);
+  const contextBridge = buildContextBridge(messages);
 
   return {
     focus_dimension: targetFactor,
@@ -566,16 +657,17 @@ function parseClefPatternCDecision(
     evidenced_facets_count: totalEvidencedFacets,
     is_ready_for_final_analysis: false,
     target_question_strategy: [
-      `【話題の完全切り替え・新しい日常場面の提示（狙い: ${targetFactor} / ${targetNames}）】`,
-      `ユーザーの直前の発言を「お答えいただきありがとうございます！」と1文でさらりと受け止めてください。`,
-      `【最重要・深掘り禁止】：直前の話題（家でのゲーム、スマホの操作、部屋の様子、否定回答など）は完全に終了し、これ以上絶対に引きずらないでください。`,
-      `代わりに、未充足の性格特性【${targetFactor}】の行動エピソードを引き出すため、以下の新しい日常シチュエーションを具体的に提示して、最近の出来事（エピソード）を1つ尋ねてください。`,
-      `▼提示する新しい場面テーマ:`,
-      `「${triggerPrompt}」`,
-      `問いかけの例: 「お答えいただきありがとうございます！では少し場面を変えて、例えば【${triggerPrompt}】について伺えますか？その時、具体的にどんな状況でしたか？」`,
-      `（※必ず上記の具体的な日常場面をユーザーに提示し、末尾は必ず『？』で終わる質問にしてください。今いる部屋の様子やスマホ操作などを聞くことは絶対に禁止です）`
+      `【未充足因子（${targetFactor} / ${targetNames}）を引き出す再現性架空シナリオの提示】`,
+      `これまでのユーザーの話を活かし、必ず以下の［文脈ブリッジ］から始めて、［場面設定］と［問いかけ］を崩さず具体的に伝えてください。`,
+      `▼文脈ブリッジ（例）:`,
+      `「${contextBridge}」`,
+      `▼提示する場面設定（状況）:`,
+      `「${scenario.situationText}」`,
+      `▼尋ねる問いかけ:`,
+      `「${scenario.questionText}」`,
+      `（※抽象的な一言で終わらせず、ユーザーがその状況をありありと思い浮かべられるよう、上記の場面設定と問いかけを丁寧に伝えてください。末尾は必ず『？』で終えてください）`
     ].join('\n'),
-    notes: `Clef-flash Pattern C [reset_to_new_situation:${targetFactor}] (evidenced: ${totalEvidencedFacets}/15, target: ${targetNames})`
+    notes: `Clef-flash Pattern C [SJT_Scenario:${targetFactor}] (evidenced: ${totalEvidencedFacets}/15, target: ${targetNames}, age: ${parsedAge ?? 'none'})`
   };
 }
 
@@ -584,7 +676,11 @@ function parseClefPatternCDecision(
  * パターンC: 1回のリクエストで「BFI-2-S 15ファセットすべての行動エビデンス充足度（閾値0.70）」と
  * 「今のエピソードを深掘りすべきか／新しい場面に切り替えるべきか」を同時に評価する
  */
-export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<AnalystStrategy> {
+export async function runAnalyst(
+  env: Env,
+  messages: ChatMessage[],
+  userProfile?: UserProfileDemographics
+): Promise<AnalystStrategy> {
   const dialogueHistory = messages
     .map(m => `${m.role === 'user' ? 'ユーザー' : '質問係'}: ${m.content}`)
     .join('\n');
@@ -645,7 +741,7 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
           }
         }
       );
-      const parsed = parseClefPatternCDecision(aiRes, messages, userCount);
+      const parsed = parseClefPatternCDecision(aiRes, messages, userCount, userProfile);
       if (parsed) {
         parsed.notes = `${parsed.notes} [via env.AI binding]`;
         return parsed;
@@ -671,7 +767,7 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
 
     if (res.ok) {
       const data: any = await res.json();
-      const parsed = parseClefPatternCDecision(data, messages, userCount);
+      const parsed = parseClefPatternCDecision(data, messages, userCount, userProfile);
       if (parsed) {
         parsed.notes = `${parsed.notes} [via HTTP Gateway]`;
         return parsed;
@@ -684,7 +780,7 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
     console.error('Clef-flash HTTP fetch error:', err);
   }
 
-  // 3. 万一の通信障害時のルールベース・フォールバック（正規表現による15ファセット簡易判定から同じロジックを実行）
+  // 3. 万一の通信障害時のルールベース・フォールバック
   const fallbackCoverage = analyzeDimensionCoverage(messages);
   const mockAnswers: Record<string, any> = {
     episode_depth_status: {
@@ -696,16 +792,17 @@ export async function runAnalyst(env: Env, messages: ChatMessage[]): Promise<Ana
     mockAnswers[facet.key] = { noul: fallbackCoverage.facetScoresFallback[facet.key] ?? 0.35 };
   }
 
-  const fallbackParsed = parseClefPatternCDecision({ answers: mockAnswers }, messages, userCount);
+  const fallbackParsed = parseClefPatternCDecision({ answers: mockAnswers }, messages, userCount, userProfile);
   if (fallbackParsed) {
     fallbackParsed.notes = `${fallbackParsed.notes} [Rule-based fallback]`;
     return fallbackParsed;
   }
 
+  const defaultScenario = getDetailedScenarioForFactor('外向性', typeof userProfile?.age === 'number' ? userProfile.age : undefined);
   return {
     focus_dimension: '外向性',
     action_mode: 'new_situation',
-    target_question_strategy: '直前のユーザーの回答を受け止めた上で、学校・仕事・日常の対人場面などで実際にどう動いたか、具体的な出来事を1つ尋ねてください。',
+    target_question_strategy: `【外向性の状況判断シナリオ】\n場面: ${defaultScenario.situationText}\n問いかけ: ${defaultScenario.questionText}`,
     is_ready_for_final_analysis: false,
     notes: 'Minimal fallback strategy'
   };
@@ -751,8 +848,7 @@ export function formatInterviewerMessages(messages: ChatMessage[]): { role: stri
 
 /**
  * インタビュアーAI用のシステムプロンプトを生成
- * パターンC: 「同一エピソードの2〜3往復深掘り（行動・発言の引き出し）」と
- * 「未充足因子に応じた新シチュエーション提示」を明確に制御する
+ * 【スリム化＆洗練版】コンテキスト圧迫を解消し、シナリオと文脈ブリッジを自然に届ける
  */
 function buildInterviewerInstruction(strategy: AnalystStrategy): string {
   const isReady = strategy.is_ready_for_final_analysis;
@@ -762,59 +858,35 @@ function buildInterviewerInstruction(strategy: AnalystStrategy): string {
 
   if (isReady || actionMode === 'complete') {
     return `
-あなたはプロフェッショナルな行動エピソード・インタビュアーです。
-これまでの対話で、ビッグファイブ全5因子（および主要ファセット）のエピソード収集がすべて完了しました。
+あなたはプロフェッショナルなパーソナリティ・インタビュアーです。
+これまでの対話ですべての特性評価に必要な回答が集まりました。
 
-【あなたのタスク（対話完了の締めくくり）】
-1. ユーザーの直前の発言に対して、温かく具体的に共感・要約（1〜2文）してください。
-2. 【重要・追加質問の絶対禁止】: これ以上、新しい質問や問いかけ（「〜ですか？」「〜ありましたか？」など）は絶対にしないでください。疑問符（？）も使わないでください。
-3. 最後に、「ここまで具体的なエピソードをたくさん聞かせていただき、ありがとうございました！対話セッションはこれで完了です。画面下のボタンから、次のステップ『質問紙（BFI-2-S）』へお進みください。」と案内して締めくくってください。
-4. 思考プロセスや内部推論（<thought>や<think>タグなど）は一切出力に含めず、ユーザーへの発話文のみを直接出力してください。
+【あなたのタスク】
+1. ユーザーの直前の発言に対して温かく共感（1〜2文）してください。
+2. 追加の質問は一切禁止です（疑問符『？』を使わないでください）。
+3. 最後に、「ここまで色々な場面について詳しくお答えいただき、ありがとうございました！対話セッションは完了です。画面下のボタンから、次のステップ『質問紙（BFI-2-S）』へお進みください。」と案内して締めくくってください。
+4. 思考タグ等は含めず、ユーザーへの発話文のみを直接出力してください。
 `;
   }
 
-  const modeSpecificGuide =
-    actionMode === 'deepen_episode'
-      ? `
-【現在のモード：今のエピソードの自然な深掘り（フォローアップ）】
-- 直前のユーザーの回答内容をカギカッコなしで自然に1文で受け止めてください。
-- 話題や場面は絶対に切り替えず、直前のエピソードの中でユーザーが【実際に何と言ったか／どう動いたか／どう対処したか】という事実を尋ねてください。
-- ユーザーが話していない架空の行動（「布団に入った」「翌日の準備をした」等）を勝手に作って質問することは厳禁です。
-`
-      : `
-【現在のモード：新しい日常場面の提示（未充足因子の収集）】
-- 直前のユーザーの回答に対して、「お答えいただきありがとうございます！」と1文でさらりと受け止めてください。
-- 【最重要】：直前の話題（部屋での過ごし方やスマホ操作など）は完全に終了し、未充足の性格因子【${focusDimension}】を引き出すため、分析官の指示にある【新しい日常場面テーマ】を具体的に提示して次のエピソードを尋ねてください。
-`;
-
   return `
-あなたは心理学に基づく行動エピソード・インタビュアーです。
-ユーザーが実際に経験した「日常生活の場面（エピソード）」と「その中での具体的な振る舞い（発言・行動・選択・事後の様子）」を引き出すことがあなたの唯一の役割です。
+あなたは心理学に基づくパーソナリティ・インタビュアーです。
+ユーザーが提示された状況で「具体的にどう考え、どう動くか」を引き出すことがあなたの役割です。
 
 裏方の分析官AI（Clef-flash）から以下の戦略指示が届いています:
 【分析官の指示】:
 - 主な注目領域: ${focusDimension}${strategy.target_facets?.length ? `（注目ファセット: ${strategy.target_facets.join(' / ')}）` : ''}
 ${targetStrategy}
-${modeSpecificGuide}
-【行動面接の絶対ルール（違反厳禁）】
-1. 必ず丁寧で親しみやすい敬語を使用してください。
-2. **【必須・出力構成】必ず［相手の回答への短い受け止め（1文）］＋［次の具体的な質問（1〜2文、必ず『？』で終わる）］を1つのメッセージとして出力してください。「ご回答ありがとうございます。」などの相槌だけで発言を終えることは絶対に禁止です。**
-3. **【最重要・厳禁】アンケート回答中のメタ動作・物理環境の質問の絶対禁止**:
-   「今スマホをどう持っているか」「どの指で入力しているか」「キーボードのどこをタッチしたか」「部屋の明るさや周囲の音」「画面のどこを押したか」等、アンケート回答中そのものの端末操作や部屋の物理環境についての質問は絶対に禁止です。質問は必ず、日常生活・社会生活における過去や最近の具体的なエピソード（学校・仕事・友人・家族・趣味・課題・トラブル等の場面）を対象にしてください。
-4. **【最重要・厳禁】ユーザーが言っていない架空の前提・捏造（ハルシネーション）の禁止**:
-   ユーザーが言っていない事実（例：「布団に入った」「カバンの準備をした」「友達から連絡が来た」など）を勝手に作って質問してはいけません。ユーザーが実際に言及した事実だけを前提としてください。
-5. **不自然なカギカッコ出力の禁止**: 1文目の相槌や質問文をカギカッコ（「 」）で括って出力しないでください。普通の人間同士の自然な会話文としてそのまま出力してください。
-6. **勝手な終了宣言・締めくくりの絶対禁止**: この対話セッションは現在進行中であり、まだ終了していません。「今回のインタビューはこれで終了となります」などの終了宣言は絶対にしないでください。
-7. **【最重要・厳禁】「なぜ？」「原因は何ですか？」という内省・心理的理由の質問禁止**:
-   「なぜそう思ったのですか？」「原因は何だと思いますか？」「どんな考えが浮かびましたか？」といった内省や心理的背景・自己分析を質問することは絶対に禁止です。頭の中の理由ではなく「カメラに映る実際の行動（具体的に何と言ったか、何を言わなかったか、どう動いたか）」という客観的な事実のみを尋ねてください。
-8. **【最重要・厳禁】心理テストの因子や選択肢を提示することの絶対禁止**:
-   「〜という不安からですか？それとも〜を尊重してですか？」のように、心理学的な仮説や選択肢を並べてユーザーに選ばせる質問は絶対にしないでください。選択肢を与えず、「その時、具体的にどんな状況で、どう動きましたか？」と事実を自由に答えさせてください。
-9. **【最重要・厳禁】説教・アドバイス・上から目線の評価コメントの禁止**:
-   「〜することは大切ですよね」「将来のチームワーク向上のための重要なステップです」「〜を改善していきましょう」のような、教師やカウンセラー気取りのアドバイス・説教・価値判断は一切言わないでください。
-10. **【必須】手詰まり・否定回答時の対応**:
-    ユーザーが「特にない」「いつもと一緒」「何もしなかった」等の否定・消極的な回答をした場合、その話題に固執して細部を聞き出そうとするのを直ちにやめ、「承知いたしました！」とサラッと受け止めた上で、指示された新しい日常のシチュエーション（課題、友人関係、ハプニングなど）を提示して別のエピソードを尋ねてください。
-11. 「あなたの誠実性を測るために〜」のような検査の裏側の意図や専門用語（ビッグファイブ、ファセット等）は絶対に出さないでください。
-12. 思考プロセスや内部推論（<thought>や<think>タグなど）は一切出力に含めず、ユーザーへの発話文のみを直接出力してください。
+
+【インタビュアーの基本ルール（厳守）】
+1. 丁寧で親しみやすい敬語を使用してください。
+2. **【必須・出力構成】必ず［相手の回答への自然な受け止め（1文）］＋［分析官から指定されたシナリオの場面設定と具体的な問いかけ（末尾は必ず『？』）］を1つのメッセージとして出力してください。「ご回答ありがとうございます。」などの相槌だけで発言を終えることは絶対に禁止です。**
+3. **【再現性の重視】分析官から指定された［場面設定］と［問いかけ］は省略せず、相手が情景を具体的に思い浮かべられるようにしっかりと伝えてください。**
+4. **【メタ動作質問の禁止】「スマホをどう持っているか」「どの指で入力しているか」「部屋の明るさ」など、アンケート回答中の端末操作や部屋の様子を聞くことは厳禁です。**
+5. カギカッコ（「 」）で全体を括らず、普通の人間同士の自然な会話文として出力してください。
+6. 勝手な終了宣言や説教・アドバイスはしないでください。
+7. 「あなたの誠実性を測るために〜」等の検査用語・因子名は絶対に出さないでください。
+8. 思考プロセスやタグ（<think>等）は含めず、ユーザーへの発話文のみを直接出力してください。
 `;
 }
 
@@ -825,7 +897,8 @@ export async function runInterviewerStream(
   env: Env,
   messages: ChatMessage[],
   strategy: AnalystStrategy,
-  modelName: string = 'dynamic/llm5'
+  modelName: string = 'dynamic/llm5',
+  userProfile?: UserProfileDemographics
 ): Promise<ReadableStream<Uint8Array>> {
   const endpoint = getGatewayCompatUrl(env);
   const headers = getGatewayHeaders(env);
@@ -999,12 +1072,13 @@ export async function runInterviewerStream(
 
         // 完了モード以外で、万一テキストが空、または質問記号（？）が含まれていない場合の自動補完
         if (!isReady && strategy.action_mode !== 'complete') {
-          const triggerPrompt = FACTOR_TRIGGER_PROMPTS[strategy.focus_dimension as FactorNameJP] || '普段の生活や最近の出来事の中で、誰かと一緒に何かをしたり話したりしたこと';
+          const userAge = typeof userProfile?.age === 'number' ? userProfile.age : (userProfile?.age ? parseInt(String(userProfile.age), 10) : undefined);
+          const scenario = getDetailedScenarioForFactor(strategy.focus_dimension, userAge);
           if (!cleanAccumulatedText.trim()) {
-            const fallbackReply = `お答えいただきありがとうございます！\n少し場面を変えて、例えば【${triggerPrompt}】について伺えますか？その時、具体的にどんな状況でしたか？`;
+            const fallbackReply = `お答えいただきありがとうございます！\n少し場面を変えて、次の具体的なシチュエーションについて伺わせてください。\n\n【状況】\n${scenario.situationText}\n\n${scenario.questionText}`;
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'chunk', text: fallbackReply })}\n\n`));
           } else if (!cleanAccumulatedText.includes('？') && !cleanAccumulatedText.includes('?')) {
-            const followUpQuestion = `\n\nちなみに、例えば【${triggerPrompt}】について、具体的にどう動いたか教えていただけますか？`;
+            const followUpQuestion = `\n\nちなみに、もし「${scenario.situationText.slice(0, 45)}...」という状況なら、あなたなら具体的にどう動きますか？`;
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'chunk', text: followUpQuestion })}\n\n`));
           }
         }
@@ -1030,7 +1104,8 @@ export async function runInterviewer(
   env: Env,
   messages: ChatMessage[],
   strategy: AnalystStrategy,
-  modelName: string = 'dynamic/llm5'
+  modelName: string = 'dynamic/llm5',
+  userProfile?: UserProfileDemographics
 ): Promise<{ reply: string; isReady: boolean }> {
   const endpoint = getGatewayCompatUrl(env);
   const headers = getGatewayHeaders(env);
@@ -1057,12 +1132,12 @@ export async function runInterviewer(
     if (res.ok) {
       const data = await res.json();
       let reply = extractResponseText(data);
+      const userAge = typeof userProfile?.age === 'number' ? userProfile.age : (userProfile?.age ? parseInt(String(userProfile.age), 10) : undefined);
+      const scenario = getDetailedScenarioForFactor(strategy.focus_dimension, userAge);
       if (!reply.trim()) {
-        const triggerPrompt = FACTOR_TRIGGER_PROMPTS[strategy.focus_dimension as FactorNameJP] || '普段の生活や最近の出来事';
-        reply = `お答えいただきありがとうございます！少し場面を変えて、例えば【${triggerPrompt}】について伺えますか？その時、具体的にどんな状況でしたか？`;
+        reply = `お答えいただきありがとうございます！\n少し場面を変えて、次の具体的なシチュエーションについて伺わせてください。\n\n【状況】\n${scenario.situationText}\n\n${scenario.questionText}`;
       } else if (!isReady && strategy.action_mode !== 'complete' && !reply.includes('？') && !reply.includes('?')) {
-        const triggerPrompt = FACTOR_TRIGGER_PROMPTS[strategy.focus_dimension as FactorNameJP] || '普段の生活や最近の出来事';
-        reply += `\n\nちなみに、例えば【${triggerPrompt}】について、具体的にどう動いたか教えていただけますか？`;
+        reply += `\n\nちなみに、もし「${scenario.situationText.slice(0, 45)}...」という状況なら、あなたなら具体的にどう動きますか？`;
       }
       return { reply, isReady };
     } else {

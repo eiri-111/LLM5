@@ -1,8 +1,9 @@
-import { Env, ChatMessage, runAnalyst, runInterviewerStream } from './_gateway';
+import { Env, ChatMessage, UserProfileDemographics, runAnalyst, runInterviewerStream } from './_gateway';
 
 interface RequestBody {
   messages: ChatMessage[];
   user_input: string;
+  user_profile?: UserProfileDemographics;
 }
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
@@ -10,7 +11,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
   try {
     const body: RequestBody = await request.json();
-    const { messages = [], user_input } = body;
+    const { messages = [], user_input, user_profile } = body;
 
     if (!user_input || user_input.trim() === '') {
       return new Response(JSON.stringify({ error: '入力内容が空です' }), {
@@ -25,12 +26,12 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     ];
 
     // ステップ1: 分析官AI (AI Gateway経由で Workers AI @cf/cloudflare/clef-flash を呼び出し)
-    // 対話履歴から不足因子を特定し、次の質問戦略を高速策定
-    const strategy = await runAnalyst(env, updatedMessages);
+    // 対話履歴から不足因子を特定し、ユーザー属性（年齢等）に適応した状況判断シナリオと文脈ブリッジを策定
+    const strategy = await runAnalyst(env, updatedMessages, user_profile);
 
     // ステップ2: 質問係AI (Route: dynamic/llm5 ※AI Gateway側でQwenに設定済み)
     // SSEストリーミングでクライアントへ逐次送出
-    const stream = await runInterviewerStream(env, updatedMessages, strategy, 'dynamic/llm5');
+    const stream = await runInterviewerStream(env, updatedMessages, strategy, 'dynamic/llm5', user_profile);
 
     return new Response(stream, {
       headers: {

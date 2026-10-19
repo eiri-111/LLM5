@@ -15,6 +15,7 @@ export const ResearchConsentModal: React.FC<ResearchConsentModalProps> = ({
   onSkipToSurvey,
   onSkipToResult
 }) => {
+  const [step, setStep] = useState<1 | 2>(1);
   const [age, setAge] = useState<string>(
     initialProfile?.age ? String(initialProfile.age) : ''
   );
@@ -24,13 +25,18 @@ export const ResearchConsentModal: React.FC<ResearchConsentModalProps> = ({
   const [hasAgreed, setHasAgreed] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleStep1Next = (e: React.FormEvent) => {
     e.preventDefault();
     if (!hasAgreed) {
       setErrorMessage('研究参加への同意項目を選択してください。');
       return;
     }
+    setErrorMessage(null);
+    setStep(2);
+  };
 
+  const handleStep2Submit = (e: React.FormEvent) => {
+    e.preventDefault();
     const parsedAge = parseInt(age, 10);
     if (!age || isNaN(parsedAge) || parsedAge < 10 || parsedAge > 120) {
       setErrorMessage('正しい年齢（半角数字 10〜120）を入力してください。');
@@ -61,233 +67,307 @@ export const ResearchConsentModal: React.FC<ResearchConsentModalProps> = ({
           <div className="qualtrics-progress-row">
             <span className="qualtrics-progress-pct">0%</span>
             <div className="qualtrics-progress-track">
-              <div className="qualtrics-progress-fill" style={{ width: '5%' }} />
+              <div className="qualtrics-progress-fill" style={{ width: step === 1 ? '5%' : '15%' }} />
             </div>
             <span className="qualtrics-progress-pct">100%</span>
           </div>
           <div style={{ textAlign: 'center', fontSize: '0.72rem', color: '#5c6878', marginTop: '4px' }}>
-            調査の進捗状況
+            調査の進捗状況（ステップ {step} / 2: {step === 1 ? '研究同意確認' : '基本属性入力'}）
           </div>
         </div>
 
-        {/* Survey Title & Instructions */}
-        <div style={{
-          borderBottom: '1px solid #d8dde6',
-          paddingBottom: '1.1rem',
-          marginBottom: '1.5rem'
-        }}>
-          <h2 style={{
-            fontSize: '1.25rem',
-            fontWeight: 700,
-            color: '#1b2432',
-            lineHeight: 1.4
-          }}>
-            対話型パーソナリティ評価に関する調査研究
-          </h2>
-          <p style={{
-            fontSize: '0.86rem',
-            color: '#333e4f',
-            marginTop: '0.5rem',
-            lineHeight: 1.65
-          }}>
-            本調査へのご協力ありがとうございます。回答を開始する前に、以下の研究概要およびデータの取り扱いについてご確認のうえ、基本属性と同意項目にご回答ください。
-          </p>
-        </div>
+        {step === 1 ? (
+          /* ================= Step 1: 研究同意画面 ================= */
+          <form onSubmit={handleStep1Next} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            {/* Survey Title & Instructions */}
+            <div style={{
+              borderBottom: '1px solid #d8dde6',
+              paddingBottom: '1.1rem'
+            }}>
+              <h2 style={{
+                fontSize: '1.25rem',
+                fontWeight: 700,
+                color: '#1b2432',
+                lineHeight: 1.4
+              }}>
+                対話型パーソナリティ評価に関する調査研究
+              </h2>
+              <p style={{
+                fontSize: '0.86rem',
+                color: '#333e4f',
+                marginTop: '0.5rem',
+                lineHeight: 1.65
+              }}>
+                本調査へのご協力ありがとうございます。回答を開始する前に、以下の研究概要およびデータの取り扱いについてご確認のうえ、同意確認にお進みください。
+              </p>
+            </div>
 
-        {/* Research Information Block (Qualtrics Descriptive Text Block) */}
-        <div style={{
-          marginBottom: '1.75rem',
-          backgroundColor: '#f7f9fa',
-          border: '1px solid #d8dde6',
-          borderLeft: '4px solid #007ac0',
-          borderRadius: '4px',
-          padding: '1rem 1.15rem',
-          fontSize: '0.83rem',
-          color: '#333e4f',
-          lineHeight: 1.65
-        }}>
-          <div style={{ marginBottom: '0.65rem' }}>
-            <strong style={{ color: '#1b2432' }}>1. 研究目的</strong><br />
-            本調査は、AIとの自然言語対話から推定されるビッグファイブ性格特性と、標準心理測定尺度（BFI-2-S）の測定値を比較・検証することを目的としています。
-          </div>
-          <div style={{ marginBottom: '0.65rem' }}>
-            <strong style={{ color: '#1b2432' }}>2. データの管理と匿名性</strong><br />
-            回答データおよび対話記録は統計的に処理され、学術研究目的にのみ使用されます。氏名・連絡先等の個人を特定できる情報は収集いたしません。
-          </div>
-          <div>
-            <strong style={{ color: '#1b2432' }}>3. 参加の任意性と中断の権利</strong><br />
-            本調査への参加は任意であり、回答の途中であってもブラウザを閉じることでいつでも中断することができます。中断による不利益は一切生じません。
-          </div>
-        </div>
+            {/* Research Information Block (Qualtrics Descriptive Text Block) */}
+            <div style={{
+              backgroundColor: '#f7f9fa',
+              border: '1px solid #d8dde6',
+              borderLeft: '4px solid #007ac0',
+              borderRadius: '4px',
+              padding: '1rem 1.15rem',
+              fontSize: '0.83rem',
+              color: '#333e4f',
+              lineHeight: 1.65
+            }}>
+              <div style={{ marginBottom: '0.65rem' }}>
+                <strong style={{ color: '#1b2432' }}>1. 研究目的</strong><br />
+                本調査は、AIとの自然言語対話から推定されるビッグファイブ性格特性と、標準心理測定尺度（BFI-2-S）の測定値を比較・検証することを目的としています。
+              </div>
+              <div style={{ marginBottom: '0.65rem' }}>
+                <strong style={{ color: '#1b2432' }}>2. データの管理と匿名性</strong><br />
+                回答データおよび対話記録は統計的に処理され、学術研究目的にのみ使用されます。氏名・連絡先等の個人を特定できる情報は収集いたしません。
+              </div>
+              <div>
+                <strong style={{ color: '#1b2432' }}>3. 参加の任意性と中断の権利</strong><br />
+                本調査への参加は任意であり、回答の途中であってもブラウザを閉じることでいつでも中断することができます。中断による不利益は一切生じません。
+              </div>
+            </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
-          {/* Question 1: Age */}
-          <div style={{
-            paddingBottom: '1.5rem',
-            borderBottom: '1px solid #e5e8ec'
-          }}>
-            <label
-              htmlFor="consent-age-input"
-              style={{
-                display: 'block',
+            {/* Question: Informed Consent */}
+            <div style={{
+              paddingBottom: '1rem',
+              borderBottom: '1px solid #e5e8ec'
+            }}>
+              <div style={{
                 fontSize: '0.94rem',
                 fontWeight: 600,
                 color: '#1b2432',
-                marginBottom: '0.6rem'
-              }}
-            >
-              Q1. あなたの現在の年齢を半角数字で入力してください。 <span style={{ color: '#d93025' }}>*</span>
-            </label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', maxWidth: '200px' }}>
-              <input
-                id="consent-age-input"
-                type="number"
-                min="10"
-                max="120"
-                placeholder="例: 21"
-                value={age}
-                onChange={(e) => setAge(e.target.value)}
-                required
-                className="form-input"
-              />
-              <span style={{ fontSize: '0.88rem', color: '#333e4f', whiteSpace: 'nowrap' }}>歳</span>
+                marginBottom: '0.65rem'
+              }}>
+                研究参加への同意確認 <span style={{ color: '#d93025' }}>*</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHasAgreed(!hasAgreed)}
+                style={{
+                  width: '100%',
+                  padding: '0.85rem 1rem',
+                  borderRadius: '4px',
+                  border: hasAgreed ? '1px solid #007ac0' : '1px solid #d8dde6',
+                  backgroundColor: hasAgreed ? '#e8f3fa' : '#f7f9fa',
+                  color: '#1b2432',
+                  fontSize: '0.88rem',
+                  fontWeight: hasAgreed ? 600 : 400,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  textAlign: 'left',
+                  transition: 'background-color 0.12s ease, border-color 0.12s ease'
+                }}
+              >
+                <span style={{
+                  width: '20px',
+                  height: '20px',
+                  borderRadius: '3px',
+                  border: hasAgreed ? '1.5px solid #007ac0' : '1.5px solid #8c98a8',
+                  backgroundColor: hasAgreed ? '#007ac0' : '#ffffff',
+                  color: '#ffffff',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  flexShrink: 0
+                }}>
+                  {hasAgreed ? '✓' : ''}
+                </span>
+                <span>上記の研究目的・データの取り扱いを理解し、調査への参加に同意します。</span>
+              </button>
             </div>
-          </div>
 
-          {/* Question 2: Gender (Qualtrics Single-Select Radio List) */}
-          <div style={{
-            paddingBottom: '1.5rem',
-            borderBottom: '1px solid #e5e8ec'
-          }}>
-            <div style={{
-              fontSize: '0.94rem',
-              fontWeight: 600,
-              color: '#1b2432',
-              marginBottom: '0.65rem'
-            }}>
-              Q2. あなたの性別を選択してください。 <span style={{ color: '#d93025' }}>*</span>
-            </div>
+            {errorMessage && (
+              <div className="profile-form-error">
+                <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                <span>{errorMessage}</span>
+              </div>
+            )}
+
+            {/* Next Button Bar */}
             <div style={{
               display: 'flex',
-              flexDirection: 'column',
-              gap: '6px'
+              justifyContent: 'flex-end',
+              paddingTop: '0.25rem'
             }}>
-              {genderOptions.map((g) => {
-                const isSelected = gender === g.key;
-                return (
-                  <button
-                    key={g.key}
-                    type="button"
-                    onClick={() => setGender(g.key)}
-                    style={{
-                      width: '100%',
-                      padding: '0.7rem 0.9rem',
-                      borderRadius: '4px',
-                      border: isSelected ? '1px solid #007ac0' : '1px solid #d8dde6',
-                      backgroundColor: isSelected ? '#e8f3fa' : '#f7f9fa',
-                      color: '#1b2432',
-                      fontSize: '0.88rem',
-                      fontWeight: isSelected ? 600 : 400,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '10px',
-                      textAlign: 'left',
-                      transition: 'background-color 0.12s ease, border-color 0.12s ease'
-                    }}
-                  >
-                    <span style={{
-                      width: '18px',
-                      height: '18px',
-                      borderRadius: '50%',
-                      border: isSelected ? '5px solid #007ac0' : '1.5px solid #8c98a8',
-                      backgroundColor: '#ffffff',
-                      flexShrink: 0,
-                      boxSizing: 'border-box'
-                    }} />
-                    <span>{g.label}</span>
-                  </button>
-                );
-              })}
+              <button
+                type="submit"
+                disabled={!hasAgreed}
+                className="qualtrics-nav-btn"
+                title="次へ進む"
+              >
+                <span>次へ進む（属性入力）</span>
+                <ArrowRight size={17} />
+              </button>
             </div>
-          </div>
-
-          {/* Question 3: Informed Consent */}
-          <div style={{
-            paddingBottom: '1.25rem',
-            borderBottom: '1px solid #e5e8ec'
-          }}>
+          </form>
+        ) : (
+          /* ================= Step 2: 年齢・性別入力画面 ================= */
+          <form onSubmit={handleStep2Submit} style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
             <div style={{
-              fontSize: '0.94rem',
-              fontWeight: 600,
-              color: '#1b2432',
-              marginBottom: '0.65rem'
+              borderBottom: '1px solid #d8dde6',
+              paddingBottom: '1.1rem'
             }}>
-              Q3. 研究参加への同意確認 <span style={{ color: '#d93025' }}>*</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setHasAgreed(!hasAgreed)}
-              style={{
-                width: '100%',
-                padding: '0.8rem 0.95rem',
-                borderRadius: '4px',
-                border: hasAgreed ? '1px solid #007ac0' : '1px solid #d8dde6',
-                backgroundColor: hasAgreed ? '#e8f3fa' : '#f7f9fa',
-                color: '#1b2432',
-                fontSize: '0.88rem',
-                fontWeight: hasAgreed ? 600 : 400,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                textAlign: 'left',
-                transition: 'background-color 0.12s ease, border-color 0.12s ease'
-              }}
-            >
-              <span style={{
-                width: '18px',
-                height: '18px',
-                borderRadius: '3px',
-                border: hasAgreed ? '1.5px solid #007ac0' : '1.5px solid #8c98a8',
-                backgroundColor: hasAgreed ? '#007ac0' : '#ffffff',
-                color: '#ffffff',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.75rem',
+              <h2 style={{
+                fontSize: '1.25rem',
                 fontWeight: 700,
-                flexShrink: 0
+                color: '#1b2432',
+                lineHeight: 1.4
               }}>
-                {hasAgreed ? '✓' : ''}
-              </span>
-              <span>上記の研究目的・データの取り扱いを理解し、調査への参加に同意します。</span>
-            </button>
-          </div>
-
-          {errorMessage && (
-            <div className="profile-form-error">
-              <AlertCircle size={16} style={{ flexShrink: 0 }} />
-              <span>{errorMessage}</span>
+                基本属性の入力
+              </h2>
+              <p style={{
+                fontSize: '0.86rem',
+                color: '#333e4f',
+                marginTop: '0.5rem',
+                lineHeight: 1.65
+              }}>
+                あなたに合わせた身近なシチュエーションで対話型診断を行うため、現在の年齢と性別をご記入ください。
+              </p>
             </div>
-          )}
 
-          {/* Qualtrics Next Button Bar */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'flex-end',
-            paddingTop: '0.25rem'
-          }}>
-            <button
-              type="submit"
-              disabled={!hasAgreed || !age}
-              className="qualtrics-nav-btn"
-              title="次へ進む"
-            >
-              <span>次へ</span>
-              <ArrowRight size={17} />
-            </button>
-          </div>
+            {/* Question 1: Age */}
+            <div style={{
+              paddingBottom: '1.5rem',
+              borderBottom: '1px solid #e5e8ec'
+            }}>
+              <label
+                htmlFor="consent-age-input"
+                style={{
+                  display: 'block',
+                  fontSize: '0.94rem',
+                  fontWeight: 600,
+                  color: '#1b2432',
+                  marginBottom: '0.6rem'
+                }}
+              >
+                Q1. あなたの現在の年齢を半角数字で入力してください。 <span style={{ color: '#d93025' }}>*</span>
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', maxWidth: '200px' }}>
+                <input
+                  id="consent-age-input"
+                  type="number"
+                  min="10"
+                  max="120"
+                  placeholder="例: 21"
+                  value={age}
+                  onChange={(e) => setAge(e.target.value)}
+                  required
+                  autoFocus
+                  className="form-input"
+                />
+                <span style={{ fontSize: '0.88rem', color: '#333e4f', whiteSpace: 'nowrap' }}>歳</span>
+              </div>
+            </div>
+
+            {/* Question 2: Gender */}
+            <div style={{
+              paddingBottom: '1.25rem',
+              borderBottom: '1px solid #e5e8ec'
+            }}>
+              <div style={{
+                fontSize: '0.94rem',
+                fontWeight: 600,
+                color: '#1b2432',
+                marginBottom: '0.65rem'
+              }}>
+                Q2. あなたの性別を選択してください。 <span style={{ color: '#d93025' }}>*</span>
+              </div>
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px'
+              }}>
+                {genderOptions.map((g) => {
+                  const isSelected = gender === g.key;
+                  return (
+                    <button
+                      key={g.key}
+                      type="button"
+                      onClick={() => setGender(g.key)}
+                      style={{
+                        width: '100%',
+                        padding: '0.7rem 0.9rem',
+                        borderRadius: '4px',
+                        border: isSelected ? '1px solid #007ac0' : '1px solid #d8dde6',
+                        backgroundColor: isSelected ? '#e8f3fa' : '#f7f9fa',
+                        color: '#1b2432',
+                        fontSize: '0.88rem',
+                        fontWeight: isSelected ? 600 : 400,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        textAlign: 'left',
+                        transition: 'background-color 0.12s ease, border-color 0.12s ease'
+                      }}
+                    >
+                      <span style={{
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '50%',
+                        border: isSelected ? '5px solid #007ac0' : '1.5px solid #8c98a8',
+                        backgroundColor: '#ffffff',
+                        flexShrink: 0,
+                        boxSizing: 'border-box'
+                      }} />
+                      <span>{g.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {errorMessage && (
+              <div className="profile-form-error">
+                <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                <span>{errorMessage}</span>
+              </div>
+            )}
+
+            {/* Nav Button Bar (Back & Submit) */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              paddingTop: '0.25rem'
+            }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorMessage(null);
+                  setStep(1);
+                }}
+                style={{
+                  padding: '8px 16px',
+                  fontSize: '0.85rem',
+                  fontWeight: 500,
+                  color: '#495057',
+                  backgroundColor: '#f1f3f5',
+                  border: '1px solid #ced4da',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                ← 同意画面に戻る
+              </button>
+
+              <button
+                type="submit"
+                disabled={!age}
+                className="qualtrics-nav-btn"
+                title="診断を開始する"
+              >
+                <span>診断を開始する</span>
+                <ArrowRight size={17} />
+              </button>
+            </div>
+          </form>
+        )}
+
 
           {/* 動作確認用スキップ */}
           {(onSkipToSurvey || onSkipToResult) && (
@@ -344,7 +424,6 @@ export const ResearchConsentModal: React.FC<ResearchConsentModalProps> = ({
               </div>
             </div>
           )}
-        </form>
       </div>
     </div>
   );

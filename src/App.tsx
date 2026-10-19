@@ -16,8 +16,10 @@ import { Loader2 } from 'lucide-react';
 import { AdminDashboard } from './components/AdminDashboard';
 
 function generateSessionId(): string {
-  const rand = Math.random().toString(36).substring(2, 9);
-  return `session_${Date.now()}_${rand}`;
+  // 分析時（SPSS/Excel/R）に見やすい短縮レスポンスID（例: R_k8m2p9qa 計10文字）
+  const rand = Math.random().toString(36).substring(2, 6);
+  const timeSuffix = Date.now().toString(36).slice(-4);
+  return `R_${timeSuffix}${rand}`;
 }
 
 type AppPhase = 'chat' | 'survey' | 'result';
