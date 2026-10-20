@@ -28,6 +28,17 @@ export interface AnalystStrategy {
   notes?: string;
 }
 
+export type AssessmentMethodSource = 'star' | 'sjt' | 'unobserved';
+
+export interface DualAssessmentScores {
+  /** STAR法（過去の客観的行動実績）に基づく5因子スコア (0-100、未観測はnull) */
+  star_scores: Record<'openness' | 'conscientiousness' | 'extraversion' | 'agreeableness' | 'neuroticism', number | null>;
+  /** SJT（架空状況判断・意図表明）に基づく5因子スコア (0-100、縮小推定適用済み、未提示はnull) */
+  sjt_scores: Record<'openness' | 'conscientiousness' | 'extraversion' | 'agreeableness' | 'neuroticism', number | null>;
+  /** 言行・判断ギャップ (SJT - STAR、両者観測時のみ算出) */
+  gap_scores: Record<'openness' | 'conscientiousness' | 'extraversion' | 'agreeableness' | 'neuroticism', number | null>;
+}
+
 export interface BigFiveDimension {
   score: number;
   level: string;
@@ -42,6 +53,10 @@ export interface BigFiveDimension {
     lower: number; // 95%信頼区間の下限 (0〜100)
     upper: number; // 95%信頼区間の上限 (0〜100)
   };
+  source_type?: 'star' | 'sjt' | 'hybrid' | 'unobserved'; // エビデンスの源泉 (STAR行動事実 / SJT状況判断 / 混合)
+  star_score?: number | null; // STAR法による行動実績スコア
+  sjt_score?: number | null; // SJTによる状況判断スコア (縮小推定版)
+  shrinkage_weight?: number; // 適用された縮小推定重み係数 w
 }
 
 export interface ClefScoringBreakdown {
@@ -49,6 +64,8 @@ export interface ClefScoringBreakdown {
   facet_mean_scores: Record<'openness' | 'conscientiousness' | 'extraversion' | 'agreeableness' | 'neuroticism', number>;
   /** 案2（比較検証用）: 5因子直接質問によるスコア (0-100) */
   direct_scores: Record<'openness' | 'conscientiousness' | 'extraversion' | 'agreeableness' | 'neuroticism', number>;
+  /** 完全二元化評価スコア (STAR行動実績スコア vs SJT状況判断スコア) */
+  dual_scores?: DualAssessmentScores;
   /** BFI-2-S 15ファセット個別のスコア (0-100、言及なし・未観測は null) */
   facets: {
     openness: { intellectual: number | null; aesthetic: number | null; creative: number | null };
@@ -59,6 +76,14 @@ export interface ClefScoringBreakdown {
   };
   /** ファセット別エビデンス充足確信度 ('high': 明確な行動事実あり, 'moderate': 言及あり, 'insufficient': 未言及/欠測) */
   facet_confidences?: Record<string, 'high' | 'moderate' | 'insufficient'>;
+  /** ファセット別エビデンス出自 ('star': 過去の行動実績, 'sjt': 架空シナリオ判断, 'unobserved': 未観測) */
+  facet_sources?: Record<string, AssessmentMethodSource>;
+  /** ファセット別縮小推定重み (STAR: 0.65〜1.0, SJT: 0.25〜0.42) */
+  facet_shrinkage_weights?: Record<string, number>;
+  /** ファセット別測定標準誤差 (SEM) */
+  facet_sems?: Record<string, number>;
+  /** ファセット別95%信頼区間 */
+  facet_confidence_intervals?: Record<string, { lower: number; upper: number }>;
   /** 多方向（両極・具体性・妥当性メタ指標）評価データ (55問同時採点) */
   multidirectional?: {
     positive_probs: Record<string, number>; // 15ファセットの高特性行動確率 (0.00〜1.00)
@@ -98,6 +123,7 @@ export interface AnalysisResult {
     gender?: string | null;
   };
   clef_scoring_data?: ClefScoringBreakdown;
+  dual_assessment?: DualAssessmentScores;
   verbosity_stats?: {
     total_user_characters: number;
     total_user_turns: number;
