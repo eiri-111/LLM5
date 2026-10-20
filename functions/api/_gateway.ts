@@ -44,13 +44,13 @@ export interface ClefScoringBreakdown {
   facet_mean_scores: Record<'openness' | 'conscientiousness' | 'extraversion' | 'agreeableness' | 'neuroticism', number>;
   /** 案2（比較検証用）: 5因子直接質問によるスコア (0-100) */
   direct_scores: Record<'openness' | 'conscientiousness' | 'extraversion' | 'agreeableness' | 'neuroticism', number>;
-  /** BFI-2-S 15ファセット個別のスコア (0-100) */
+  /** BFI-2-S 15ファセット個別のスコア (0-100、言及なし・未観測は null) */
   facets: {
-    openness: { intellectual: number; aesthetic: number; creative: number };
-    conscientiousness: { organization: number; productiveness: number; responsibility: number };
-    extraversion: { sociability: number; assertiveness: number; activity: number };
-    agreeableness: { compassion: number; respect: number; trust: number };
-    neuroticism: { anxiety: number; depression: number; volatility: number };
+    openness: { intellectual: number | null; aesthetic: number | null; creative: number | null };
+    conscientiousness: { organization: number | null; productiveness: number | null; responsibility: number | null };
+    extraversion: { sociability: number | null; assertiveness: number | null; activity: number | null };
+    agreeableness: { compassion: number | null; respect: number | null; trust: number | null };
+    neuroticism: { anxiety: number | null; depression: number | null; volatility: number | null };
   };
   /** ファセット別エビデンス充足確信度 ('high': 明確な行動事実あり, 'moderate': 言及あり, 'insufficient': 未言及/欠測) */
   facet_confidences?: Record<string, 'high' | 'moderate' | 'insufficient'>;
@@ -1432,7 +1432,7 @@ function parseClefScoringResponse(rawObj: any, sourceLabel: string): ClefScoring
   const positiveProbs: Record<string, number> = {};
   const negativeProbs: Record<string, number> = {};
   const concretenessProbs: Record<string, number> = {};
-  const facetScores: Record<string, number> = {};
+  const facetScores: Record<string, number | null> = {};
   const facetConfidences: Record<string, 'high' | 'moderate' | 'insufficient'> = {};
 
   let hasAnyValidScore = false;
@@ -1450,36 +1450,46 @@ function parseClefScoringResponse(rawObj: any, sourceLabel: string): ClefScoring
     if (pNeg !== null) negativeProbs[cfg.key] = pNeg;
     if (pCon !== null) concretenessProbs[cfg.key] = pCon;
 
-    // スコア算出ロジック:
-    // 両極（ポジティブ・ネガティブ）の差分 Delta (-1.00 〜 +1.00) を 0 〜 100 に正規化
-    let score = 50;
-    if (pPos !== null && pNeg !== null) {
-      const delta = pPos - pNeg;
-      score = Math.min(100, Math.max(0, Math.round(50 + delta * 50)));
-    } else if (pPos !== null) {
-      score = Math.min(100, Math.max(0, Math.round(pPos * 100)));
+    // 測定学的判定: 「未観測（欠測: Missing Data）」と「真の中庸（スコア50）」の厳格な分離
+    // ポジティブ行動、ネガティブ行動、具体的エピソード描写のいずれも検出されていない場合は欠測とする
+    const isMissing =
+      (pCon === null || pCon < 0.35) &&
+      (pPos === null || pPos < 0.35) &&
+      (pNeg === null || pNeg < 0.35);
+
+    let score: number | null = null;
+    if (isMissing) {
+      score = null;
+      facetConfidences[cfg.key] = 'insufficient';
+    } else {
+      // 対話内で行動事実が語られている場合のみスコアを算出
+      if (pPos !== null && pNeg !== null) {
+        const delta = pPos - pNeg;
+        score = Math.min(100, Math.max(0, Math.round(50 + delta * 50)));
+      } else if (pPos !== null) {
+        score = Math.min(100, Math.max(0, Math.round(pPos * 100)));
+      } else {
+        score = 50;
+      }
+
+      // 確信度（行動エビデンス充実度）判定:
+      if (pCon !== null) {
+        if (pCon >= 0.65) {
+          facetConfidences[cfg.key] = 'high';
+        } else if (pCon >= 0.40) {
+          facetConfidences[cfg.key] = 'moderate';
+        } else {
+          facetConfidences[cfg.key] = 'insufficient';
+        }
+      } else {
+        if (score >= 70 || score <= 30) {
+          facetConfidences[cfg.key] = 'high';
+        } else {
+          facetConfidences[cfg.key] = 'moderate';
+        }
+      }
     }
     facetScores[cfg.key] = score;
-
-    // 確信度（行動エビデンス充実度）判定:
-    // 具体性確率 (pCon) を最優先、未取得時はポジティブ/ネガティブの極端度で判定
-    if (pCon !== null) {
-      if (pCon >= 0.65) {
-        facetConfidences[cfg.key] = 'high';
-      } else if (pCon >= 0.40) {
-        facetConfidences[cfg.key] = 'moderate';
-      } else {
-        facetConfidences[cfg.key] = 'insufficient';
-      }
-    } else {
-      if (score >= 70 || score <= 30) {
-        facetConfidences[cfg.key] = 'high';
-      } else if (score >= 42 && score <= 58) {
-        facetConfidences[cfg.key] = 'insufficient';
-      } else {
-        facetConfidences[cfg.key] = 'moderate';
-      }
-    }
   }
 
   // 案2: 5因子直接採点 (0-100)
@@ -1502,18 +1512,20 @@ function parseClefScoringResponse(rawObj: any, sourceLabel: string): ClefScoring
     emotional_expressiveness: extractClefNoulProb(target.val_emotional_expressiveness) ?? 0.70
   };
 
-  const avg3 = (v1: number | undefined, v2: number | undefined, v3: number | undefined, fallback: number): number => {
-    const valid = [v1, v2, v3].filter((v): v is number => typeof v === 'number');
+  // 測定学的配慮: 観測データが存在する有効ファセットのみで平均を算出（欠測除外平均: Available-Case Analysis）
+  // 未言及ファセットが50点として因子平均を平坦に引き下げる希釈バイアスを完全に防ぐ
+  const avgAvailable = (v1: number | null | undefined, v2: number | null | undefined, v3: number | null | undefined, fallback: number): number => {
+    const valid = [v1, v2, v3].filter((v): v is number => typeof v === 'number' && v !== null);
     if (valid.length === 0) return fallback;
     return Math.round(valid.reduce((sum, v) => sum + v, 0) / valid.length);
   };
 
   const facetMeanScores = {
-    openness: avg3(facetScores.openness_intellectual, facetScores.openness_aesthetic, facetScores.openness_creative, d_o ?? 50),
-    conscientiousness: avg3(facetScores.conscientiousness_organization, facetScores.conscientiousness_productiveness, facetScores.conscientiousness_responsibility, d_c ?? 50),
-    extraversion: avg3(facetScores.extraversion_sociability, facetScores.extraversion_assertiveness, facetScores.extraversion_activity, d_e ?? 50),
-    agreeableness: avg3(facetScores.agreeableness_compassion, facetScores.agreeableness_respect, facetScores.agreeableness_trust, d_a ?? 50),
-    neuroticism: avg3(facetScores.neuroticism_anxiety, facetScores.neuroticism_depression, facetScores.neuroticism_volatility, d_n ?? 50)
+    openness: avgAvailable(facetScores.openness_intellectual, facetScores.openness_aesthetic, facetScores.openness_creative, d_o ?? 50),
+    conscientiousness: avgAvailable(facetScores.conscientiousness_organization, facetScores.conscientiousness_productiveness, facetScores.conscientiousness_responsibility, d_c ?? 50),
+    extraversion: avgAvailable(facetScores.extraversion_sociability, facetScores.extraversion_assertiveness, facetScores.extraversion_activity, d_e ?? 50),
+    agreeableness: avgAvailable(facetScores.agreeableness_compassion, facetScores.agreeableness_respect, facetScores.agreeableness_trust, d_a ?? 50),
+    neuroticism: avgAvailable(facetScores.neuroticism_anxiety, facetScores.neuroticism_depression, facetScores.neuroticism_volatility, d_n ?? 50)
   };
 
   const directScores = {
@@ -1529,29 +1541,29 @@ function parseClefScoringResponse(rawObj: any, sourceLabel: string): ClefScoring
     direct_scores: directScores,
     facets: {
       openness: {
-        intellectual: facetScores.openness_intellectual ?? facetMeanScores.openness,
-        aesthetic: facetScores.openness_aesthetic ?? facetMeanScores.openness,
-        creative: facetScores.openness_creative ?? facetMeanScores.openness
+        intellectual: facetScores.openness_intellectual ?? null,
+        aesthetic: facetScores.openness_aesthetic ?? null,
+        creative: facetScores.openness_creative ?? null
       },
       conscientiousness: {
-        organization: facetScores.conscientiousness_organization ?? facetMeanScores.conscientiousness,
-        productiveness: facetScores.conscientiousness_productiveness ?? facetMeanScores.conscientiousness,
-        responsibility: facetScores.conscientiousness_responsibility ?? facetMeanScores.conscientiousness
+        organization: facetScores.conscientiousness_organization ?? null,
+        productiveness: facetScores.conscientiousness_productiveness ?? null,
+        responsibility: facetScores.conscientiousness_responsibility ?? null
       },
       extraversion: {
-        sociability: facetScores.extraversion_sociability ?? facetMeanScores.extraversion,
-        assertiveness: facetScores.extraversion_assertiveness ?? facetMeanScores.extraversion,
-        activity: facetScores.extraversion_activity ?? facetMeanScores.extraversion
+        sociability: facetScores.extraversion_sociability ?? null,
+        assertiveness: facetScores.extraversion_assertiveness ?? null,
+        activity: facetScores.extraversion_activity ?? null
       },
       agreeableness: {
-        compassion: facetScores.agreeableness_compassion ?? facetMeanScores.agreeableness,
-        respect: facetScores.agreeableness_respect ?? facetMeanScores.agreeableness,
-        trust: facetScores.agreeableness_trust ?? facetMeanScores.agreeableness
+        compassion: facetScores.agreeableness_compassion ?? null,
+        respect: facetScores.agreeableness_respect ?? null,
+        trust: facetScores.agreeableness_trust ?? null
       },
       neuroticism: {
-        anxiety: facetScores.neuroticism_anxiety ?? facetMeanScores.neuroticism,
-        depression: facetScores.neuroticism_depression ?? facetMeanScores.neuroticism,
-        volatility: facetScores.neuroticism_volatility ?? facetMeanScores.neuroticism
+        anxiety: facetScores.neuroticism_anxiety ?? null,
+        depression: facetScores.neuroticism_depression ?? null,
+        volatility: facetScores.neuroticism_volatility ?? null
       }
     },
     facet_confidences: facetConfidences,
@@ -1726,20 +1738,22 @@ export async function runFinalAnalysis(
   // 1. まず Clef-flash で20問（案1: 15ファセット + 案2: 5因子直接）を同時数値化
   const clefScores = await runClefScoring(env, dialogueHistory);
 
+  const fmtFacet = (v: number | null | undefined) => (v !== null && v !== undefined ? `${v}点` : '未言及（判定保留）');
+
   const confirmedScoresBlock = clefScores
     ? `
 【Clef-flash により算出・確定済みのBFI-2-Sスコア（変更厳禁）】
-以下の5因子スコア（各3ファセットの平均×100）が確定値です。JSON出力の score には必ずこの数値をそのまま設定してください：
+以下の5因子スコア（有効ファセットの平均×100）が確定値です。JSON出力の score には必ずこの数値をそのまま設定してください：
 - openness (開放性): 確定スコア ${clefScores.facet_mean_scores.openness}点 (level: "${scoreToLevelLabel(clefScores.facet_mean_scores.openness)}")
-  [内訳: 知的好奇心=${clefScores.facets.openness.intellectual}, 美的好奇心=${clefScores.facets.openness.aesthetic}, 創造力=${clefScores.facets.openness.creative}]
+  [内訳: 知的好奇心=${fmtFacet(clefScores.facets.openness.intellectual)}, 美的好奇心=${fmtFacet(clefScores.facets.openness.aesthetic)}, 創造力=${fmtFacet(clefScores.facets.openness.creative)}]
 - conscientiousness (誠実性): 確定スコア ${clefScores.facet_mean_scores.conscientiousness}点 (level: "${scoreToLevelLabel(clefScores.facet_mean_scores.conscientiousness)}")
-  [内訳: 組織化=${clefScores.facets.conscientiousness.organization}, 生産性=${clefScores.facets.conscientiousness.productiveness}, 責任感=${clefScores.facets.conscientiousness.responsibility}]
+  [内訳: 組織化=${fmtFacet(clefScores.facets.conscientiousness.organization)}, 生産性=${fmtFacet(clefScores.facets.conscientiousness.productiveness)}, 責任感=${fmtFacet(clefScores.facets.conscientiousness.responsibility)}]
 - extraversion (外向性): 確定スコア ${clefScores.facet_mean_scores.extraversion}点 (level: "${scoreToLevelLabel(clefScores.facet_mean_scores.extraversion)}")
-  [内訳: 社交性=${clefScores.facets.extraversion.sociability}, 主張性=${clefScores.facets.extraversion.assertiveness}, 活動性=${clefScores.facets.extraversion.activity}]
+  [内訳: 社交性=${fmtFacet(clefScores.facets.extraversion.sociability)}, 主張性=${fmtFacet(clefScores.facets.extraversion.assertiveness)}, 活動性=${fmtFacet(clefScores.facets.extraversion.activity)}]
 - agreeableness (協調性): 確定スコア ${clefScores.facet_mean_scores.agreeableness}点 (level: "${scoreToLevelLabel(clefScores.facet_mean_scores.agreeableness)}")
-  [内訳: 思いやり=${clefScores.facets.agreeableness.compassion}, 敬意=${clefScores.facets.agreeableness.respect}, 信頼=${clefScores.facets.agreeableness.trust}]
+  [内訳: 思いやり=${fmtFacet(clefScores.facets.agreeableness.compassion)}, 敬意=${fmtFacet(clefScores.facets.agreeableness.respect)}, 信頼=${fmtFacet(clefScores.facets.agreeableness.trust)}]
 - neuroticism (情緒安定性): 確定スコア ${clefScores.facet_mean_scores.neuroticism}点 (level: "${scoreToLevelLabel(clefScores.facet_mean_scores.neuroticism)}")
-  [内訳: 不安の低さ(ストレス対処)=${clefScores.facets.neuroticism.anxiety}, 抑うつの低さ(気分の安定)=${clefScores.facets.neuroticism.depression}, 感情変動の低さ(動じにくさ)=${clefScores.facets.neuroticism.volatility}]
+  [内訳: 不安の低さ(ストレス対処)=${fmtFacet(clefScores.facets.neuroticism.anxiety)}, 抑うつの低さ(気分の安定)=${fmtFacet(clefScores.facets.neuroticism.depression)}, 感情変動の低さ(動じにくさ)=${fmtFacet(clefScores.facets.neuroticism.volatility)}]
 `
     : `
 ※万一事前スコアが存在しない場合は、BFI-2-Sの5因子×3ファセット基準に基づき0〜100で採点してください。

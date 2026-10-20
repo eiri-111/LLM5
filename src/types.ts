@@ -22,13 +22,13 @@ export interface ClefScoringBreakdown {
   facet_mean_scores: Record<'openness' | 'conscientiousness' | 'extraversion' | 'agreeableness' | 'neuroticism', number>;
   /** 案2（比較検証用）: 5因子直接質問によるスコア (0-100) */
   direct_scores: Record<'openness' | 'conscientiousness' | 'extraversion' | 'agreeableness' | 'neuroticism', number>;
-  /** BFI-2-S 15ファセット個別のスコア (0-100) */
+  /** BFI-2-S 15ファセット個別のスコア (0-100、言及なし・未観測は null) */
   facets: {
-    openness: { intellectual: number; aesthetic: number; creative: number };
-    conscientiousness: { organization: number; productiveness: number; responsibility: number };
-    extraversion: { sociability: number; assertiveness: number; activity: number };
-    agreeableness: { compassion: number; respect: number; trust: number };
-    neuroticism: { anxiety: number; depression: number; volatility: number };
+    openness: { intellectual: number | null; aesthetic: number | null; creative: number | null };
+    conscientiousness: { organization: number | null; productiveness: number | null; responsibility: number | null };
+    extraversion: { sociability: number | null; assertiveness: number | null; activity: number | null };
+    agreeableness: { compassion: number | null; respect: number | null; trust: number | null };
+    neuroticism: { anxiety: number | null; depression: number | null; volatility: number | null };
   };
   /** ファセット別エビデンス充足確信度 ('high': 明確な行動事実あり, 'moderate': 言及あり, 'insufficient': 未言及/欠測) */
   facet_confidences?: Record<string, 'high' | 'moderate' | 'insufficient'>;

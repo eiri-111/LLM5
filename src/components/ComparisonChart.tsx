@@ -103,11 +103,10 @@ export const ComparisonChart: React.FC<ComparisonChartProps> = ({
   );
 
   const facetComparisonList = ALL_FACET_CONFIGS.map(f => {
-    // AI側ファセットスコア
-    let aiFacetVal = (clefScoringData?.facets?.[f.factorKey] as any)?.[f.key];
-    if (typeof aiFacetVal !== 'number') {
-      aiFacetVal = aiScores[f.factorKey]?.score ?? 50;
-    }
+    // AI側ファセットスコア（言及なし・未観測の場合は null）
+    const rawAiVal = (clefScoringData?.facets?.[f.factorKey] as any)?.[f.key];
+    const isObserved = typeof rawAiVal === 'number' && rawAiVal !== null;
+    const aiFacetVal: number | null = isObserved ? rawAiVal : null;
 
     // 質問紙側ファセットスコア
     let surveyFacetVal = (resolvedSurveyFacets?.[f.factorKey] as any)?.[f.key];
@@ -115,16 +114,18 @@ export const ComparisonChart: React.FC<ComparisonChartProps> = ({
       surveyFacetVal = surveyResult.scores[f.factorKey]?.normalizedScore ?? 50;
     }
 
-    const diff = aiFacetVal - surveyFacetVal;
-    const absDiff = Math.abs(diff);
+    const diff = isObserved && aiFacetVal !== null ? aiFacetVal - surveyFacetVal : null;
+    const absDiff = diff !== null ? Math.abs(diff) : null;
 
     // AI側の確信度
-    const confidence = clefScoringData?.facet_confidences?.[`${f.factorKey}_${f.key}`] || 'moderate';
+    const confidence = clefScoringData?.facet_confidences?.[`${f.factorKey}_${f.key}`] || (isObserved ? 'moderate' : 'insufficient');
 
     let insight = '';
-    if (absDiff <= 10) {
+    if (!isObserved) {
+      insight = '対話内での行動データなし（判定保留）';
+    } else if (absDiff !== null && absDiff <= 10) {
       insight = '高一致（対話行動と自己認識が整合）';
-    } else if (diff > 10) {
+    } else if (diff !== null && diff > 10) {
       insight = 'AI推定優位（対話内で該当行動が顕著）';
     } else {
       insight = '自己認識優位（内面的意識が行動より高め）';
@@ -134,6 +135,7 @@ export const ComparisonChart: React.FC<ComparisonChartProps> = ({
       ...f,
       aiVal: aiFacetVal,
       surveyVal: surveyFacetVal,
+      isObserved,
       diff,
       absDiff,
       confidence,
@@ -141,9 +143,10 @@ export const ComparisonChart: React.FC<ComparisonChartProps> = ({
     };
   });
 
-  const avgFacetDiff = Math.round(
-    (facetComparisonList.reduce((acc, f) => acc + f.absDiff, 0) / facetComparisonList.length) * 10
-  ) / 10;
+  const observedFacets = facetComparisonList.filter(f => f.isObserved);
+  const avgFacetDiff = observedFacets.length > 0
+    ? Math.round((observedFacets.reduce((acc, f) => acc + (f.absDiff ?? 0), 0) / observedFacets.length) * 10) / 10
+    : 0;
   const facetMatchRate = Math.max(0, Math.min(100, Math.round(100 - avgFacetDiff)));
 
   // レーダーチャート用データ
@@ -320,6 +323,11 @@ export const ComparisonChart: React.FC<ComparisonChartProps> = ({
             <strong style={{ color: '#007ac0', fontSize: '0.9rem' }}>
               {viewMode === 'dimension' ? `${dimMatchRate}%` : `${facetMatchRate}%`}
             </strong>
+            {viewMode === 'facet' && (
+              <span style={{ fontSize: '0.72rem', color: '#64748b', marginLeft: '4px' }}>
+                (観測データ: {observedFacets.length}/15)
+              </span>
+            )}
           </span>
           <span style={{ color: '#cbd5e1' }}>|</span>
           <span style={{ color: '#5c6878' }}>
@@ -465,22 +473,43 @@ export const ComparisonChart: React.FC<ComparisonChartProps> = ({
                       {/* バーによる視覚的対比 */}
                       <div>
                         {/* AI推定バー */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-                          <span style={{ fontSize: '0.7rem', color: '#007ac0', width: '38px', fontWeight: 600 }}>AI</span>
-                          <div style={{ flex: 1, height: '8px', backgroundColor: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
-                            <div
-                              style={{
-                                width: `${facet.aiVal}%`,
-                                height: '100%',
-                                backgroundColor: '#007ac0',
-                                borderRadius: '4px'
-                              }}
-                            />
+                        {facet.isObserved ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '0.7rem', color: '#007ac0', width: '38px', fontWeight: 600 }}>AI</span>
+                            <div style={{ flex: 1, height: '8px', backgroundColor: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+                              <div
+                                style={{
+                                  width: `${facet.aiVal}%`,
+                                  height: '100%',
+                                  backgroundColor: '#007ac0',
+                                  borderRadius: '4px'
+                                }}
+                              />
+                            </div>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#007ac0', width: '35px', textAlign: 'right' }}>
+                              {facet.aiVal}
+                            </span>
                           </div>
-                          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#007ac0', width: '35px', textAlign: 'right' }}>
-                            {facet.aiVal}
-                          </span>
-                        </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '0.7rem', color: '#94a3b8', width: '38px', fontWeight: 600 }}>AI</span>
+                            <div style={{
+                              flex: 1,
+                              padding: '2px 8px',
+                              backgroundColor: '#f8fafc',
+                              border: '1px dashed #cbd5e1',
+                              borderRadius: '4px',
+                              fontSize: '0.68rem',
+                              color: '#64748b',
+                              fontStyle: 'italic'
+                            }}>
+                              対話内での言及なし（未観測・欠測）
+                            </div>
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', width: '35px', textAlign: 'right' }}>
+                              ―
+                            </span>
+                          </div>
+                        )}
 
                         {/* 質問紙測定バー */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -505,16 +534,29 @@ export const ComparisonChart: React.FC<ComparisonChartProps> = ({
                       {/* 差分 & 所見 */}
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
-                          <span style={{
-                            fontSize: '0.75rem',
-                            fontWeight: 700,
-                            padding: '1px 6px',
-                            borderRadius: '3px',
-                            backgroundColor: facet.absDiff <= 10 ? '#e6f4ea' : (facet.diff > 0 ? '#e8f3fa' : '#fef7e0'),
-                            color: facet.absDiff <= 10 ? '#137333' : (facet.diff > 0 ? '#005e94' : '#b06000')
-                          }}>
-                            {facet.diff > 0 ? `+${facet.diff}` : `${facet.diff}`}点
-                          </span>
+                          {facet.isObserved && facet.diff !== null ? (
+                            <span style={{
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              padding: '1px 6px',
+                              borderRadius: '3px',
+                              backgroundColor: facet.absDiff! <= 10 ? '#e6f4ea' : (facet.diff > 0 ? '#e8f3fa' : '#fef7e0'),
+                              color: facet.absDiff! <= 10 ? '#137333' : (facet.diff > 0 ? '#005e94' : '#b06000')
+                            }}>
+                              {facet.diff > 0 ? `+${facet.diff}` : `${facet.diff}`}点
+                            </span>
+                          ) : (
+                            <span style={{
+                              fontSize: '0.68rem',
+                              fontWeight: 600,
+                              padding: '1px 6px',
+                              borderRadius: '3px',
+                              backgroundColor: '#f1f5f9',
+                              color: '#64748b'
+                            }}>
+                              判定保留
+                            </span>
+                          )}
                           <span style={{
                             fontSize: '0.65rem',
                             padding: '1px 5px',
@@ -522,7 +564,7 @@ export const ComparisonChart: React.FC<ComparisonChartProps> = ({
                             backgroundColor: facet.confidence === 'high' ? '#e6f4ea' : (facet.confidence === 'moderate' ? '#f8fafc' : '#f1f3f4'),
                             color: facet.confidence === 'high' ? '#137333' : '#64748b'
                           }}>
-                            {facet.confidence === 'high' ? '確信度:高' : (facet.confidence === 'moderate' ? '確信度:中' : '参考値')}
+                            {facet.confidence === 'high' ? '確信度:高' : (facet.confidence === 'moderate' ? '確信度:中' : '参考・欠測')}
                           </span>
                         </div>
                         <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '3px' }}>
