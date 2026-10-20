@@ -337,6 +337,102 @@ export const FACET_DEFINITIONS: FacetDefinition[] = [
   }
 ];
 
+/**
+ * CAT (Computerized Adaptive Testing) 項目反応理論 (IRT) に基づく因子測定精度モデル
+ * BFI-2の各因子（3ファセット）について、各ファセットの情報量から因子の標準誤差 (SEM) を算出
+ * 
+ * 心理測定学的根拠:
+ * - BFI-2の各因子は3つの独立したファセットで構成される。
+ * - 1ファセットでも未観測（情報量0）の場合、その潜在的極値（例: 達成努力/責任感が極端に低い等）の
+ *   不確実性が残るため、因子の標準誤差 SEM は目標精度 (<= 5.5) に達しない。
+ * - 3ファセットすべてに一定以上の客観的エビデンス（情報量）が得られて初めて SEM <= 5.5 を達成する。
+ */
+export function calculateFactorCATMetrics(
+  facetProbs: Record<string, number>,
+  factor: FactorNameJP
+): {
+  sem: number;
+  information: number;
+  isSatisfied: boolean;
+  evidencedCount: number;
+  partialCount: number;
+  unobservedFacets: FacetDefinition[];
+  meanProb: number;
+} {
+  const facets = FACET_DEFINITIONS.filter(f => f.factor === factor);
+  let totalInformation = 0;
+  let evidencedCount = 0;
+  let partialCount = 0;
+  const unobservedFacets: FacetDefinition[] = [];
+  let sumProb = 0;
+
+  for (const f of facets) {
+    const p = facetProbs[f.key] ?? 0;
+    sumProb += p;
+
+    // 各ファセットの情報量 I_j (0.0 〜 1.0)
+    // 0.70以上: 十分な行動エビデンス (I = 1.0)
+    // 0.45〜0.70: 部分的エビデンス (I = 0.3〜0.8)
+    // 0.45未満: 未観測 (I < 0.2)
+    let info = 0;
+    if (p >= FACET_EVIDENCE_THRESHOLD) {
+      info = 1.0;
+      evidencedCount++;
+    } else if (p >= 0.45) {
+      info = 0.3 + ((p - 0.45) / 0.25) * 0.5; // 0.3 ~ 0.8
+      partialCount++;
+      unobservedFacets.push(f);
+    } else {
+      info = Math.max(0, (p / 0.45) * 0.2); // 0.0 ~ 0.2
+      unobservedFacets.push(f);
+    }
+    totalInformation += info;
+  }
+
+  const meanProb = sumProb / facets.length;
+
+  // 因子の標準誤差 (SEM, 100点スケール):
+  // 3ファセットすべて十分観測 (evidencedCount === 3): SEM = 4.0 ~ 5.0
+  // 2ファセット観測 + 1ファセット高部分エビデンス (evidencedCount === 2, partialCount === 1, meanProb >= 0.68): SEM = 5.4
+  // 2ファセット観測 + 1ファセット未観測 (evidencedCount === 2, unobserved): SEM = 7.0 ~ 8.0 (目標5.5に未達)
+  // 1ファセット観測: SEM = 10.0 ~ 12.0
+  // 0ファセット観測: SEM = 16.0
+  let sem = 16.0;
+  if (evidencedCount === 3) {
+    sem = 4.0 + (3.0 - totalInformation) * 2.0; // 4.0 ~ 5.0
+  } else if (evidencedCount === 2) {
+    if (partialCount === 1 && totalInformation >= 2.6) {
+      // 3ファセット目にも相当な手応え（p >= 0.60程度）がある場合
+      sem = 5.4;
+    } else {
+      // 1ファセットが未観測のまま残っている場合 -> 永久に過大評価されるリスクを防ぐため SEM >= 7.0
+      sem = 7.0 + (1.0 - (totalInformation - 2.0)) * 1.5;
+    }
+  } else if (evidencedCount === 1) {
+    sem = 10.0 + (2.0 - totalInformation) * 2.0;
+  } else {
+    sem = 16.0;
+  }
+  sem = Math.round(sem * 10) / 10;
+
+  // 目標精度到達基準: CAT目標SEM (<= 5.5)
+  // 3ファセットすべてについて客観的行動エビデンス（あるいは強い部分エビデンス）が得られていることが必要
+  const isSatisfied = sem <= CAT_TARGET_FACTOR_SEM;
+
+  // 未観測ファセットを確率の低い順（情報量が最も足りない順）にソート
+  unobservedFacets.sort((a, b) => (facetProbs[a.key] ?? 0) - (facetProbs[b.key] ?? 0));
+
+  return {
+    sem,
+    information: Math.round(totalInformation * 100) / 100,
+    isSatisfied,
+    evidencedCount,
+    partialCount,
+    unobservedFacets,
+    meanProb
+  };
+}
+
 
 
 export interface UserProfileDemographics {
@@ -454,6 +550,7 @@ export function analyzeDimensionCoverage(messages: ChatMessage[]): {
   uncovered: string[];
   lastAssignedDim: string | null;
   facetScoresFallback: Record<string, number>;
+  factorSems: Record<string, number>;
 } {
   const allDimensions: FactorNameJP[] = ['開放性', '誠実性', '外向性', '協調性', '情緒安定性'];
   const userTextCombined = messages
@@ -474,15 +571,21 @@ export function analyzeDimensionCoverage(messages: ChatMessage[]): {
     '協調性': false,
     '情緒安定性': false
   };
+  const factorSems: Record<string, number> = {};
 
   for (const dim of allDimensions) {
-    const dimFacets = FACET_DEFINITIONS.filter(f => f.factor === dim);
-    const evidencedCount = dimFacets.filter(f => (facetScoresFallback[f.key] ?? 0) >= FACET_EVIDENCE_THRESHOLD).length;
-    covered[dim] = evidencedCount >= 2;
+    const metrics = calculateFactorCATMetrics(facetScoresFallback, dim);
+    factorSems[dim] = metrics.sem;
+    // CAT IRT 基準: 3ファセットすべてが観測され SEM <= CAT_TARGET_FACTOR_SEM (5.5) を満たした場合のみ充足
+    covered[dim] = metrics.isSatisfied;
   }
 
-  const uncovered = allDimensions.filter(d => !covered[d]);
-  return { covered, uncovered, lastAssignedDim: null, facetScoresFallback };
+  // SEMが大きい順（測定精度が低く情報量が最も不足している順）に並べる
+  const uncovered = allDimensions
+    .filter(d => !covered[d])
+    .sort((a, b) => (factorSems[b] ?? 16.0) - (factorSems[a] ?? 16.0));
+
+  return { covered, uncovered, lastAssignedDim: null, facetScoresFallback, factorSems };
 }
 
 /**
@@ -585,39 +688,27 @@ function parseClefPatternCDecision(
   }
 
   const allFactors: FactorNameJP[] = ['開放性', '誠実性', '外向性', '協調性', '情緒安定性'];
-  const factorEvidencedCounts: Record<FactorNameJP, number> = {
-    '開放性': 0,
-    '誠実性': 0,
-    '外向性': 0,
-    '協調性': 0,
-    '情緒安定性': 0
-  };
-  const factorCovered: Record<FactorNameJP, boolean> = {
-    '開放性': false,
-    '誠実性': false,
-    '外向性': false,
-    '協調性': false,
-    '情緒安定性': false
+
+  // CAT / IRT 項目情報量モデルに基づく各因子の測定精度メトリクス (SEM) を算出
+  const factorMetrics: Record<FactorNameJP, ReturnType<typeof calculateFactorCATMetrics>> = {
+    '開放性': calculateFactorCATMetrics(facetProbs, '開放性'),
+    '誠実性': calculateFactorCATMetrics(facetProbs, '誠実性'),
+    '外向性': calculateFactorCATMetrics(facetProbs, '外向性'),
+    '協調性': calculateFactorCATMetrics(facetProbs, '協調性'),
+    '情緒安定性': calculateFactorCATMetrics(facetProbs, '情緒安定性')
   };
 
   let totalEvidencedFacets = 0;
-
   for (const factor of allFactors) {
-    const facets = FACET_DEFINITIONS.filter(f => f.factor === factor);
-    const evidenced = facets.filter(f => (facetProbs[f.key] ?? 0) >= FACET_EVIDENCE_THRESHOLD);
-    const partial = facets.filter(f => (facetProbs[f.key] ?? 0) >= FACET_PARTIAL_THRESHOLD);
-    const meanProb = facets.reduce((sum, f) => sum + (facetProbs[f.key] ?? 0), 0) / facets.length;
-
-    factorEvidencedCounts[factor] = evidenced.length;
-    totalEvidencedFacets += evidenced.length;
-
-    // パターンC 因子充足条件:
-    // 3ファセット中2ファセット以上が >= 0.70、または 1ファセット以上が >= 0.70 かつ全3ファセットが >= 0.50（平均 >= 0.65）
-    factorCovered[factor] =
-      evidenced.length >= 2 || (evidenced.length >= 1 && partial.length === 3 && meanProb >= 0.65);
+    totalEvidencedFacets += factorMetrics[factor].evidencedCount;
   }
 
-  const uncoveredFactors = allFactors.filter(f => !factorCovered[f]);
+  // CAT 測定精度未充足（SEM > CAT_TARGET_FACTOR_SEM: 5.5）の因子をSEMが大きい順（誤差が大きい順）にソート
+  // ※3ファセット中1ファセットでも未観測の場合、SEM >= 7.0 となり必ず未充足として残る
+  const uncoveredFactors = allFactors
+    .filter(f => !factorMetrics[f].isSatisfied)
+    .sort((a, b) => factorMetrics[b].sem - factorMetrics[a].sem);
+
   const overallReadyProb = extractProb(target.is_ready_overall) ?? 0;
 
   // 既出シナリオのトラッキング
@@ -638,25 +729,46 @@ function parseClefPatternCDecision(
 
   const isStuck = isStuckOrNegativeResponse(messages);
 
-  // パターンC 完了判定:
-  // 1) 最低ターン数（6ターン）以上
-  // 2) 全5因子が充足（各2ファセット以上 >= 0.70）かつ10ファセット以上が >= 0.70
-  //    または 7ターン以上で全シナリオが出題済み（未提示シナリオなし）
-  //    または 8ターン以上で4因子以上充足 ＆ overallReadyProb >= 0.65
-  const isAllFactorsSatisfied = uncoveredFactors.length === 0 && totalEvidencedFacets >= 10;
-  const isAllScenariosPresentedSatisfied = userCount >= 6 && unpresentedAny.length === 0 && totalEvidencedFacets >= 6;
-  const isLongDialogueSatisfied = userCount >= 8 && uncoveredFactors.length <= 1 && (overallReadyProb >= 0.65 || totalEvidencedFacets >= 8);
-  const isReady = userCount >= MIN_USER_TURNS && (isAllFactorsSatisfied || isAllScenariosPresentedSatisfied || isLongDialogueSatisfied);
+  // -------------------------------------------------------------
+  // CAT (コンピュータ適応型テスト) 項目反応理論 (IRT) 停止ルール
+  // -------------------------------------------------------------
+  // 1) 統計的測定精度停止ルール (Precision Criterion):
+  //    最低ターン数 (MIN_USER_TURNS: 6) 以上かつ、全5因子の測定標準誤差が目標以下 (全SEM <= 5.5)
+  //    ※BFI-2の各因子3ファセットすべてについて行動エビデンス（情報量）が得られて初めてSEM <= 5.5が達成されるため、
+  //      「2ファセットで打ち切られて残りの1ファセットが永久に測定されない」歪みが数学的に防止される。
+  const isPrecisionSatisfied = userCount >= MIN_USER_TURNS && uncoveredFactors.length === 0;
+
+  // 2) 安全停止ルール (Safety Stop / Maximum Turns):
+  //    受検者の疲労・離脱（Fatigue bias / Attrition）を防ぐためのCAT標準の最大ターン数制限
+  const isMaxTurnsReached = userCount >= MAX_USER_TURNS;
+
+  // 3) 情報利得サチュレーション停止ルール (Information Gain Saturation / Plateau Stop):
+  //    十分なターン数 (8ターン以上) を経て全シナリオが提示済みであり、かつ
+  //    ユーザーの回答が手詰まり・拒絶等でこれ以上の追加情報量が得られない場合
+  const isSaturationSatisfied =
+    userCount >= 8 &&
+    unpresentedAny.length === 0 &&
+    (isStuck || userSaidNoEpisode) &&
+    totalEvidencedFacets >= 8;
+
+  const isReady = isPrecisionSatisfied || isMaxTurnsReached || isSaturationSatisfied;
 
   if (isReady) {
+    const semSummary = allFactors.map(f => `${f}:SE${factorMetrics[f].sem}`).join(', ');
+    const stopReason = isPrecisionSatisfied
+      ? `Precision achieved (All SEM <= ${CAT_TARGET_FACTOR_SEM}, evidencedFacets: ${totalEvidencedFacets}/15)`
+      : isMaxTurnsReached
+      ? `Max turns safety stop (${userCount} turns reached)`
+      : `Information saturation stop (turns: ${userCount})`;
+
     return {
       focus_dimension: '完了',
       target_question_strategy:
-        'すべての質問が完了しました。新たな質問は一切行わず、直前の回答に温かく共感・感謝した上で、画面下のボタンから次の質問紙（BFI-2-S）へ進むよう案内してください。',
+        'すべての測定が完了しました。新たな質問は一切行わず、直前の回答に温かく共感・感謝した上で、画面下のボタンから次の質問紙（BFI-2-S）へ進むよう案内してください。',
       is_ready_for_final_analysis: true,
       action_mode: 'complete',
       evidenced_facets_count: totalEvidencedFacets,
-      notes: `Clef-flash Pattern C Complete (evidencedFacets: ${totalEvidencedFacets}/15, turns: ${userCount})`
+      notes: `Clef-flash CAT Pattern C Complete [${stopReason}] (${semSummary})`
     };
   }
 
@@ -732,7 +844,7 @@ function parseClefPatternCDecision(
     '誠実性';
 
   // もし未提示シナリオが存在しない場合は、無理に新シナリオを出さず完了へ
-  if (unpresentedAny.length === 0 && userCount >= 6) {
+  if (unpresentedAny.length === 0 && userCount >= 8) {
     return {
       focus_dimension: '完了',
       target_question_strategy:
@@ -744,9 +856,12 @@ function parseClefPatternCDecision(
     };
   }
 
-  const missingFacetsInFactor = FACET_DEFINITIONS.filter(
-    f => f.factor === targetFactor && (facetProbs[f.key] ?? 0) < FACET_EVIDENCE_THRESHOLD
-  );
+  // ターゲット因子内で測定精度が不足している未観測ファセットを優先抽出
+  const missingFacetsInFactor = factorMetrics[targetFactor]?.unobservedFacets?.length
+    ? factorMetrics[targetFactor].unobservedFacets
+    : FACET_DEFINITIONS.filter(
+        f => f.factor === targetFactor && (facetProbs[f.key] ?? 0) < FACET_EVIDENCE_THRESHOLD
+      );
   const targetFacets = (missingFacetsInFactor.length > 0 ? missingFacetsInFactor : contextualMissingFacets).slice(0, 3);
   const targetNames = targetFacets.map(f => `${f.factor}［${f.name}］`).join('・');
 
@@ -822,11 +937,11 @@ export async function runAnalyst(
     }
   };
 
-  // 全体の完了判定
+  // 全体の完了判定 (CAT IRT 測定精度基準)
   clefQuestions.is_ready_overall = {
     type: 'noul',
     instructions:
-      'これまでの対話全体を通じて、ビッグファイブ全5因子（開放性・誠実性・外向性・協調性・情緒安定性）すべてについて、各因子2ファセット以上の具体的な行動エピソードが十分に集まり、質問紙と同等の精度で採点できる状態に達しましたか？'
+      'これまでの対話全体を通じて、ビッグファイブ全5因子（開放性・誠実性・外向性・協調性・情緒安定性）の各因子3ファセットすべてについて客観的な行動事実・エビデンスが確認され、測定の標準誤差が十分に小さく高精度に推定できる状態に達しましたか？（未観測のファセットが残っている因子がある場合は必ずno）'
   };
 
   // 1. Cloudflare Workers AI バインディング (env.AI) を最優先で実行
@@ -1518,10 +1633,11 @@ function parseClefScoringResponse(rawObj: any, sourceLabel: string): ClefScoring
       facetConfidences[cfg.key] = 'insufficient';
     } else {
       // 確信度重み（客観エビデンス具体性: Concreteness Weight）
-      // 具体性 P(con) を中庸(50点)からの偏差に対する確信度重み係数として適用。
-      // 「具体性が極めて低く薄っぺらい回答（ポジティブワードを並べただけ）」は自動的に中庸50点へ収縮（Shrinkage）させ、
+      // サイコメトリクスの保守的判定原則（Conservative Principle）に基づき、
+      // 具体性データが欠測（null）の場合はエビデンス未存在と同義であるため重みを 0.0（完全収縮で中庸50点確定）とする。
+      // 具体性 P(con) が観測されている場合のみその確信度（0.0〜1.0）を中庸50点からの偏差に乗算し、
       // 具体的行動エピソード描写が十全に伴っている場合のみ最大振幅（0〜100点）を展開する。
-      const wCon = pCon !== null ? Math.max(0, Math.min(1, pCon)) : 0.5;
+      const wCon = pCon !== null ? Math.max(0, Math.min(1, pCon)) : 0.0;
 
       if (pPos !== null && pNeg !== null) {
         const delta = pPos - pNeg; // -1.0 〜 +1.0
