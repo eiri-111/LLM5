@@ -108,8 +108,11 @@ export interface AnalysisResult {
 const DEFAULT_ACCOUNT_ID = 'e809b1129ec4b6f69520858ac79b2095';
 const DEFAULT_GATEWAY_ID = 'llm5';
 
-/** 対話ターン数（ユーザー発話回数）の制御基準 */
-export const MIN_USER_TURNS = 6; // 最低ターン数（2〜3個のエピソードを深掘りして最低6ターン）
+/** 対話ターン数（ユーザー発話回数）の制御基準（CAT: コンピュータ適応型テスト準拠） */
+export const MIN_USER_TURNS = 6; // 最低ターン数（十分な情報収集を保証する下限）
+export const MAX_USER_TURNS = 11; // 最大ターン数（受検者疲労・離脱防止の安全上限）
+/** IRT / CAT 停止判定における因子の目標測定標準誤差 (SEM Target) */
+export const CAT_TARGET_FACTOR_SEM = 5.5; // 3ファセットすべてにエビデンスが得られSEM<=5.5に収束したら停止
 /** Clef-flash noul確率で「具体的な行動エビデンスが十分に得られた」と判定する閾値 */
 export const FACET_EVIDENCE_THRESHOLD = 0.70;
 /** 「話題には触れたが、まだ具体的な発言・行動の深掘りが足りない（深掘りチャンス）」と判定する中間閾値 */
@@ -1514,12 +1517,21 @@ function parseClefScoringResponse(rawObj: any, sourceLabel: string): ClefScoring
       score = null;
       facetConfidences[cfg.key] = 'insufficient';
     } else {
-      // 対話内で行動事実が語られている場合のみスコアを算出
+      // 確信度重み（客観エビデンス具体性: Concreteness Weight）
+      // 具体性 P(con) を中庸(50点)からの偏差に対する確信度重み係数として適用。
+      // 「具体性が極めて低く薄っぺらい回答（ポジティブワードを並べただけ）」は自動的に中庸50点へ収縮（Shrinkage）させ、
+      // 具体的行動エピソード描写が十全に伴っている場合のみ最大振幅（0〜100点）を展開する。
+      const wCon = pCon !== null ? Math.max(0, Math.min(1, pCon)) : 0.5;
+
       if (pPos !== null && pNeg !== null) {
-        const delta = pPos - pNeg;
-        score = Math.min(100, Math.max(0, Math.round(50 + delta * 50)));
+        const delta = pPos - pNeg; // -1.0 〜 +1.0
+        score = Math.min(100, Math.max(0, Math.round(50 + delta * 50 * wCon)));
       } else if (pPos !== null) {
-        score = Math.min(100, Math.max(0, Math.round(pPos * 100)));
+        const delta = (pPos - 0.5) * 2; // -1.0 〜 +1.0
+        score = Math.min(100, Math.max(0, Math.round(50 + delta * 50 * wCon)));
+      } else if (pNeg !== null) {
+        const delta = (0.5 - pNeg) * 2; // -1.0 〜 +1.0
+        score = Math.min(100, Math.max(0, Math.round(50 + delta * 50 * wCon)));
       } else {
         score = 50;
       }
