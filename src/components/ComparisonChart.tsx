@@ -359,13 +359,18 @@ export const ComparisonChart: React.FC<ComparisonChartProps> = ({
               </thead>
               <tbody>
                 {DIMENSION_CONFIG.map(({ key, label }) => {
-                  const aiVal = aiScores[key].score;
+                  const dimScoreObj = aiScores[key];
+                  const aiVal = dimScoreObj.score;
                   const surveyVal = surveyResult.scores[key].normalizedScore;
                   const diff = aiVal - surveyVal;
+                  const ci = dimScoreObj.confidence_interval;
+                  const sem = dimScoreObj.sem;
 
                   let insightText = '';
                   if (Math.abs(diff) <= 10) {
                     insightText = '高一致（対話行動と自己認識が整合）';
+                  } else if (ci && surveyVal >= ci.lower && surveyVal <= ci.upper) {
+                    insightText = '95%信頼区間内（測定誤差の許容範囲内で整合）';
                   } else if (diff > 10) {
                     insightText = 'AI推定優位（対話内で該当行動が顕著）';
                   } else {
@@ -374,8 +379,22 @@ export const ComparisonChart: React.FC<ComparisonChartProps> = ({
 
                   return (
                     <tr key={key}>
-                      <td style={{ fontWeight: 600, color: '#1b2432' }}>{label}</td>
-                      <td style={{ color: '#007ac0', fontWeight: 700 }}>{aiVal}点</td>
+                      <td style={{ fontWeight: 600, color: '#1b2432' }}>
+                        <div>{label}</div>
+                        {ci && (
+                          <div style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 'normal', marginTop: '2px' }}>
+                            SEM: ±{sem ?? 5}点
+                          </div>
+                        )}
+                      </td>
+                      <td>
+                        <div style={{ color: '#007ac0', fontWeight: 700 }}>{aiVal}点</div>
+                        {ci && (
+                          <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '2px' }}>
+                            CI: [{ci.lower}〜{ci.upper}]
+                          </div>
+                        )}
+                      </td>
                       <td style={{ color: '#1b365d', fontWeight: 700 }}>{surveyVal}点</td>
                       <td style={{ fontWeight: 600, color: '#333e4f' }}>
                         {diff > 0 ? `+${diff}` : `${diff}`}

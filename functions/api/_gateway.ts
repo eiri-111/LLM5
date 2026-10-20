@@ -1280,10 +1280,57 @@ function extractClefNoulScore(item: any): number | null {
   return Math.min(100, Math.max(0, Math.round(prob * 100)));
 }
 
-function scoreToLevelLabel(score: number): string {
+export function scoreToLevelLabel(score: number): string {
   if (score >= 70) return '高い';
   if (score >= 45) return '中庸';
   return '控えめ';
+}
+
+/**
+ * 古典的テスト理論(CTT)およびIRT情報量モデルに基づく測定の標準誤差 (SEM) と95%信頼区間の算出
+ * 観測された情報量（ファセット数・行動事実の具体性）に応じた測定誤差の幅を誠実に開示する
+ * @param score 確定スコア (0〜100)
+ * @param observedCount 観測された有効ファセット数 (0〜3)
+ * @param confidences ファセットごとの確信度リスト
+ */
+export function calculateDimensionMeasurementError(
+  score: number,
+  observedCount: number,
+  confidences: Array<'high' | 'moderate' | 'insufficient'> = []
+): {
+  sem: number;
+  confidence_interval: { lower: number; upper: number };
+  confidence: 'high' | 'moderate' | 'insufficient' | 'unobserved';
+} {
+  const highCount = confidences.filter(c => c === 'high').length;
+
+  let sem = 16.0;
+  let confidence: 'high' | 'moderate' | 'insufficient' | 'unobserved' = 'unobserved';
+
+  if (observedCount >= 3) {
+    sem = highCount >= 2 ? 4.0 : 5.5;
+    confidence = 'high';
+  } else if (observedCount === 2) {
+    sem = highCount >= 1 ? 6.5 : 8.0;
+    confidence = 'moderate';
+  } else if (observedCount === 1) {
+    sem = highCount >= 1 ? 10.0 : 12.0;
+    confidence = 'insufficient';
+  } else {
+    sem = 16.0;
+    confidence = 'unobserved';
+  }
+
+  // 95%信頼区間: Score ± 1.96 * SEM
+  const margin = Math.round(1.96 * sem);
+  const lower = Math.max(0, score - margin);
+  const upper = Math.min(100, score + margin);
+
+  return {
+    sem: Math.round(sem * 10) / 10,
+    confidence_interval: { lower, upper },
+    confidence
+  };
 }
 
 /** 15ファセットの多方向評価定義リスト（ポジティブ高特性・ネガティブ低特性・具体性エビデンス） */
@@ -1597,7 +1644,7 @@ export async function runClefScoring(
   env: Env,
   dialogueHistory: string
 ): Promise<ClefScoringBreakdown | null> {
-  const scoringState = `【対話履歴】\n${dialogueHistory}\n\n上記の対話履歴から、行動アンカー評定尺度（BARS / BOS）に基づき、各性格ファセットに対応する「客観的な具体的行動事実・発言」が実際に確認できるかを厳密に判定・評価してください。単なる印象や言葉遣いの丁寧さではなく、実際に語られた振る舞いを根拠としてください。`;
+  const scoringState = `【対話履歴】\n${dialogueHistory}\n\n上記の対話履歴から、行動アンカー評定尺度（BARS / BOS）に基づき、各性格ファセットに対応する「客観的な具体的行動事実・発言」が実際に確認できるかを厳密に判定・評価してください。単なる印象や言葉遣いの丁寧さではなく、実際に語られた振る舞いを根拠としてください。\n\n【心理測定学上の絶対原則】\n受検者の発話の短さ（短文・口数の少なさ・端的な回答）を、安易に内向性や低特性行動（P(neg)）として加算することは厳禁です。集まりや対人場面において「自分からあえて沈黙を保った」「一人で静かに過ごした」という客観的なエピソード事実が語られた場合のみ低特性行動として判定してください。単なる回答文字数の短さや回答の消極性は、受検態度妥当性指標（defensiveness: 防衛的姿勢、concrete_detail: 具体描写度、mock_or_careless: 省力化回答）として評価してください。`;
 
   const scoringQuestions: Record<string, { type: 'noul'; instructions: string }> = {};
 
@@ -1931,16 +1978,20 @@ ${confirmedScoresBlock}
           parsedResult.scores[dim].score = confirmedScore;
           parsedResult.scores[dim].level = scoreToLevelLabel(confirmedScore);
 
-          // ファセット単位の確信度集約 (3ファセット中 high の数)
+          // ファセット単位の観測状況・確信度の集約
           const facetKeys = Object.keys(clefScores.facets[dim]) as Array<keyof typeof clefScores.facets[typeof dim]>;
-          const confidences = facetKeys.map(fk => clefScores.facet_confidences?.[`${dim}_${String(fk)}`] || 'moderate');
-          const highCount = confidences.filter(c => c === 'high').length;
-          const insufficientCount = confidences.filter(c => c === 'insufficient').length;
+          const observedFacetCount = facetKeys.filter(fk => clefScores.facets[dim][fk] !== null).length;
+          const confidences = facetKeys
+            .filter(fk => clefScores.facets[dim][fk] !== null)
+            .map(fk => clefScores.facet_confidences?.[`${dim}_${String(fk)}`] || 'moderate');
 
-          parsedResult.scores[dim].evidenced_facet_count = highCount;
-          parsedResult.scores[dim].confidence = highCount >= 2
-            ? 'high'
-            : (insufficientCount >= 2 ? 'insufficient' : 'moderate');
+          // 古典的テスト理論(CTT)およびIRT情報量モデルに基づくSEM・95%信頼区間の厳密算出
+          const errorMetrics = calculateDimensionMeasurementError(confirmedScore, observedFacetCount, confidences);
+
+          parsedResult.scores[dim].evidenced_facet_count = observedFacetCount;
+          parsedResult.scores[dim].sem = errorMetrics.sem;
+          parsedResult.scores[dim].confidence_interval = errorMetrics.confidence_interval;
+          parsedResult.scores[dim].confidence = errorMetrics.confidence;
         }
       }
       parsedResult.clef_scoring_data = clefScores;

@@ -209,7 +209,7 @@ export const ResultReport: React.FC<ResultReportProps> = ({
                   <span className="dim-avatar" style={{ backgroundColor: d.color }}>{d.badge}</span>
                   <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1b2432' }}>{d.name}</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   {dimData.confidence && (
                     <span style={{
                       fontSize: '0.68rem',
@@ -219,7 +219,25 @@ export const ResultReport: React.FC<ResultReportProps> = ({
                       backgroundColor: dimData.confidence === 'high' ? '#e6f4ea' : (dimData.confidence === 'moderate' ? '#fef7e0' : '#f1f3f4'),
                       color: dimData.confidence === 'high' ? '#137333' : (dimData.confidence === 'moderate' ? '#b06000' : '#5f6368')
                     }}>
-                      {dimData.confidence === 'high' ? 'エビデンス十分' : (dimData.confidence === 'moderate' ? 'エビデンス中程度' : '言及少・参考値')}
+                      {dimData.confidence === 'high'
+                        ? '測定信頼度: 高 (3ファセット観測)'
+                        : (dimData.confidence === 'moderate'
+                          ? '測定信頼度: 中 (2ファセット観測)'
+                          : (dimData.confidence === 'insufficient'
+                            ? '測定信頼度: 低 (1ファセット観測)'
+                            : '未観測・直接推論'))}
+                    </span>
+                  )}
+                  {dimData.confidence_interval && (
+                    <span style={{
+                      fontSize: '0.68rem',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      backgroundColor: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      color: '#475569'
+                    }}>
+                      95% CI: [{dimData.confidence_interval.lower} - {dimData.confidence_interval.upper}点] (SEM: ±{dimData.sem ?? 5}点)
                     </span>
                   )}
                   <span className="dim-score-badge" style={{ color: d.color }}>{dimData.score}</span>
