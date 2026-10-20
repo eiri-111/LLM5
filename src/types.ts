@@ -5,8 +5,13 @@ export interface BigFiveDimension {
   description: string;
   traits: string[];
   analysis_reasoning?: string; // 対話からなぜこのスコアと判定されたかの根拠
-  confidence?: 'high' | 'moderate' | 'insufficient'; // 行動エビデンスの充足度・測定確信度
+  confidence?: 'high' | 'moderate' | 'insufficient' | 'unobserved'; // 行動エビデンスの充足度・測定確信度
   evidenced_facet_count?: number; // 3ファセット中エビデンスが得られた数 (0〜3)
+  sem?: number; // 測定の標準誤差 (Standard Error of Measurement)
+  confidence_interval?: {
+    lower: number; // 95%信頼区間の下限 (0〜100)
+    upper: number; // 95%信頼区間の上限 (0〜100)
+  };
 }
 
 export interface BigFiveScores {

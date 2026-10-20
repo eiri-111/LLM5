@@ -35,8 +35,13 @@ export interface BigFiveDimension {
   description: string;
   traits: string[];
   analysis_reasoning?: string;
-  confidence?: 'high' | 'moderate' | 'insufficient';
+  confidence?: 'high' | 'moderate' | 'insufficient' | 'unobserved';
   evidenced_facet_count?: number;
+  sem?: number; // 測定の標準誤差 (Standard Error of Measurement)
+  confidence_interval?: {
+    lower: number; // 95%信頼区間の下限 (0〜100)
+    upper: number; // 95%信頼区間の上限 (0〜100)
+  };
 }
 
 export interface ClefScoringBreakdown {
