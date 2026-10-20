@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, RotateCcw } from 'lucide-react';
 import { ChatMessage, UserProfile } from '../types';
 import { buildInitialGreeting } from '../data/scenarios';
 
@@ -9,6 +9,7 @@ interface ChatModeProps {
   onStartSurvey: (messages: ChatMessage[]) => void;
   onSkipToSurvey?: () => void;
   onSkipToResult?: () => void;
+  onReset?: () => void;
   showToast: (msg: string) => void;
 }
 
@@ -37,6 +38,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
   onStartSurvey,
   onSkipToSurvey,
   onSkipToResult,
+  onReset,
   showToast,
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
@@ -270,18 +272,41 @@ export const ChatMode: React.FC<ChatModeProps> = ({
 
   return (
     <div className="chat-wrapper">
-      {/* スキップ操作バー（進捗バー・説明バナーを排除し、ボタンのみをコンパクトに配置） */}
-      {(onSkipToSurvey || onSkipToResult) && (
+      {/* 操作バー（ヘッダー・進捗バーを全廃し、やり直し＆スキップボタンをコンパクトに横並び配置） */}
+      {(onReset || onSkipToSurvey || onSkipToResult) && (
         <div style={{
           display: 'flex',
           justifyContent: 'flex-end',
           alignItems: 'center',
-          gap: '8px',
+          gap: '6px',
           padding: '6px 12px',
           backgroundColor: '#f7f9fa',
           borderBottom: '1px solid #e2e6eb',
-          flexShrink: 0
+          flexShrink: 0,
+          flexWrap: 'wrap'
         }}>
+          {onReset && (
+            <button
+              type="button"
+              onClick={onReset}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                backgroundColor: '#ffffff',
+                border: '1px solid #b8c2cc',
+                color: '#5c6878',
+                fontSize: '0.72rem',
+                fontWeight: 500,
+                padding: '3px 8px',
+                borderRadius: '3px',
+                cursor: 'pointer'
+              }}
+            >
+              <RotateCcw size={11} />
+              <span>最初からやり直す</span>
+            </button>
+          )}
           {onSkipToSurvey && (
             <button
               type="button"

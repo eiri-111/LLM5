@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AnalysisResult, UserProfile, ChatMessage, SurveyResult } from './types';
-import { Header } from './components/Header';
 import { ChatMode } from './components/ChatMode';
 import { ResultReport } from './components/ResultReport';
 import { BfiSurveySection } from './components/BfiSurveySection';
@@ -535,12 +534,6 @@ export const App: React.FC = () => {
       <div className="ambient-glow-1"></div>
       <div className="ambient-glow-2"></div>
 
-      {/* アプリ共通ヘッダー（診断を最初からに戻るボタン） */}
-      <Header
-        phase={phase}
-        onReset={handleConfirmRetake}
-      />
-
       {/* 開発・デバッグ確認用（?dev=true の時のみ表示） */}
       {typeof window !== 'undefined' && window.location.search.includes('dev=true') && (
         <DevQuickBar
@@ -571,6 +564,7 @@ export const App: React.FC = () => {
             onStartSurvey={handleStartSurvey}
             onSkipToSurvey={handleSkipToSurvey}
             onSkipToResult={handleSkipToResult}
+            onReset={handleConfirmRetake}
             showToast={showToast}
           />
         )}
@@ -581,6 +575,7 @@ export const App: React.FC = () => {
             onCompleteSurvey={handleCompleteSurvey}
             onSkipToResult={handleSkipToResult}
             onBackToChat={handleSkipToChat}
+            onReset={handleConfirmRetake}
             showToast={showToast}
           />
         )}

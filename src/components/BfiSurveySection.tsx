@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, ArrowLeft } from 'lucide-react';
+import { ArrowRight, ArrowLeft, RotateCcw } from 'lucide-react';
 import { SurveyResult } from '../types';
 import { BFI_2_S_CONFIG, calculateBfiScores } from '../data/bfi2s';
 
@@ -7,6 +7,7 @@ interface BfiSurveySectionProps {
   onCompleteSurvey: (result: SurveyResult) => void;
   onSkipToResult?: () => void;
   onBackToChat?: () => void;
+  onReset?: () => void;
   showToast: (msg: string) => void;
 }
 
@@ -16,6 +17,7 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
   onCompleteSurvey,
   onSkipToResult,
   onBackToChat,
+  onReset,
   showToast
 }) => {
   const [answers, setAnswers] = useState<Record<number, number>>(() => {
@@ -192,7 +194,29 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
               設問ブロック 2: 自己認識に関する質問（BFI-2-S）
             </h1>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              {onReset && (
+                <button
+                  type="button"
+                  onClick={onReset}
+                  style={{
+                    backgroundColor: '#ffffff',
+                    border: '1px solid #b8c2cc',
+                    borderRadius: '3px',
+                    color: '#5c6878',
+                    cursor: 'pointer',
+                    padding: '3px 8px',
+                    fontSize: '0.72rem',
+                    fontWeight: 500,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <RotateCcw size={11} />
+                  <span>最初からやり直す</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleAutoFillSample}
