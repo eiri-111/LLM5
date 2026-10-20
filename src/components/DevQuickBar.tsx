@@ -22,10 +22,10 @@ export const DevQuickBar: React.FC<DevQuickBarProps> = ({
     <div
       style={{
         position: 'fixed',
-        bottom: '12px',
+        top: '64px',
         right: '12px',
         zIndex: 9999,
-        maxWidth: '360px',
+        maxWidth: '320px',
         pointerEvents: 'auto'
       }}
     >
@@ -33,12 +33,14 @@ export const DevQuickBar: React.FC<DevQuickBarProps> = ({
         style={{
           backgroundColor: '#ffffff',
           border: '1px solid #b8c2cc',
-          borderTop: '3px solid #1b365d',
-          borderRadius: '4px',
-          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12)',
-          padding: isExpanded ? '8px 10px' : '5px 10px',
+          borderLeft: '3px solid #1b365d',
+          borderRadius: '6px',
+          boxShadow: '0 2px 10px rgba(0, 0, 0, 0.15)',
+          padding: isExpanded ? '8px 10px' : '4px 8px',
           color: '#1b2432',
-          fontSize: '0.75rem'
+          fontSize: '0.72rem',
+          opacity: isExpanded ? 1 : 0.85,
+          transition: 'all 0.2s ease'
         }}
       >
         <div
@@ -47,15 +49,15 @@ export const DevQuickBar: React.FC<DevQuickBarProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            gap: '8px',
+            gap: '6px',
             cursor: 'pointer',
             userSelect: 'none',
             fontWeight: 600,
             color: '#1b365d'
           }}
         >
-          <span>プレビュー切替 ({currentPhase === 'chat' ? '対話' : currentPhase === 'survey' ? '質問紙' : '結果'})</span>
-          {isExpanded ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+          <span>🛠️ プレビュー切替 ({currentPhase === 'chat' ? '対話' : currentPhase === 'survey' ? '質問紙' : '結果'})</span>
+          {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
         </div>
 
         {isExpanded && (
@@ -63,17 +65,20 @@ export const DevQuickBar: React.FC<DevQuickBarProps> = ({
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '5px',
-              marginTop: '8px',
+              gap: '4px',
+              marginTop: '6px',
               flexWrap: 'wrap'
             }}
           >
             <button
               type="button"
-              onClick={onSkipToChat}
+              onClick={() => {
+                onSkipToChat();
+                setIsExpanded(false);
+              }}
               style={{
-                padding: '4px 8px',
-                fontSize: '0.72rem',
+                padding: '4px 6px',
+                fontSize: '0.70rem',
                 fontWeight: currentPhase === 'chat' ? 700 : 500,
                 borderRadius: '3px',
                 border: '1px solid #b8c2cc',
@@ -87,10 +92,13 @@ export const DevQuickBar: React.FC<DevQuickBarProps> = ({
 
             <button
               type="button"
-              onClick={onSkipToSurvey}
+              onClick={() => {
+                onSkipToSurvey();
+                setIsExpanded(false);
+              }}
               style={{
-                padding: '4px 8px',
-                fontSize: '0.72rem',
+                padding: '4px 6px',
+                fontSize: '0.70rem',
                 fontWeight: currentPhase === 'survey' ? 700 : 500,
                 borderRadius: '3px',
                 border: '1px solid #b8c2cc',
@@ -104,10 +112,13 @@ export const DevQuickBar: React.FC<DevQuickBarProps> = ({
 
             <button
               type="button"
-              onClick={onSkipToResult}
+              onClick={() => {
+                onSkipToResult();
+                setIsExpanded(false);
+              }}
               style={{
-                padding: '4px 8px',
-                fontSize: '0.72rem',
+                padding: '4px 6px',
+                fontSize: '0.70rem',
                 fontWeight: currentPhase === 'result' ? 700 : 500,
                 borderRadius: '3px',
                 border: '1px solid #b8c2cc',
@@ -116,15 +127,18 @@ export const DevQuickBar: React.FC<DevQuickBarProps> = ({
                 cursor: 'pointer'
               }}
             >
-              3. 結果レポート
+              3. 結果
             </button>
 
             <button
               type="button"
-              onClick={onReset}
+              onClick={() => {
+                onReset();
+                setIsExpanded(false);
+              }}
               style={{
-                padding: '4px 8px',
-                fontSize: '0.72rem',
+                padding: '4px 6px',
+                fontSize: '0.70rem',
                 borderRadius: '3px',
                 border: '1px solid #d93025',
                 backgroundColor: '#ffffff',
@@ -132,7 +146,7 @@ export const DevQuickBar: React.FC<DevQuickBarProps> = ({
                 cursor: 'pointer'
               }}
             >
-              初期化
+              リセット
             </button>
           </div>
         )}

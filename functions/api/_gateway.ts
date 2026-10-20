@@ -203,25 +203,25 @@ export const FACET_DEFINITIONS: FacetDefinition[] = [
     key: 'ev_openness_intellectual',
     factor: '開放性',
     name: '知的好奇心',
-    probeHint: '普段の会話でどんな話題（「なぜそうなるのか」等の仕組みや知的なテーマ）に食いつくか、疑問が湧いたときにどう調べるか',
-    evidenceInstruction: '【開放性 - 知的好奇心の行動エビデンス】単なる抽象的な自己紹介ではなく、対話の中で「普段どんな話題に食いつくか」「疑問や未知のテーマに対してどう調べたり議論したりしたか」という具体的な行動・会話エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
-    regexFallback: /(調べ|仕組み|なぜ|理由|議論|深掘り|知識|勉強|本|ニュース|考察|分析|知的好奇心)/
+    probeHint: '普段の会話でどんな話題（「なぜそうなるのか」等の仕組みや知的なテーマ）に食いつくか、疑問が湧いたときにどう調べるか（あるいは深入りせず手近で済ませるか）',
+    evidenceInstruction: '【開放性 - 知的好奇心の行動エビデンス】対話の中で、「疑問や未知のテーマを自ら深く調べた事実」または「深入りせず手近な定番・実用的なことにとどめた事実」のいずれか、知的好奇心の高低を客観的に判定できる具体的な行動・選択が語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(調べ|仕組み|なぜ|理由|議論|深掘り|知識|勉強|本|ニュース|考察|分析|知的好奇心|定番|その場|こだわら)/
   },
   {
     key: 'ev_openness_aesthetic',
     factor: '開放性',
     name: '美的好奇心',
-    probeHint: '自由な時間や休日にどんなコンテンツ（音楽・映画・美術・デザイン・景色・雰囲気の良い場所など）を選び、どう楽しむか',
-    evidenceInstruction: '【開放性 - 美的好奇心の行動エビデンス】対話の中で、音楽・映画・芸術・デザイン・風景・作品のこだわりなど、美的・文化的な体験にどう触れているか（または全く関心がないか）が分かる具体的な選択・行動エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
-    regexFallback: /(音楽|映画|美術|芸術|デザイン|景色|雰囲気|カフェ|建築|作品|イラスト|写真|ライブ|センス)/
+    probeHint: '自由な時間や休日にどんなコンテンツ（音楽・映画・美術・デザイン・景色・雰囲気の良い場所など）を選び、どう楽しむか（あるいは芸術に関心がないか）',
+    evidenceInstruction: '【開放性 - 美的好奇心の行動エビデンス】対話の中で、音楽・映画・芸術・デザイン等の体験に「能動的に触れて楽しんだ事実」または「そうした体験に関心を払わず定番や実利を優先した事実」のいずれか、美的好奇心の高低を客観的に判定できる具体的な行動・選択が語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(音楽|映画|美術|芸術|デザイン|景色|雰囲気|カフェ|建築|作品|イラスト|写真|ライブ|センス|実用|関心.*ない|見ない)/
   },
   {
     key: 'ev_openness_creative',
     factor: '開放性',
     name: '創造力',
-    probeHint: 'いつものやり方に飽きたときや課題に直面したとき、新しい方法・独自の工夫・変わった選択肢をどう試したか',
-    evidenceInstruction: '【開放性 - 創造力の行動エビデンス】対話の中で、新しいやり方を試した、独自の工夫やアイデアを出した（あるいは定番・ルーティンをあえて守った）という具体的な行動エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
-    regexFallback: /(工夫|新しい|アイデア|試|自作|アレンジ|独自|発想|挑戦|ルーティン|定番)/
+    probeHint: 'いつものやり方に飽きたときや課題に直面したとき、新しい方法・独自の工夫を試したか、それとも確立された定番・ルーティン通りに動いたか',
+    evidenceInstruction: '【開放性 - 創造力の行動エビデンス】対話の中で、「新しいやり方や独自の工夫・アレンジを試した事実」または「自己流を避けて確立された手順・定番通りを選んだ（工夫は特にしない）事実」のいずれか、創造力の高低を客観的に判定できる具体的な行動・選択が語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(工夫|新しい|アイデア|試|自作|アレンジ|独自|発想|挑戦|ルーティン|定番|工夫.*(しない|しな|特になし)|そのまま)/
   },
 
   // 2. 誠実性 (Conscientiousness)
@@ -229,25 +229,25 @@ export const FACET_DEFINITIONS: FacetDefinition[] = [
     key: 'ev_conscientiousness_organization',
     factor: '誠実性',
     name: '組織化（段取り・整理）',
-    probeHint: '出かける前や作業前にどこまで事前に計画・段取りを組むか、あるいは予定変更時にどう再手配したか',
-    evidenceInstruction: '【誠実性 - 組織化の行動エビデンス】対話の中で、事前の計画・スケジュール管理・段取り・整理整頓（あるいはノープラン・行き当たりばったりで動く様子）が分かる具体的な行動エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
-    regexFallback: /(計画|段取り|準備|スケジュール|予約|整理|リスト|片付け|ノープラン|行き当たりばったり|ルート)/
+    probeHint: '出かける前や作業前にどこまで事前に計画・段取りを組むか、あるいは予定変更時にどう再手配したか（またはノープランで動くか）',
+    evidenceInstruction: '【誠実性 - 組織化の行動エビデンス】対話の中で、「事前に計画・優先順位を整理して段取りを組み立てた事実」または「計画を立てずその場の行き当たりばったり・ノープランで動いた事実」のいずれか、組織化の高低を客観的に判定できる具体的な行動が語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(計画|段取り|準備|スケジュール|予約|整理|リスト|片付け|ノープラン|行き当たりばったり|ルート|成り行き|適当)/
   },
   {
     key: 'ev_conscientiousness_productiveness',
     factor: '誠実性',
     name: '生産性（やり抜く力）',
-    probeHint: 'やらなければいけないけれど面倒な作業や課題があるとき、すぐ着手してやり通したか、後回しにしたか',
-    evidenceInstruction: '【誠実性 - 生産性の行動エビデンス】対話の中で、面倒な作業や地道なタスクに対して「どう着手し、最後までどうやり抜いたか（あるいは先延ばし・休憩を優先したか）」が分かる具体的な行動エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
-    regexFallback: /(面倒|コツコツ|やり切|やり抜|最後|終わらせ|後回し|先延ばし|集中|継続|作業|課題)/
+    probeHint: 'やらなければいけないけれど面倒な作業や課題があるとき、すぐ着手してやり通したか、それとも後回し・先延ばしにしたか',
+    evidenceInstruction: '【誠実性 - 生産性の行動エビデンス】対話の中で、「面倒なタスクに着手して最後までやり抜いた事実」または「無理せず諦めて寝る・後回し・先延ばしにした事実」のいずれか、生産性の高低を客観的に判定できる具体的な行動が語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(面倒|コツコツ|やり切|やり抜|最後|終わらせ|後回し|先延ばし|集中|継続|作業|課題|諦めて寝|ほったらか)/
   },
   {
     key: 'ev_conscientiousness_responsibility',
     factor: '誠実性',
     name: '責任感',
     probeHint: '自分の役割や約束・時間を守るために具体的にどう動いたか、周囲から頼まれた時にどう対応したか',
-    evidenceInstruction: '【誠実性 - 責任感の行動エビデンス】対話の中で、約束や締切の遵守、自分の役割を最後まで果たす行動、周囲からの頼まれごとへの対応ぶりが分かる具体的な行動エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
-    regexFallback: /(役割|責任|約束|時間|遅刻|締切|期限|守る|任され|担当|きっちり)/
+    evidenceInstruction: '【誠実性 - 責任感の行動エビデンス】対話の中で、「約束や締切を守るため自ら責任を持って動いた・連絡した事実」または「連絡を後回しにしたり放置・他人に任せきりにした事実」のいずれか、責任感の高低を客観的に判定できる具体的な行動が語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(役割|責任|約束|時間|遅刻|締切|期限|守る|任され|担当|きっちり|連絡.*(しない|後回し)|放置)/
   },
 
   // 3. 外向性 (Extraversion)
@@ -255,25 +255,25 @@ export const FACET_DEFINITIONS: FacetDefinition[] = [
     key: 'ev_extraversion_sociability',
     factor: '外向性',
     name: '社交性',
-    probeHint: '人が集まる場や会話の中で、自分からどう話しかけたか、または聞き役に回ったか',
-    evidenceInstruction: '【外向性 - 社交性の行動エビデンス】対話の中で、他者との会話や集まりの場面で「自分から話しかけたか、会話を広げたか、それとも静かに聞き役に回ったか」という具体的な振る舞い・発言エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
-    regexFallback: /(話しかけ|会話|盛り上|雑談|聞き役|しゃべ|初対面|友達|仲間|声かけ|明るく)/
+    probeHint: '人が集まる場や会話の中で、自分からどう話しかけたか、または聞き役に回ったか（あるいは話しかけられるまで待ったか）',
+    evidenceInstruction: '【外向性 - 社交性の行動エビデンス】対話の中で、「自分から進んで話しかけたり会話を広げた事実」または「自らは話しかけず沈黙を保つ・聞かれるまで待った事実」のいずれか、社交性の高低を客観的に判定できる具体的な振る舞いが語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(話しかけ|会話|盛り上|雑談|聞き役|しゃべ|初対面|友達|仲間|声かけ|明るく|聞かれるまで|自分からは|静かに)/
   },
   {
     key: 'ev_extraversion_assertiveness',
     factor: '外向性',
     name: '主張性（主導権）',
     probeHint: '複数人で何かを決めるときや場が停滞したとき、自分から「こうしよう」と提案・リードしたか、周囲の決定に従ったか',
-    evidenceInstruction: '【外向性 - 主張性の行動エビデンス】対話の中で、集団や対人場面で「自分から意見を出して主導（リード）したか、それとも他人の提案に任せたか」が分かる具体的な発言・行動エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
-    regexFallback: /(提案|リード|主導|意見|まとめ|引っ張|仕切|決め|従う|合わせる)/
+    evidenceInstruction: '【外向性 - 主張性の行動エビデンス】対話の中で、「自分から意見・折衷案を出して全体をリードした事実」または「自分の主張は出さず他人の意見に同調・決定を周囲に任せた事実」のいずれか、主張性の高低を客観的に判定できる具体的な発言が語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(提案|リード|主導|意見|まとめ|引っ張|仕切|決め|従う|合わせる|任せる|同調|一票|運転.*やる)/
   },
   {
     key: 'ev_extraversion_activity',
     factor: '外向性',
     name: '活動性',
-    probeHint: '休日や日常の中でどれくらい予定を入れて外へ動き回るか、あるいは家でゆっくり過ごすか、行動のテンポやフットワークの軽さ',
-    evidenceInstruction: '【外向性 - 活動性の行動エビデンス】対話の中で、日々の行動量、休日のフットワークの軽さ、エネルギッシュに動き回るかゆっくり過ごすかが分かる具体的な行動エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
-    regexFallback: /(休日|出かけ|動き回|アクティブ|フットワーク|インドア|家でのんびり|予定を入れ|活発|外に出)/
+    probeHint: '休日や日常の中でどれくらい予定を入れて外へ動き回るか、あるいは家でゆっくり過ごすか',
+    evidenceInstruction: '【外向性 - 活動性の行動エビデンス】対話の中で、「能動的に外出して精力的に活動した事実」または「活発な外出を避け自宅・自室で静かにリラックスして過ごした事実」のいずれか、活動性の高低を客観的に判定できる具体的な行動が語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(休日|出かけ|動き回|アクティブ|フットワーク|インドア|家でのんびり|予定を入れ|活発|外に出|部屋で|家で)/
   },
 
   // 4. 協調性 (Agreeableness)
@@ -281,25 +281,25 @@ export const FACET_DEFINITIONS: FacetDefinition[] = [
     key: 'ev_agreeableness_compassion',
     factor: '協調性',
     name: '思いやり',
-    probeHint: '周囲で困っている人や疲れている人がいたとき、どんな声をかけたか・どんな手助けをしたか',
-    evidenceInstruction: '【協調性 - 思いやりの行動エビデンス】対話の中で、周囲の人への気遣い、声かけ、手助け、フォロー（あるいは自分のペースを優先した様子）が分かる具体的な行動・発言エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
-    regexFallback: /(気遣|フォロー|助け|手伝|声.*かけ|心配|優し|サポート|気づか|寄り添)/
+    probeHint: '周囲で困っている人や疲れている人がいたとき、どんな声をかけたか・どんな手助けをしたか（あるいは距離を置いたか）',
+    evidenceInstruction: '【協調性 - 思いやりの行動エビデンス】対話の中で、「他者に寄り添い助けや気遣いの声かけ・行動を行った事実」または「深入りせず自分の都合・効率を最優先した事実」のいずれか、思いやりの高低を客観的に判定できる具体的な行動が語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(気遣|フォロー|助け|手伝|声.*かけ|心配|優し|サポート|気づか|寄り添|教え|大丈夫か|深入りしな)/
   },
   {
     key: 'ev_agreeableness_respect',
     factor: '協調性',
     name: '敬意（対立回避）',
-    probeHint: '周囲と意見や考えが少し違ったとき（または相手の話を聞くとき）、角が立たないようにどう伝えたか・どう折り合いをつけたか（あるいは率直に意見を言ったか）',
-    evidenceInstruction: '【協調性 - 敬意の行動エビデンス】対話の中で、意見の相違や他人のミスに直面した際、「角を立てずに穏やかに伝えたか、譲歩したか、それともストレートに反論・指摘したか」という具体的な言葉遣い・態度のエピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
-    regexFallback: /(意見.*違|対立|譲|穏やか|角が立た|怒ら|指摘|反論|言い方|空気を読|丁寧)/
+    probeHint: '周囲と意見や考えが少し違ったとき、角が立たないようにどう伝えたか・どう折り合いをつけたか（あるいは率直に反論したか）',
+    evidenceInstruction: '【協調性 - 敬意の行動エビデンス】対話の中で、「対立時にも相手に敬意を払い穏やかに接した・譲歩した事実」または「不満をストレートにぶつける・率直に自己主張した事実」のいずれか、敬意・対立回避の高低を客観的に判定できる具体的な言動が語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(意見.*違|対立|譲|穏やか|角が立た|怒ら|指摘|反論|言い方|空気を読|丁寧|合わない|説明する)/
   },
   {
     key: 'ev_agreeableness_trust',
     factor: '協調性',
     name: '信頼',
     probeHint: '他人に作業や役割を任せるとき、相手を信じて任せたか、それとも自分で確認しないと気が済まなかったか',
-    evidenceInstruction: '【協調性 - 信頼の行動エビデンス】対話の中で、他者の言動や役割分担に対して「相手を信頼して任せたか、好意的に受け止めたか、あるいは疑って自分で確認したか」が分かる具体的な行動エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
-    regexFallback: /(任せ|信頼|信じ|頼る|疑|自分でや|確認しな|お願いし)/
+    evidenceInstruction: '【協調性 - 信頼の行動エビデンス】対話の中で、「周囲を好意的に受け止め信じて協調した事実」または「他者を警戒・疑って自分一人で抱え込んだ・距離を置いた事実」のいずれか、信頼の高低を客観的に判定できる具体的な行動が語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(任せ|信頼|信じ|頼る|疑|自分でや|確認しな|お願いし|話しやすそうな|話しかけづら)/
   },
 
   // 5. 情緒安定性 (Emotional Stability)
@@ -308,24 +308,24 @@ export const FACET_DEFINITIONS: FacetDefinition[] = [
     factor: '情緒安定性',
     name: '不安の低さ（ストレス対処）',
     probeHint: 'プレッシャーがかかる場面や結果が分からない状況で、どんな態度・行動をとっていたか',
-    evidenceInstruction: '【情緒安定性 - 不安の低さの行動エビデンス】対話の中で、プレッシャーや不確実な状況に対して「落ち着いて構えていたか、それとも心配や焦りが行動・言葉に出ていたか」が分かる具体的なエピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
-    regexFallback: /(不安|焦|心配|緊張|プレッシャー|落ち着|リラックス|ドキドキ|気にし)/
+    evidenceInstruction: '【情緒安定性 - 不安の低さの行動エビデンス】対話の中で、「プレッシャーや不測の事態に直面しても落ち着いて構えていた事実」または「強い焦りや動揺・不安を感じて取り乱した事実」のいずれか、ストレス耐性の高低を客観的に判定できる具体的な行動が語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(不安|焦|心配|緊張|プレッシャー|落ち着|リラックス|ドキドキ|気にし|焦りを隠|冷静)/
   },
   {
     key: 'ev_neuroticism_depression',
     factor: '情緒安定性',
     name: '抑うつの低さ（気分の切り替え）',
-    probeHint: '失敗したあとや嫌な出来事があった直後〜翌日にかけて、どれくらい引きずったか、どうやって気分を切り替えたか（口数・態度・行動）',
-    evidenceInstruction: '【情緒安定性 - 抑うつの低さの行動エビデンス】対話の中で、失敗や嫌な出来事があった後の「気分の切り替え行動・翌日の様子・どれくらい引きずったか」が分かる具体的な事後エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
-    regexFallback: /(落ち込|引きず|切り替え|立ち直|寝れば|翌日|気分|ショック|凹|へこ|元気)/
+    probeHint: '失敗したあとや嫌な出来事があった直後〜翌日にかけて、どれくらい引きずったか、どうやって気分を切り替えたか',
+    evidenceInstruction: '【情緒安定性 - 抑うつの低さの行動エビデンス】対話の中で、「嫌な出来事の後でも好きなことをして前向きに気持ちを切り替えた事実」または「長く落ち込んだりモヤモヤを引きずった事実」のいずれか、気分の安定の高低を客観的に判定できる具体的な行動が語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(落ち込|引きず|切り替え|立ち直|寝れば|翌日|気分|ショック|凹|へこ|元気|好きなこと.*する)/
   },
   {
     key: 'ev_neuroticism_volatility',
     factor: '情緒安定性',
     name: '感情変動の低さ（トラブル時の冷静さ）',
     probeHint: '想定外のことが起きたり思い通りに進まない場面で、イライラや焦りが態度・口調に出たか、それとも動じず冷静に対処したか',
-    evidenceInstruction: '【情緒安定性 - 感情変動の低さの行動エビデンス】対話の中で、予定外のトラブルやハプニングが起きた瞬間に「イライラやパニックを態度・口調に出したか、それとも動じず冷静に対処したか」が分かる具体的な行動・発言エピソードがすでに語られましたか？（未言及や曖昧な場合は必ずno）',
-    regexFallback: /(イライラ|パニック|冷静|動じ|トラブル|ハプニング|怒|感情的|落ち着いて対)/
+    evidenceInstruction: '【情緒安定性 - 感情変動の低さの行動エビデンス】対話の中で、「突発的なトラブルや変更に対しても動じず冷静に対処した事実」または「苛立ちや落胆が態度・口調に出て感情的になった事実」のいずれか、動じにくさの高低を客観的に判定できる具体的な行動が語られましたか？（未言及や曖昧な場合は必ずno）',
+    regexFallback: /(イライラ|パニック|冷静|動じ|トラブル|ハプニング|怒|感情的|落ち着いて対|冷静な方)/
   }
 ];
 
@@ -366,12 +366,12 @@ export function getDetailedScenarioForFactor(factor?: string, age?: number): {
       return {
         scenarioTitle: '集まりの計画・意見対立と意思決定',
         situationText: isStudent
-          ? '友人やサークル・ゼミ仲間など3〜4人で、週末の集まり（食事の店選びや遊びの行き先など）を決めている場面を想像してください。相談している最中、メンバーの意見が「遠出して新しい場所に行きたい派」と「近場でゆっくりしたい派」に真っ二つに分かれ、議論が平行線のまま気まずい沈黙が流れて決まらなくなってしまいました。'
+          ? '友人やサークル・ゼミ仲間など3〜4人で、集まりで入る食事の店や行き先を決めている場面を想像してください。相談している最中、候補が2つ挙がってお互いに譲らず意見が真っ二つに分かれ、議論が平行線のまま気まずい沈黙が流れて決まらなくなってしまいました。'
           : isYoungAdult
-          ? '同僚や友人、パートナーなど3〜4人で、集まりの行き先や食事の店などを決めている場面を想像してください。相談している最中、意見が真っ二つに分かれて議論が平行線になり、気まずい沈黙が流れて決まらなくなってしまいました。'
-          : '友人や知人、家族など3〜4人で、集まりや予定（出かける場所や食事の店など）を決めている場面を想像してください。相談している最中、意見が真っ二つに分かれて平行線になり、気まずい沈黙が流れて決まらなくなってしまいました。',
+          ? '同僚や友人、パートナーなど3〜4人で、集まりの行き先や食事の店などを決めている場面を想像してください。相談している最中、候補が2つ挙がってお互いに譲らず意見が真っ二つに分かれ、議論が平行線のまま気まずい沈黙が流れて決まらなくなってしまいました。'
+          : '友人や知人、家族など3〜4人で、集まりや予定（出かける場所や食事の店など）を決めている場面を想像してください。相談している最中、候補が2つ挙がってお互いに譲らず意見が真っ二つに分かれ、平行線のまま気まずい沈黙が流れて決まらなくなってしまいました。',
         questionText:
-          'このとき、あなたはその場のメンバーに対して、具体的にどんなタイミングで何と声をかけますか？（自分から妥協案を出して引っ張る、誰かの意見に同調して決める、場を和ませる雑談を挟む、周りの様子を見て決定に任せるなど、あなたが実際に取る発言や立ち回りを教えてください）'
+          'このとき、あなたはその場のメンバーに対して、具体的にどんなタイミングで何と声をかけますか？（自分から折衷案を出して場を引っ張る、誰かの意見に同調して後押しする、場を和ませる雑談を挟む、周りの様子を見て決定に任せるなど、あなたが実際に取る発言や立ち回りを教えてください）'
       };
 
     case '開放性':
@@ -487,6 +487,63 @@ export function analyzeDimensionCoverage(messages: ChatMessage[]): {
 }
 
 /**
+ * 多言語LLMのハルシネーション（ハングル文字や韓国語助詞の混入等）を日本語に置換・除去
+ */
+export function sanitizeJapaneseOutput(text: string): string {
+  if (!text) return text;
+  return text
+    .replace(/具体적으로/g, '具体的に')
+    .replace(/적으(?=[ろロ])/g, '的')
+    .replace(/[\uAC00-\uD7AF\u1100-\u11FF]/g, '');
+}
+
+/**
+ * 対話履歴からすでに提示済みのシナリオ（因子）を検出
+ */
+export function getPresentedFactors(messages: ChatMessage[]): Set<FactorNameJP> {
+  const presented = new Set<FactorNameJP>();
+  for (const m of messages) {
+    if (m.role === 'assistant') {
+      const text = m.content;
+      if (
+        text.includes('週末の集まり') ||
+        text.includes('食事の店選び') ||
+        text.includes('候補が2つ') ||
+        text.includes('議論が平行線') ||
+        text.includes('遠出して')
+      ) {
+        presented.add('外向性');
+        presented.add('協調性');
+      }
+      if (
+        text.includes('丸一日フリーな時間') ||
+        text.includes('新しいお店や場所に出かけたり') ||
+        text.includes('新しい刺激に触れてみたい')
+      ) {
+        presented.add('開放性');
+      }
+      if (
+        text.includes('提出が必要な') ||
+        text.includes('手をつかないまま夜遅く') ||
+        text.includes('締切') ||
+        text.includes('課題')
+      ) {
+        presented.add('誠実性');
+      }
+      if (
+        text.includes('予定外のトラブル') ||
+        text.includes('うっかりミス') ||
+        text.includes('イライラや嫌な気分') ||
+        text.includes('手違い')
+      ) {
+        presented.add('情緒安定性');
+      }
+    }
+  }
+  return presented;
+}
+
+/**
  * Clef-flashの15ファセット同時評価レスポンス（パターンC）を解析し、
  * 「同じエピソードの深掘り」または「未充足因子に応じた年齢別SJTシナリオ提示」を決定する
  */
@@ -564,6 +621,11 @@ function parseClefPatternCDecision(
   const uncoveredFactors = allFactors.filter(f => !factorCovered[f]);
   const overallReadyProb = extractProb(target.is_ready_overall) ?? 0;
 
+  // 既出シナリオのトラッキング
+  const presentedFactors = getPresentedFactors(messages);
+  const unpresentedUncovered = uncoveredFactors.filter(f => !presentedFactors.has(f));
+  const unpresentedAny = allFactors.filter(f => !presentedFactors.has(f));
+
   const episodeDepthChoice =
     target.episode_depth_status?.chosen ||
     target.episode_depth_status?.answer ||
@@ -580,10 +642,12 @@ function parseClefPatternCDecision(
   // パターンC 完了判定:
   // 1) 最低ターン数（6ターン）以上
   // 2) 全5因子が充足（各2ファセット以上 >= 0.70）かつ10ファセット以上が >= 0.70
-  //    （または 9ターン以上で4因子以上充足 ＆ overallReadyProb >= 0.70）
+  //    または 7ターン以上で全シナリオが出題済み（未提示シナリオなし）
+  //    または 8ターン以上で4因子以上充足 ＆ overallReadyProb >= 0.65
   const isAllFactorsSatisfied = uncoveredFactors.length === 0 && totalEvidencedFacets >= 10;
-  const isLongDialogueSatisfied = userCount >= 9 && uncoveredFactors.length <= 1 && overallReadyProb >= 0.70;
-  const isReady = userCount >= MIN_USER_TURNS && (isAllFactorsSatisfied || isLongDialogueSatisfied);
+  const isAllScenariosPresentedSatisfied = userCount >= 6 && unpresentedAny.length === 0 && totalEvidencedFacets >= 6;
+  const isLongDialogueSatisfied = userCount >= 8 && uncoveredFactors.length <= 1 && (overallReadyProb >= 0.65 || totalEvidencedFacets >= 8);
+  const isReady = userCount >= MIN_USER_TURNS && (isAllFactorsSatisfied || isAllScenariosPresentedSatisfied || isLongDialogueSatisfied);
 
   if (isReady) {
     return {
@@ -660,8 +724,26 @@ function parseClefPatternCDecision(
   }
 
   // 話題の完全切り替え・再現性架空シナリオ（SJT）提示モード
-  // まだエビデンスが足りない未充足因子・ファセットを最優先で特定
-  const targetFactor = uncoveredFactors[0] || '誠実性';
+  // 【重要】すでに提示済みのシナリオは絶対に再出題せず、未提示の未充足因子を最優先する
+  const targetFactor =
+    unpresentedUncovered[0] ||
+    unpresentedAny[0] ||
+    uncoveredFactors[0] ||
+    '誠実性';
+
+  // もし未提示シナリオが存在しない場合は、無理に新シナリオを出さず完了へ
+  if (unpresentedAny.length === 0 && userCount >= 6) {
+    return {
+      focus_dimension: '完了',
+      target_question_strategy:
+        'すべてのシナリオについての確認が完了しました。追加の質問は行わず、直前の回答に感謝を伝えた上で、画面下のボタンから次の質問紙へ進むよう案内してください。',
+      is_ready_for_final_analysis: true,
+      action_mode: 'complete',
+      evidenced_facets_count: totalEvidencedFacets,
+      notes: `Clef-flash Pattern C [All scenarios presented] (turns: ${userCount})`
+    };
+  }
+
   const missingFacetsInFactor = FACET_DEFINITIONS.filter(
     f => f.factor === targetFactor && (facetProbs[f.key] ?? 0) < FACET_EVIDENCE_THRESHOLD
   );
@@ -910,6 +992,7 @@ ${targetStrategy}
 7. 「あなたの誠実性を測るために〜」等の検査用語・因子名は絶対に出さないでください。
 8. **【STAR法行動事実の深掘り】自由な世間話や雑談に脱線せず、ユーザーの「具体的な発言（何と言ったか）」「実際の振る舞い（どう動いたか）」「結果への対処（どう切り替えたか）」の客観的事実の深掘りに集中してください。一度に複数の質問を重ねて投げず、問いかけは必ず1つ（末尾は『？』）に絞ってください。**
 9. 思考プロセスやタグ（<think>等）は含めず、ユーザーへの発話文のみを直接出力してください。
+10. **【言語制約（絶対厳守）】完全な自然な日本語のみを出力してください。外国語（ハングル文字・韓国語の助詞［「적으로」等］、英語、中国語等）の混入は厳禁です。提示する［場面設定］と［問いかけ］は指定された日本語テキストを一字一句正確に出力してください。**
 `;
 }
 
@@ -1057,8 +1140,9 @@ export async function runInterviewerStream(
                 }
 
                 if (cleanChunk) {
-                  cleanAccumulatedText += cleanChunk;
-                  const chunkEvent = JSON.stringify({ type: 'chunk', text: cleanChunk });
+                  const sanitizedChunk = sanitizeJapaneseOutput(cleanChunk);
+                  cleanAccumulatedText += sanitizedChunk;
+                  const chunkEvent = JSON.stringify({ type: 'chunk', text: sanitizedChunk });
                   controller.enqueue(encoder.encode(`data: ${chunkEvent}\n\n`));
                 }
               }
@@ -1154,7 +1238,7 @@ export async function runInterviewer(
 
     if (res.ok) {
       const data = await res.json();
-      let reply = extractResponseText(data);
+      let reply = sanitizeJapaneseOutput(extractResponseText(data));
       const userAge = typeof userProfile?.age === 'number' ? userProfile.age : (userProfile?.age ? parseInt(String(userProfile.age), 10) : undefined);
       const scenario = getDetailedScenarioForFactor(strategy.focus_dimension, userAge);
       if (!reply.trim()) {
