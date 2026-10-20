@@ -270,16 +270,56 @@ export const ChatMode: React.FC<ChatModeProps> = ({
 
   return (
     <div className="chat-wrapper">
-      {/* Qualtrics Top Progress Bar */}
-      <div className="qualtrics-progress-bar-wrap">
-        <div className="qualtrics-progress-row">
-          <span className="qualtrics-progress-pct">0%</span>
-          <div className="qualtrics-progress-track">
-            <div className="qualtrics-progress-fill" style={{ width: `${progressPercent}%` }} />
-          </div>
-          <span className="qualtrics-progress-pct">100%</span>
+      {/* スキップ操作バー（進捗バー・説明バナーを排除し、ボタンのみをコンパクトに配置） */}
+      {(onSkipToSurvey || onSkipToResult) && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '6px 12px',
+          backgroundColor: '#f7f9fa',
+          borderBottom: '1px solid #e2e6eb',
+          flexShrink: 0
+        }}>
+          {onSkipToSurvey && (
+            <button
+              type="button"
+              onClick={onSkipToSurvey}
+              style={{
+                backgroundColor: '#ffffff',
+                border: '1px solid #b8c2cc',
+                color: '#1b365d',
+                fontSize: '0.72rem',
+                fontWeight: 600,
+                padding: '3px 8px',
+                borderRadius: '3px',
+                cursor: 'pointer'
+              }}
+            >
+              質問紙へスキップ
+            </button>
+          )}
+          {onSkipToResult && (
+            <button
+              type="button"
+              onClick={onSkipToResult}
+              style={{
+                backgroundColor: '#ffffff',
+                border: '1px solid #b8c2cc',
+                color: '#1b365d',
+                fontSize: '0.72rem',
+                fontWeight: 600,
+                padding: '3px 8px',
+                borderRadius: '3px',
+                cursor: 'pointer'
+              }}
+            >
+              結果へスキップ
+            </button>
+          )}
         </div>
-      </div>
+      )}
 
       <div className="chat-scroll-area" ref={scrollRef}>
         {messages.map((m, idx) => (
