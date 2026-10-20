@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowRight, ArrowLeft, RotateCcw } from 'lucide-react';
 import { SurveyResult } from '../types';
-import { BFI_2_S_CONFIG, calculateBfiScores } from '../data/bfi2s';
+import { BFI_2_S_CONFIG, calculateBfiScores, calculateBfiFacetScores } from '../data/bfi2s';
 
 interface BfiSurveySectionProps {
   onCompleteSurvey: (result: SurveyResult) => void;
@@ -105,6 +105,7 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
 
     try {
       const scores = calculateBfiScores(answers);
+      const facetScores = calculateBfiFacetScores(answers);
       const completedAt = new Date().toISOString();
 
       const surveyResult: SurveyResult = {
@@ -112,6 +113,7 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
         scaleName: BFI_2_S_CONFIG.name,
         rawAnswers: answers,
         scores,
+        facetScores,
         completedAt
       };
 
@@ -151,11 +153,13 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
     });
     setAnswers(sampleAnswers);
     const scores = calculateBfiScores(sampleAnswers);
+    const facetScores = calculateBfiFacetScores(sampleAnswers);
     const surveyResult: SurveyResult = {
       scaleType: 'bfi-2-s',
       scaleName: BFI_2_S_CONFIG.name,
       rawAnswers: sampleAnswers,
       scores,
+      facetScores,
       completedAt: new Date().toISOString()
     };
     onCompleteSurvey(surveyResult);

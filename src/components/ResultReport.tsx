@@ -143,7 +143,11 @@ export const ResultReport: React.FC<ResultReportProps> = ({
             <h3 className="card-section-title">
               1. AI対話推定値 × 標準心理尺度（{surveyResult.scaleName}）の照合結果
             </h3>
-            <ComparisonChart aiScores={result.scores} surveyResult={surveyResult} />
+            <ComparisonChart
+              aiScores={result.scores}
+              surveyResult={surveyResult}
+              clefScoringData={result.clef_scoring_data}
+            />
           </>
         ) : (
           <>

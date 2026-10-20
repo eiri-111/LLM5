@@ -1,4 +1,4 @@
-import { DimensionKey, SurveyScoreDetail } from '../types';
+import { DimensionKey, SurveyScoreDetail, SurveyFacetScores } from '../types';
 
 export interface BfiQuestion {
   id: number;
@@ -72,6 +72,99 @@ export const BFI_2_S_CONFIG: BfiScaleConfig = {
     { id: 30, text: '創造性がほとんどない。', dimension: 'openness', is_reverse: true, facet: '創造力' }
   ]
 };
+
+/**
+ * BFI-2-Sの回答から15ファセット個別の0〜100正規化スコアを算出
+ */
+export function calculateBfiFacetScores(
+  rawAnswers: Record<number, number>
+): SurveyFacetScores {
+  const maxPoints = BFI_2_S_CONFIG.likertPoints; // 5件法
+
+  // ファセットごとの回答値を集計
+  const facetValues: Record<string, number[]> = {
+    intellectual: [],
+    aesthetic: [],
+    creative: [],
+    organization: [],
+    productiveness: [],
+    responsibility: [],
+    sociability: [],
+    assertiveness: [],
+    activity: [],
+    compassion: [],
+    respect: [],
+    trust: [],
+    anxiety: [],
+    depression: [],
+    volatility: []
+  };
+
+  const facetMap: Record<string, string> = {
+    '知的好奇心': 'intellectual',
+    '美的好奇心': 'aesthetic',
+    '創造力': 'creative',
+    '組織化': 'organization',
+    '生産性': 'productiveness',
+    '責任感': 'responsibility',
+    '社交性': 'sociability',
+    '主張性': 'assertiveness',
+    '活動性': 'activity',
+    '思いやり': 'compassion',
+    '敬意': 'respect',
+    '信頼': 'trust',
+    '不安': 'anxiety',
+    '抑うつ': 'depression',
+    '感情の変動': 'volatility'
+  };
+
+  BFI_2_S_CONFIG.questions.forEach((q) => {
+    const rawVal = rawAnswers[q.id];
+    const key = facetMap[q.facet];
+    if (key && typeof rawVal === 'number' && rawVal >= 1 && rawVal <= maxPoints) {
+      const scoredVal = q.is_reverse ? (maxPoints + 1) - rawVal : rawVal;
+      facetValues[key].push(scoredVal);
+    }
+  });
+
+  const getFacetScore = (key: string, isNeuroticism = false): number => {
+    const values = facetValues[key];
+    if (!values || values.length === 0) return 50;
+    const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
+    const normalized = Math.round(((mean - 1) / (maxPoints - 1)) * 100);
+    // 情緒安定性（不安の低さ、気分の安定、動じにくさ）はAI側の定義に合わせて反転して方向性を揃える
+    const effective = isNeuroticism ? 100 - normalized : normalized;
+    return Math.min(100, Math.max(0, effective));
+  };
+
+  return {
+    openness: {
+      intellectual: getFacetScore('intellectual'),
+      aesthetic: getFacetScore('aesthetic'),
+      creative: getFacetScore('creative')
+    },
+    conscientiousness: {
+      organization: getFacetScore('organization'),
+      productiveness: getFacetScore('productiveness'),
+      responsibility: getFacetScore('responsibility')
+    },
+    extraversion: {
+      sociability: getFacetScore('sociability'),
+      assertiveness: getFacetScore('assertiveness'),
+      activity: getFacetScore('activity')
+    },
+    agreeableness: {
+      compassion: getFacetScore('compassion'),
+      respect: getFacetScore('respect'),
+      trust: getFacetScore('trust')
+    },
+    neuroticism: {
+      anxiety: getFacetScore('anxiety', true),
+      depression: getFacetScore('depression', true),
+      volatility: getFacetScore('volatility', true)
+    }
+  };
+}
 
 /**
  * BFI-2-Sの回答から逆転項目の反転処理と0〜100正規化スコアを算出

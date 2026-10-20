@@ -89,6 +89,14 @@ export type ScaleType = 'bfi-2-s' | string;
 
 export type DimensionKey = 'openness' | 'conscientiousness' | 'extraversion' | 'agreeableness' | 'neuroticism';
 
+export interface SurveyFacetScores {
+  openness: { intellectual: number; aesthetic: number; creative: number };
+  conscientiousness: { organization: number; productiveness: number; responsibility: number };
+  extraversion: { sociability: number; assertiveness: number; activity: number };
+  agreeableness: { compassion: number; respect: number; trust: number };
+  neuroticism: { anxiety: number; depression: number; volatility: number };
+}
+
 export interface SurveyScoreDetail {
   rawMean: number;        // 尺度の元の平均点 (1〜5)
   normalizedScore: number;// 0〜100に正規化したスコア
@@ -99,6 +107,7 @@ export interface SurveyResult {
   scaleName: string;
   rawAnswers?: Record<string | number, number>; // { [questionId]: answerValue }
   scores: Record<DimensionKey, SurveyScoreDetail>;
+  facetScores?: SurveyFacetScores;
   completedAt: string;
 }
 
