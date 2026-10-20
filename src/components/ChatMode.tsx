@@ -281,55 +281,6 @@ export const ChatMode: React.FC<ChatModeProps> = ({
         </div>
       </div>
 
-      {/* Qualtrics Instruction Header */}
-      <div className="chat-instruction-banner">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
-          <span>
-            <strong>設問ブロック 1:</strong> AIインタビュアーの質問に対して、あなたの具体的な経験やエピソードをご記入ください。
-          </span>
-          {(onSkipToSurvey || onSkipToResult) && (
-            <div style={{ display: 'flex', gap: '6px' }}>
-              {onSkipToSurvey && (
-                <button
-                  type="button"
-                  onClick={onSkipToSurvey}
-                  style={{
-                    backgroundColor: '#ffffff',
-                    border: '1px solid #b8c2cc',
-                    color: '#333e4f',
-                    fontSize: '0.7rem',
-                    fontWeight: 500,
-                    padding: '2px 8px',
-                    borderRadius: '3px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  質問紙へスキップ
-                </button>
-              )}
-              {onSkipToResult && (
-                <button
-                  type="button"
-                  onClick={onSkipToResult}
-                  style={{
-                    backgroundColor: '#ffffff',
-                    border: '1px solid #b8c2cc',
-                    color: '#333e4f',
-                    fontSize: '0.7rem',
-                    fontWeight: 500,
-                    padding: '2px 8px',
-                    borderRadius: '3px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  結果へスキップ
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
       <div className="chat-scroll-area" ref={scrollRef}>
         {messages.map((m, idx) => (
           <div key={idx} className={`chat-bubble ${m.role === 'user' ? 'user' : 'assistant'}`}>

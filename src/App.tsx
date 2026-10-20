@@ -541,14 +541,16 @@ export const App: React.FC = () => {
         onReset={handleConfirmRetake}
       />
 
-      {/* 動作確認用クイックバー */}
-      <DevQuickBar
-        currentPhase={phase}
-        onSkipToChat={handleSkipToChat}
-        onSkipToSurvey={handleSkipToSurvey}
-        onSkipToResult={handleSkipToResult}
-        onReset={handleResetAll}
-      />
+      {/* 開発・デバッグ確認用（?dev=true の時のみ表示） */}
+      {typeof window !== 'undefined' && window.location.search.includes('dev=true') && (
+        <DevQuickBar
+          currentPhase={phase}
+          onSkipToChat={handleSkipToChat}
+          onSkipToSurvey={handleSkipToSurvey}
+          onSkipToResult={handleSkipToResult}
+          onReset={handleResetAll}
+        />
+      )}
 
       {/* 研究倫理同意＆プロファイル入力モーダル（未同意の場合に表示） */}
       {(!hasConsented || !userProfile) && (
