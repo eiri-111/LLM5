@@ -1619,19 +1619,44 @@ const MULTIDIRECTIONAL_FACET_CONFIGS: MultidirectionalFacetConfig[] = [
   }
 ];
 
-function parseClefScoringResponse(rawObj: any, sourceLabel: string): ClefScoringBreakdown | null {
+function parseClefScoringResponse(
+  rawObj: any,
+  sourceLabel: string,
+  presentedFactors?: Set<FactorNameJP>
+): ClefScoringBreakdown | null {
   if (!rawObj) return null;
   const target = rawObj.answers || rawObj.result || rawObj;
   if (!target || typeof target !== 'object') return null;
 
-  // 15ファセットそれぞれの生確率・スコア・確信度を算出
+  // 15ファセットそれぞれの生確率・スコア・確信度・出自・重み・SEMを算出
   const positiveProbs: Record<string, number> = {};
   const negativeProbs: Record<string, number> = {};
   const concretenessProbs: Record<string, number> = {};
   const facetScores: Record<string, number | null> = {};
   const facetConfidences: Record<string, 'high' | 'moderate' | 'insufficient'> = {};
+  const facetSources: Record<string, AssessmentMethodSource> = {};
+  const facetWeights: Record<string, number> = {};
+  const facetSems: Record<string, number> = {};
+  const facetCIs: Record<string, { lower: number; upper: number }> = {};
 
   let hasAnyValidScore = false;
+
+  // 受検態度・妥当性メタチェック（5問）の抽出（縮小推定重みの算出に先行使用）
+  const validityChecks = {
+    social_desirability: extractClefNoulProb(target.val_social_desirability) ?? 0.35,
+    mock_or_careless: extractClefNoulProb(target.val_mock_or_careless) ?? 0.05,
+    concrete_detail: extractClefNoulProb(target.val_concrete_detail) ?? 0.65,
+    defensiveness: extractClefNoulProb(target.val_defensiveness) ?? 0.20,
+    emotional_expressiveness: extractClefNoulProb(target.val_emotional_expressiveness) ?? 0.70
+  };
+
+  const FACTOR_KEY_TO_JP: Record<string, FactorNameJP> = {
+    openness: '開放性',
+    conscientiousness: '誠実性',
+    extraversion: '外向性',
+    agreeableness: '協調性',
+    neuroticism: '情緒安定性'
+  };
 
   for (const cfg of MULTIDIRECTIONAL_FACET_CONFIGS) {
     // 55問多方向キー（新）または 20問キー（旧互換）から確率を取得
@@ -1646,56 +1671,89 @@ function parseClefScoringResponse(rawObj: any, sourceLabel: string): ClefScoring
     if (pNeg !== null) negativeProbs[cfg.key] = pNeg;
     if (pCon !== null) concretenessProbs[cfg.key] = pCon;
 
-    // 測定学的判定: 「未観測（欠測: Missing Data）」と「真の中庸（スコア50）」の厳格な分離
-    // ポジティブ行動、ネガティブ行動、具体的エピソード描写のいずれも検出されていない場合は欠測とする
+    // 測定学的判定: 「未観測（欠測: Missing Data）」の判定
     const isMissing =
       (pCon === null || pCon < 0.35) &&
       (pPos === null || pPos < 0.35) &&
       (pNeg === null || pNeg < 0.35);
 
-    let score: number | null = null;
     if (isMissing) {
-      score = null;
+      facetScores[cfg.key] = null;
       facetConfidences[cfg.key] = 'insufficient';
-    } else {
-      // 確信度重み（客観エビデンス具体性: Concreteness Weight）
-      // サイコメトリクスの保守的判定原則（Conservative Principle）に基づき、
-      // 具体性データが欠測（null）の場合はエビデンス未存在と同義であるため重みを 0.0（完全収縮で中庸50点確定）とする。
-      // 具体性 P(con) が観測されている場合のみその確信度（0.0〜1.0）を中庸50点からの偏差に乗算し、
-      // 具体的行動エピソード描写が十全に伴っている場合のみ最大振幅（0〜100点）を展開する。
-      const wCon = pCon !== null ? Math.max(0, Math.min(1, pCon)) : 0.0;
-
-      if (pPos !== null && pNeg !== null) {
-        const delta = pPos - pNeg; // -1.0 〜 +1.0
-        score = Math.min(100, Math.max(0, Math.round(50 + delta * 50 * wCon)));
-      } else if (pPos !== null) {
-        const delta = (pPos - 0.5) * 2; // -1.0 〜 +1.0
-        score = Math.min(100, Math.max(0, Math.round(50 + delta * 50 * wCon)));
-      } else if (pNeg !== null) {
-        const delta = (0.5 - pNeg) * 2; // -1.0 〜 +1.0
-        score = Math.min(100, Math.max(0, Math.round(50 + delta * 50 * wCon)));
-      } else {
-        score = 50;
-      }
-
-      // 確信度（行動エビデンス充実度）判定:
-      if (pCon !== null) {
-        if (pCon >= 0.65) {
-          facetConfidences[cfg.key] = 'high';
-        } else if (pCon >= 0.40) {
-          facetConfidences[cfg.key] = 'moderate';
-        } else {
-          facetConfidences[cfg.key] = 'insufficient';
-        }
-      } else {
-        if (score >= 70 || score <= 30) {
-          facetConfidences[cfg.key] = 'high';
-        } else {
-          facetConfidences[cfg.key] = 'moderate';
-        }
-      }
+      facetSources[cfg.key] = 'unobserved';
+      facetWeights[cfg.key] = 0.0;
+      facetSems[cfg.key] = 16.0;
+      facetCIs[cfg.key] = { lower: 20, upper: 80 };
+      continue;
     }
+
+    // 該当因子がSJT架空シナリオとして提示されたかを確認
+    const factorJp = FACTOR_KEY_TO_JP[cfg.factor];
+    const isSjtPresented = presentedFactors ? presentedFactors.has(factorJp) : false;
+
+    // アプローチA: 出自（Source）の分離
+    // SJTシナリオが提示された因子は 'sjt'、過去の実体験深掘りのみで引き出された因子は 'star'
+    const source: AssessmentMethodSource = isSjtPresented ? 'sjt' : 'star';
+    facetSources[cfg.key] = source;
+
+    // アプローチB: 縮小推定重み w の適用（社会的望ましさバイアスの抑制）
+    let w = 1.0;
+    if (source === 'star') {
+      // STAR法（過去の客観的行動実績）:
+      // 具体性 P(con) に応じた満額〜適正反映 (0.65〜1.0)
+      const conVal = pCon ?? 0.65;
+      w = Math.max(0.65, Math.min(1.0, conVal));
+    } else {
+      // SJT（架空状況判断・意図表明）:
+      // 建前・社会的望ましさバイアス（SDB）によるインフレーションを防ぐ縮小推定 (Shrinkage)
+      // 中央値50寄りに強く抑制 (基準 0.40 × SDB割引)
+      const sdb = validityChecks.social_desirability;
+      const sdbDiscount = Math.max(0.5, 1.0 - 0.5 * sdb); // 0.5〜1.0
+      w = Math.round(0.40 * sdbDiscount * 100) / 100; // 0.20〜0.40
+    }
+    facetWeights[cfg.key] = w;
+
+    // スコア算出: 50 + Δ * 50 * w
+    let delta = 0;
+    if (pPos !== null && pNeg !== null) {
+      delta = pPos - pNeg; // -1.0 〜 +1.0
+    } else if (pPos !== null) {
+      delta = (pPos - 0.5) * 2;
+    } else if (pNeg !== null) {
+      delta = (0.5 - pNeg) * 2;
+    }
+    const score = Math.min(100, Math.max(0, Math.round(50 + delta * 50 * w)));
     facetScores[cfg.key] = score;
+
+    // アプローチC: 確信度および測定標準誤差 (SEM) / 信頼区間の差別化
+    if (source === 'star') {
+      // STAR法: 過去の実績エピソードに基づくため高い精度
+      if ((pCon ?? 0) >= 0.65) {
+        facetConfidences[cfg.key] = 'high';
+        facetSems[cfg.key] = 4.5;
+      } else if ((pCon ?? 0) >= 0.40) {
+        facetConfidences[cfg.key] = 'moderate';
+        facetSems[cfg.key] = 6.0;
+      } else {
+        facetConfidences[cfg.key] = 'insufficient';
+        facetSems[cfg.key] = 8.5;
+      }
+    } else {
+      // SJT: 架空状況判断のため不確実性が高く、絶対に 'high' には昇格させない
+      if ((pCon ?? 0) >= 0.50) {
+        facetConfidences[cfg.key] = 'moderate';
+      } else {
+        facetConfidences[cfg.key] = 'insufficient';
+      }
+      // SJT由来のファセットは「推定レンジが広い」ことを明示するため SEM = 11.0（95% CI幅: ±22点）
+      facetSems[cfg.key] = 11.0;
+    }
+
+    const margin = Math.round(1.96 * facetSems[cfg.key]);
+    facetCIs[cfg.key] = {
+      lower: Math.max(0, score - margin),
+      upper: Math.min(100, score + margin)
+    };
   }
 
   // 案2: 5因子直接採点 (0-100)
@@ -1709,29 +1767,60 @@ function parseClefScoringResponse(rawObj: any, sourceLabel: string): ClefScoring
     return null;
   }
 
-  // 受検態度・妥当性メタチェック（5問）の抽出
-  const validityChecks = {
-    social_desirability: extractClefNoulProb(target.val_social_desirability) ?? 0.35,
-    mock_or_careless: extractClefNoulProb(target.val_mock_or_careless) ?? 0.05,
-    concrete_detail: extractClefNoulProb(target.val_concrete_detail) ?? 0.65,
-    defensiveness: extractClefNoulProb(target.val_defensiveness) ?? 0.20,
-    emotional_expressiveness: extractClefNoulProb(target.val_emotional_expressiveness) ?? 0.70
-  };
-
-  // 測定学的配慮: 観測データが存在する有効ファセットのみで平均を算出（欠測除外平均: Available-Case Analysis）
-  // 未言及ファセットが50点として因子平均を平坦に引き下げる希釈バイアスを完全に防ぐ
-  const avgAvailable = (v1: number | null | undefined, v2: number | null | undefined, v3: number | null | undefined, fallback: number): number => {
-    const valid = [v1, v2, v3].filter((v): v is number => typeof v === 'number' && v !== null);
-    if (valid.length === 0) return fallback;
+  // アプローチA: STAR法スコアとSJTスコアの二元化集計
+  const calcFactorScoresBySource = (
+    fKeys: string[],
+    targetSource: 'star' | 'sjt'
+  ): number | null => {
+    const valid = fKeys
+      .filter(k => facetSources[k] === targetSource && typeof facetScores[k] === 'number')
+      .map(k => facetScores[k] as number);
+    if (valid.length === 0) return null;
     return Math.round(valid.reduce((sum, v) => sum + v, 0) / valid.length);
   };
 
+  const starScores = {
+    openness: calcFactorScoresBySource(['openness_intellectual', 'openness_aesthetic', 'openness_creative'], 'star'),
+    conscientiousness: calcFactorScoresBySource(['conscientiousness_organization', 'conscientiousness_productiveness', 'conscientiousness_responsibility'], 'star'),
+    extraversion: calcFactorScoresBySource(['extraversion_sociability', 'extraversion_assertiveness', 'extraversion_activity'], 'star'),
+    agreeableness: calcFactorScoresBySource(['agreeableness_compassion', 'agreeableness_respect', 'agreeableness_trust'], 'star'),
+    neuroticism: calcFactorScoresBySource(['neuroticism_anxiety', 'neuroticism_depression', 'neuroticism_volatility'], 'star')
+  };
+
+  const sjtScores = {
+    openness: calcFactorScoresBySource(['openness_intellectual', 'openness_aesthetic', 'openness_creative'], 'sjt'),
+    conscientiousness: calcFactorScoresBySource(['conscientiousness_organization', 'conscientiousness_productiveness', 'conscientiousness_responsibility'], 'sjt'),
+    extraversion: calcFactorScoresBySource(['extraversion_sociability', 'extraversion_assertiveness', 'extraversion_activity'], 'sjt'),
+    agreeableness: calcFactorScoresBySource(['agreeableness_compassion', 'agreeableness_respect', 'agreeableness_trust'], 'sjt'),
+    neuroticism: calcFactorScoresBySource(['neuroticism_anxiety', 'neuroticism_depression', 'neuroticism_volatility'], 'sjt')
+  };
+
+  const calcGap = (sjt: number | null, star: number | null): number | null => {
+    if (sjt !== null && star !== null) return sjt - star;
+    return null;
+  };
+
+  const gapScores = {
+    openness: calcGap(sjtScores.openness, starScores.openness),
+    conscientiousness: calcGap(sjtScores.conscientiousness, starScores.conscientiousness),
+    extraversion: calcGap(sjtScores.extraversion, starScores.extraversion),
+    agreeableness: calcGap(sjtScores.agreeableness, starScores.agreeableness),
+    neuroticism: calcGap(sjtScores.neuroticism, starScores.neuroticism)
+  };
+
+  // メイン採用スコア (STAR行動実績を最優先、STAR未観測時のみSJT縮小推定値を採用)
+  const resolveMainFactorScore = (starVal: number | null, sjtVal: number | null, directFallback: number | null): number => {
+    if (starVal !== null) return starVal;
+    if (sjtVal !== null) return sjtVal;
+    return directFallback ?? 50;
+  };
+
   const facetMeanScores = {
-    openness: avgAvailable(facetScores.openness_intellectual, facetScores.openness_aesthetic, facetScores.openness_creative, d_o ?? 50),
-    conscientiousness: avgAvailable(facetScores.conscientiousness_organization, facetScores.conscientiousness_productiveness, facetScores.conscientiousness_responsibility, d_c ?? 50),
-    extraversion: avgAvailable(facetScores.extraversion_sociability, facetScores.extraversion_assertiveness, facetScores.extraversion_activity, d_e ?? 50),
-    agreeableness: avgAvailable(facetScores.agreeableness_compassion, facetScores.agreeableness_respect, facetScores.agreeableness_trust, d_a ?? 50),
-    neuroticism: avgAvailable(facetScores.neuroticism_anxiety, facetScores.neuroticism_depression, facetScores.neuroticism_volatility, d_n ?? 50)
+    openness: resolveMainFactorScore(starScores.openness, sjtScores.openness, d_o),
+    conscientiousness: resolveMainFactorScore(starScores.conscientiousness, sjtScores.conscientiousness, d_c),
+    extraversion: resolveMainFactorScore(starScores.extraversion, sjtScores.extraversion, d_e),
+    agreeableness: resolveMainFactorScore(starScores.agreeableness, sjtScores.agreeableness, d_a),
+    neuroticism: resolveMainFactorScore(starScores.neuroticism, sjtScores.neuroticism, d_n)
   };
 
   const directScores = {
@@ -1745,6 +1834,11 @@ function parseClefScoringResponse(rawObj: any, sourceLabel: string): ClefScoring
   return {
     facet_mean_scores: facetMeanScores,
     direct_scores: directScores,
+    dual_scores: {
+      star_scores: starScores,
+      sjt_scores: sjtScores,
+      gap_scores: gapScores
+    },
     facets: {
       openness: {
         intellectual: facetScores.openness_intellectual ?? null,
@@ -1773,6 +1867,10 @@ function parseClefScoringResponse(rawObj: any, sourceLabel: string): ClefScoring
       }
     },
     facet_confidences: facetConfidences,
+    facet_sources: facetSources,
+    facet_shrinkage_weights: facetWeights,
+    facet_sems: facetSems,
+    facet_confidence_intervals: facetCIs,
     multidirectional: {
       positive_probs: positiveProbs,
       negative_probs: negativeProbs,
@@ -1796,7 +1894,8 @@ function parseClefScoringResponse(rawObj: any, sourceLabel: string): ClefScoring
  */
 export async function runClefScoring(
   env: Env,
-  dialogueHistory: string
+  dialogueHistory: string,
+  presentedFactors?: Set<FactorNameJP>
 ): Promise<ClefScoringBreakdown | null> {
   const scoringState = `【対話履歴】\n${dialogueHistory}\n\n上記の対話履歴から、行動アンカー評定尺度（BARS / BOS）に基づき、各性格ファセットに対応する「客観的な具体的行動事実・発言」が実際に確認できるかを厳密に判定・評価してください。単なる印象や言葉遣いの丁寧さではなく、実際に語られた振る舞いを根拠としてください。\n\n【心理測定学上の絶対原則】\n受検者の発話の短さ（短文・口数の少なさ・端的な回答）を、安易に内向性や低特性行動（P(neg)）として加算することは厳禁です。集まりや対人場面において「自分からあえて沈黙を保った」「一人で静かに過ごした」という客観的なエピソード事実が語られた場合のみ低特性行動として判定してください。単なる回答文字数の短さや回答の消極性は、受検態度妥当性指標（defensiveness: 防衛的姿勢、concrete_detail: 具体描写度、mock_or_careless: 省力化回答）として評価してください。`;
 
@@ -1886,7 +1985,7 @@ export async function runClefScoring(
           }
         }
       );
-      const parsed = parseClefScoringResponse(aiRes, 'clef-flash [55-question multidirectional / env.AI binding]');
+      const parsed = parseClefScoringResponse(aiRes, 'clef-flash [55-question multidirectional / env.AI binding]', presentedFactors);
       if (parsed) return parsed;
     } catch (aiErr: any) {
       console.warn('[runClefScoring] env.AI.run warning, falling back to HTTP fetch:', aiErr?.message || aiErr);
@@ -1908,7 +2007,7 @@ export async function runClefScoring(
 
     if (res.ok) {
       const data: any = await res.json();
-      const parsed = parseClefScoringResponse(data, 'clef-flash [55-question multidirectional / HTTP Gateway]');
+      const parsed = parseClefScoringResponse(data, 'clef-flash [55-question multidirectional / HTTP Gateway]', presentedFactors);
       if (parsed) return parsed;
     } else {
       const errText = await res.text();
@@ -1941,8 +2040,11 @@ export async function runFinalAnalysis(
     .map(m => `${m.role === 'user' ? 'ユーザー' : 'インタビュアー'}: ${m.content}`)
     .join('\n');
 
-  // 1. まず Clef-flash で20問（案1: 15ファセット + 案2: 5因子直接）を同時数値化
-  const clefScores = await runClefScoring(env, dialogueHistory);
+  // メッセージ履歴からすでに提示済みのSJTシナリオ因子を抽出（アプローチA・B・Cの判定基準）
+  const presentedFactors = getPresentedFactors(messages);
+
+  // 1. まず Clef-flash で同時数値化（STAR/SJTの出自分離・縮小推定を適用）
+  const clefScores = await runClefScoring(env, dialogueHistory, presentedFactors);
 
   const fmtFacet = (v: number | null | undefined) => (v !== null && v !== undefined ? `${v}点` : '未言及（判定保留）');
 
@@ -2120,8 +2222,7 @@ ${confirmedScoresBlock}
       avg_characters_per_turn: avgChars
     };
 
-    // Clef-flashの確定スコア（案1：3ファセット平均）をプログラム側で厳密に保証し、
-    // 比較検証用データ（案1の15ファセット＆平均スコア＋案2の5因子直接スコア）を同梱する
+    // Clef-flashの確定スコア（アプローチA: STAR行動実績主導 / SJT縮小推定二元化）をプログラム側で厳密に反映
     if (clefScores && parsedResult.scores) {
       const dims: Array<'openness' | 'conscientiousness' | 'extraversion' | 'agreeableness' | 'neuroticism'> = [
         'openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism'
@@ -2132,23 +2233,53 @@ ${confirmedScoresBlock}
           parsedResult.scores[dim].score = confirmedScore;
           parsedResult.scores[dim].level = scoreToLevelLabel(confirmedScore);
 
-          // ファセット単位の観測状況・確信度の集約
+          // ファセット単位の観測状況・確信度・出自の集約
           const facetKeys = Object.keys(clefScores.facets[dim]) as Array<keyof typeof clefScores.facets[typeof dim]>;
           const observedFacetCount = facetKeys.filter(fk => clefScores.facets[dim][fk] !== null).length;
           const confidences = facetKeys
             .filter(fk => clefScores.facets[dim][fk] !== null)
             .map(fk => clefScores.facet_confidences?.[`${dim}_${String(fk)}`] || 'moderate');
 
+          // 出自（STARかSJTかハイブリッドか）
+          const sources = facetKeys
+            .filter(fk => clefScores.facets[dim][fk] !== null)
+            .map(fk => clefScores.facet_sources?.[`${dim}_${String(fk)}`]);
+          const hasStar = sources.includes('star');
+          const hasSjt = sources.includes('sjt');
+          const sourceType: 'star' | 'sjt' | 'hybrid' | 'unobserved' =
+            (hasStar && hasSjt) ? 'hybrid' : (hasStar ? 'star' : (hasSjt ? 'sjt' : 'unobserved'));
+
+          parsedResult.scores[dim].source_type = sourceType;
+          parsedResult.scores[dim].star_score = clefScores.dual_scores?.star_scores[dim] ?? null;
+          parsedResult.scores[dim].sjt_score = clefScores.dual_scores?.sjt_scores[dim] ?? null;
+
           // 古典的テスト理論(CTT)およびIRT情報量モデルに基づくSEM・95%信頼区間の厳密算出
           const errorMetrics = calculateDimensionMeasurementError(confirmedScore, observedFacetCount, confidences);
 
+          // アプローチC: SJT主導の場合のSEM拡大と信頼区間の可視化補正
+          // SJT由来ファセットは架空状況判断であり不確実性が高いためSEMを拡大し、信頼区間（推定レンジ）を広く明示する
+          let dimSem = errorMetrics.sem;
+          let dimConf = errorMetrics.confidence;
+          if (sourceType === 'sjt') {
+            dimSem = Math.max(9.5, dimSem * 1.5);
+            dimConf = dimConf === 'high' ? 'moderate' : dimConf; // SJTは高確信度にしない
+          } else if (sourceType === 'hybrid') {
+            dimSem = Math.max(6.5, dimSem * 1.2);
+          }
+          dimSem = Math.round(dimSem * 10) / 10;
+          const margin = Math.round(1.96 * dimSem);
+
           parsedResult.scores[dim].evidenced_facet_count = observedFacetCount;
-          parsedResult.scores[dim].sem = errorMetrics.sem;
-          parsedResult.scores[dim].confidence_interval = errorMetrics.confidence_interval;
-          parsedResult.scores[dim].confidence = errorMetrics.confidence;
+          parsedResult.scores[dim].sem = dimSem;
+          parsedResult.scores[dim].confidence_interval = {
+            lower: Math.max(0, confirmedScore - margin),
+            upper: Math.min(100, confirmedScore + margin)
+          };
+          parsedResult.scores[dim].confidence = dimConf;
         }
       }
       parsedResult.clef_scoring_data = clefScores;
+      parsedResult.dual_assessment = clefScores.dual_scores;
     }
 
     return parsedResult;

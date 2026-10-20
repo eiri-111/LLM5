@@ -117,12 +117,19 @@ export const ComparisonChart: React.FC<ComparisonChartProps> = ({
     const diff = isObserved && aiFacetVal !== null ? aiFacetVal - surveyFacetVal : null;
     const absDiff = diff !== null ? Math.abs(diff) : null;
 
-    // AI側の確信度
-    const confidence = clefScoringData?.facet_confidences?.[`${f.factorKey}_${f.key}`] || (isObserved ? 'moderate' : 'insufficient');
+    // AI側の確信度・出自・SEM・縮小重み
+    const facetKeyFull = `${f.factorKey}_${f.key}`;
+    const confidence = clefScoringData?.facet_confidences?.[facetKeyFull] || (isObserved ? 'moderate' : 'insufficient');
+    const source = clefScoringData?.facet_sources?.[facetKeyFull] || (isObserved ? 'star' : 'unobserved');
+    const sem = clefScoringData?.facet_sems?.[facetKeyFull];
+    const ci = clefScoringData?.facet_confidence_intervals?.[facetKeyFull];
+    const shrinkageWeight = clefScoringData?.facet_shrinkage_weights?.[facetKeyFull];
 
     let insight = '';
     if (!isObserved) {
       insight = '対話内での行動データなし（判定保留）';
+    } else if (source === 'sjt') {
+      insight = `SJT状況判断推定 (縮小推定w=${shrinkageWeight ?? 0.35}, CI広レンジ)`;
     } else if (absDiff !== null && absDiff <= 10) {
       insight = '高一致（対話行動と自己認識が整合）';
     } else if (diff !== null && diff > 10) {
@@ -139,6 +146,10 @@ export const ComparisonChart: React.FC<ComparisonChartProps> = ({
       diff,
       absDiff,
       confidence,
+      source,
+      sem,
+      ci,
+      shrinkageWeight,
       insight
     };
   });
@@ -422,8 +433,10 @@ export const ComparisonChart: React.FC<ComparisonChartProps> = ({
             fontSize: '0.78rem',
             color: '#1a4971'
           }}>
-            💡 <strong>15ファセット比較の見方:</strong>
-            国際標準尺度BFI-2の30設問（各ファセット2問）の自己回答と、Clef-flashが対話の具体的エピソードから採点したファセット行動事実スコアを直接突き合わせています。
+            💡 <strong>15ファセット比較の見方（等化エラー防止モデル適用）:</strong>
+            国際標準尺度BFI-2の30設問自己回答と、Clef-flashが対話から採点したファセット行動事実スコアを突き合わせています。
+            過去の行動実績（STAR）と架空状況判断（SJT）を<strong>完全二元化</strong>して分離評価し、
+            SJT由来のファセットは社会的望ましさバイアスを考慮した<strong>縮小推定（中央値50抑制）</strong>と<strong>広レンジ信頼区間（CI）</strong>を適用しています。
           </div>
 
           {/* 5因子ごとのファセットカードグループ */}
@@ -479,14 +492,35 @@ export const ComparisonChart: React.FC<ComparisonChartProps> = ({
                         borderBottom: '1px dashed #f1f5f9'
                       }}
                     >
-                      {/* ファセット名称 & 説明 */}
+                      {/* ファセット名称 & 説明 & 出自バッジ */}
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: '0.82rem', color: '#1e293b' }}>
-                          {facet.name}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontWeight: 600, fontSize: '0.82rem', color: '#1e293b' }}>
+                            {facet.name}
+                          </span>
+                          {facet.isObserved && (
+                            <span style={{
+                              fontSize: '0.62rem',
+                              fontWeight: 700,
+                              padding: '1px 5px',
+                              borderRadius: '3px',
+                              backgroundColor: facet.source === 'star' ? '#e6f4ea' : '#fff8e1',
+                              border: `1px solid ${facet.source === 'star' ? '#a8dab5' : '#ffe082'}`,
+                              color: facet.source === 'star' ? '#137333' : '#b06000'
+                            }}>
+                              {facet.source === 'star' ? 'STAR実績' : 'SJT判断'}
+                            </span>
+                          )}
                         </div>
                         <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '1px' }}>
                           {facet.description}
                         </div>
+                        {/* SJT由来の場合の広レンジ注意喚起 */}
+                        {facet.isObserved && facet.source === 'sjt' && facet.ci && (
+                          <div style={{ fontSize: '0.64rem', color: '#d46b08', marginTop: '2px', fontWeight: 500 }}>
+                            ⚠️ SJT広レンジ: CI [{facet.ci.lower}〜{facet.ci.upper}] (SEM: ±{facet.sem})
+                          </div>
+                        )}
                       </div>
 
                       {/* バーによる視覚的対比 */}

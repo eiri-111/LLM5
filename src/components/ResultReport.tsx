@@ -210,6 +210,24 @@ export const ResultReport: React.FC<ResultReportProps> = ({
                   <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1b2432' }}>{d.name}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  {/* アプローチA: 評価手法の出自バッジ (STAR vs SJT) */}
+                  {dimData.source_type && (
+                    <span style={{
+                      fontSize: '0.68rem',
+                      fontWeight: 700,
+                      padding: '2px 7px',
+                      borderRadius: '4px',
+                      backgroundColor: dimData.source_type === 'star' ? '#e6f4ea' : (dimData.source_type === 'sjt' ? '#fff8e1' : '#e8f0fe'),
+                      border: `1px solid ${dimData.source_type === 'star' ? '#a8dab5' : (dimData.source_type === 'sjt' ? '#ffe082' : '#b3d1ff')}`,
+                      color: dimData.source_type === 'star' ? '#137333' : (dimData.source_type === 'sjt' ? '#b06000' : '#1a73e8')
+                    }}>
+                      {dimData.source_type === 'star'
+                        ? 'STAR: 行動実績'
+                        : (dimData.source_type === 'sjt'
+                          ? 'SJT: 状況判断（建前推定）'
+                          : (dimData.source_type === 'hybrid' ? 'STAR+SJT 複合' : '未観測'))}
+                    </span>
+                  )}
                   {dimData.confidence && (
                     <span style={{
                       fontSize: '0.68rem',
@@ -220,30 +238,67 @@ export const ResultReport: React.FC<ResultReportProps> = ({
                       color: dimData.confidence === 'high' ? '#137333' : (dimData.confidence === 'moderate' ? '#b06000' : '#5f6368')
                     }}>
                       {dimData.confidence === 'high'
-                        ? '測定信頼度: 高 (3ファセット観測)'
+                        ? '測定信頼度: 高'
                         : (dimData.confidence === 'moderate'
-                          ? '測定信頼度: 中 (2ファセット観測)'
+                          ? '測定信頼度: 中'
                           : (dimData.confidence === 'insufficient'
-                            ? '測定信頼度: 低 (1ファセット観測)'
-                            : '未観測・直接推論'))}
+                            ? '測定信頼度: 低'
+                            : '未観測'))}
                     </span>
                   )}
+                  {/* アプローチC: 信頼区間とSEMの可視化（SJT由来は広レンジであることを明示） */}
                   {dimData.confidence_interval && (
                     <span style={{
                       fontSize: '0.68rem',
                       padding: '2px 6px',
                       borderRadius: '4px',
-                      backgroundColor: '#f8fafc',
-                      border: '1px solid #e2e8f0',
-                      color: '#475569'
+                      backgroundColor: dimData.source_type === 'sjt' ? '#fffbf0' : '#f8fafc',
+                      border: `1px solid ${dimData.source_type === 'sjt' ? '#ffd591' : '#e2e8f0'}`,
+                      color: dimData.source_type === 'sjt' ? '#d46b08' : '#475569',
+                      fontWeight: dimData.source_type === 'sjt' ? 600 : 'normal'
                     }}>
+                      {dimData.source_type === 'sjt' && '⚠️ '}
                       95% CI: [{dimData.confidence_interval.lower} - {dimData.confidence_interval.upper}点] (SEM: ±{dimData.sem ?? 5}点)
+                      {dimData.source_type === 'sjt' && ' [広レンジ推定]'}
                     </span>
                   )}
                   <span className="dim-score-badge" style={{ color: d.color }}>{dimData.score}</span>
                   <span style={{ fontSize: '0.75rem', color: '#5c6878', fontWeight: 600 }}>/ 100 ({dimData.level})</span>
                 </div>
               </div>
+
+              {/* アプローチA: 二元化スコア（行動実績 vs 状況判断）の並列バー */}
+              {(dimData.star_score !== null || dimData.sjt_score !== null) && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  marginTop: 6,
+                  padding: '4px 8px',
+                  backgroundColor: '#f8fafc',
+                  borderRadius: 4,
+                  fontSize: '0.72rem',
+                  color: '#475569'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontWeight: 600, color: '#137333' }}>● STAR行動実績:</span>
+                    <strong style={{ color: dimData.star_score !== null ? '#1b2432' : '#94a3b8' }}>
+                      {dimData.star_score !== null ? `${dimData.star_score}点` : '未観測'}
+                    </strong>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontWeight: 600, color: '#b06000' }}>● SJT状況判断:</span>
+                    <strong style={{ color: dimData.sjt_score !== null ? '#1b2432' : '#94a3b8' }}>
+                      {dimData.sjt_score !== null ? `${dimData.sjt_score}点 (縮小推定)` : '未提示'}
+                    </strong>
+                  </div>
+                  {typeof dimData.star_score === 'number' && typeof dimData.sjt_score === 'number' && (
+                    <div style={{ marginLeft: 'auto', fontSize: '0.70rem', color: '#64748b' }}>
+                      言行乖離: {dimData.sjt_score - dimData.star_score > 0 ? `+${dimData.sjt_score - dimData.star_score}` : dimData.sjt_score - dimData.star_score}点
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="progress-rail">
                 <div
                   className="progress-fill"
