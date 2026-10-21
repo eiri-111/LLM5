@@ -48,8 +48,8 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         ).bind(session_id).first();
 
         const isAdmin = verifyAdminPassword(request, env);
-        if (existingRow && existingRow.session_token && !isAdmin) {
-          if (!incomingToken || incomingToken !== existingRow.session_token) {
+        if (existingRow && !isAdmin) {
+          if (!existingRow.session_token || !incomingToken || incomingToken !== existingRow.session_token) {
             console.warn('Unauthorized attempt to update session in /api/analyze');
             // 分析結果自体は返す（オンザフライ）がD1上書きは拒否
             return new Response(JSON.stringify(result), {
@@ -66,13 +66,14 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
         await env.DB.prepare(`
           INSERT INTO assessment_sessions (
-            id, student_id, age, gender, created_at,
+            id, session_token, student_id, age, gender, created_at,
             dialogue_turns, chat_messages,
             ai_personality_title, ai_personality_type, ai_summary,
             ai_openness, ai_conscientiousness, ai_extraversion, ai_agreeableness, ai_neuroticism,
             ai_full_result
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(id) DO UPDATE SET
+            session_token = COALESCE(assessment_sessions.session_token, excluded.session_token),
             student_id = excluded.student_id,
             age = CASE WHEN excluded.age > 0 THEN excluded.age ELSE assessment_sessions.age END,
             gender = CASE WHEN excluded.gender != 'unspecified' THEN excluded.gender ELSE assessment_sessions.gender END,
@@ -89,6 +90,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             ai_full_result = excluded.ai_full_result
         `).bind(
           session_id,
+          effectiveToken,
           effectiveStudentId,
           effectiveAge,
           effectiveGender,

@@ -63,6 +63,9 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   }
 
   try {
+    const limitParam = url.searchParams.get('limit');
+    const limit = limitParam ? Math.min(Math.max(1, parseInt(limitParam, 10)), 2000) : (format === 'json' ? 500 : 2000);
+
     const selectQuery = format === 'json'
       ? `SELECT 
           id, age, gender, created_at, dialogue_turns,
@@ -74,7 +77,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
           COALESCE(r2_saved, 0) AS r2_saved, r2_key,
           chat_messages, ai_full_result, survey_raw_answers
         FROM assessment_sessions
-        ORDER BY created_at DESC`
+        ORDER BY created_at DESC
+        LIMIT ?`
       : `SELECT 
           id, age, gender, created_at, dialogue_turns,
           ai_personality_title, ai_personality_type, ai_summary,
@@ -85,129 +89,15 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
           COALESCE(r2_saved, 0) AS r2_saved, r2_key,
           ai_full_result, survey_raw_answers
         FROM assessment_sessions
-        ORDER BY created_at DESC`;
+        ORDER BY created_at DESC
+        LIMIT ?`;
 
-    const { results } = await env.DB.prepare(selectQuery).all();
+    const { results } = await env.DB.prepare(selectQuery).bind(limit).all();
 
     const dataRows = (results || []) as any[];
     const nowIso = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 
-    // 1. JSONエクスポート
-    if (format === 'json') {
-      const formattedJson = dataRows.map(row => {
-        let messages = [];
-        try { if (row.chat_messages) messages = JSON.parse(row.chat_messages); } catch (_) {}
-
-        let aiResult = null;
-        try { if (row.ai_full_result) aiResult = JSON.parse(row.ai_full_result); } catch (_) {}
-
-        let surveyAnswers = null;
-        try { if (row.survey_raw_answers) surveyAnswers = JSON.parse(row.survey_raw_answers); } catch (_) {}
-
-        return {
-          ...row,
-          chat_messages: messages,
-          ai_full_result: aiResult,
-          survey_raw_answers: surveyAnswers
-        };
-      });
-
-      return new Response(JSON.stringify(formattedJson, null, 2), {
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          'Content-Disposition': `attachment; filename="llm5_dataset_${nowIso}.json"`,
-          'Cache-Control': 'no-store'
-        }
-      });
-    }
-
-    // 2. SPSSシンタックスファイル (.sps) 生成
-    if (format === 'sps') {
-      const spsContent = `* SPSS Syntax for LLM5 Big Five Dataset.
-* Generated at: ${new Date().toISOString()}.
-* Usage: SPSSで [ファイル] -> [開く] -> [シンタックス] で実行、またはCSV読み込み後に実行してください.
-
-VARIABLE LABELS
-  ResponseId 'セッションID'
-  RecordedDate '記録日時'
-  Finished '調査完了フラグ (1=完了, 0=未完了)'
-  DialogueTurns '対話ターン数 (ユーザー発話数)'
-  Age '年齢'
-  Gender_Code '性別コード'
-  Gender '性別'
-  AI_Openness 'AI推定スコア: 開放性 (0-100)'
-  AI_Conscientiousness 'AI推定スコア: 誠実性 (0-100)'
-  AI_Extraversion 'AI推定スコア: 外向性 (0-100)'
-  AI_Agreeableness 'AI推定スコア: 協調性 (0-100)'
-  AI_EmotionalStability 'AI推定スコア: 情緒安定性 (0-100, 高=安定)'
-  AI_Neuroticism 'AI推定スコア: 神経症傾向 (0-100, 高=敏感/不安)'
-  Survey_Openness 'BFI-2-S尺度スコア: 開放性 (0-100)'
-  Survey_Conscientiousness 'BFI-2-S尺度スコア: 誠実性 (0-100)'
-  Survey_Extraversion 'BFI-2-S尺度スコア: 外向性 (0-100)'
-  Survey_Agreeableness 'BFI-2-S尺度スコア: 協調性 (0-100)'
-  Survey_EmotionalStability 'BFI-2-S尺度スコア: 情緒安定性 (0-100, 高=安定)'
-  Survey_Neuroticism 'BFI-2-S尺度スコア: 神経症傾向 (0-100, 高=敏感/不安)'
-  Diff_Openness '差分: 開放性 (AI - Survey)'
-  Diff_Conscientiousness '差分: 誠実性 (AI - Survey)'
-  Diff_Extraversion '差分: 外向性 (AI - Survey)'
-  Diff_Agreeableness '差分: 協調性 (AI - Survey)'
-  Diff_EmotionalStability '差分: 情緒安定性 (AI - Survey)'
-  Diff_Neuroticism '差分: 神経症傾向 (AI - Survey)'
-  STAR_Openness 'STAR法行動実績スコア: 開放性 (0-100)'
-  STAR_Conscientiousness 'STAR法行動実績スコア: 誠実性 (0-100)'
-  STAR_Extraversion 'STAR法行動実績スコア: 外向性 (0-100)'
-  STAR_Agreeableness 'STAR法行動実績スコア: 協調性 (0-100)'
-  STAR_EmotionalStability 'STAR法行動実績スコア: 情緒安定性 (0-100)'
-  SJT_Openness 'SJT状況判断スコア: 開放性 (0-100)'
-  SJT_Conscientiousness 'SJT状況判断スコア: 誠実性 (0-100)'
-  SJT_Extraversion 'SJT状況判断スコア: 外向性 (0-100)'
-  SJT_Agreeableness 'SJT状況判断スコア: 協調性 (0-100)'
-  SJT_EmotionalStability 'SJT状況判断スコア: 情緒安定性 (0-100)'
-  Gap_Openness '言行判断ギャップ: 開放性 (SJT - STAR)'
-  Gap_Conscientiousness '言行判断ギャップ: 誠実性 (SJT - STAR)'
-  Gap_Extraversion '言行判断ギャップ: 外向性 (SJT - STAR)'
-  Gap_Agreeableness '言行判断ギャップ: 協調性 (SJT - STAR)'
-  Gap_EmotionalStability '言行判断ギャップ: 情緒安定性 (SJT - STAR)'
-  ${Array.from({ length: 30 }, (_, i) => `BFI_Q${String(i + 1).padStart(2, '0')} '${QUESTION_LABELS[i + 1]}'`).join('\n  ')}.
-
-VALUE LABELS
-  Finished
-    0 '未完了'
-    1 '完了'
-  /Gender_Code
-    1 '男性'
-    2 '女性'
-    3 'その他'
-    9 '無回答・未設定'
-  /${Array.from({ length: 30 }, (_, i) => `BFI_Q${String(i + 1).padStart(2, '0')}`).join(' ')}
-    1 '全くあてはまらない'
-    2 'あまりあてはまらない'
-    3 'どちらともいえない'
-    4 'ややあてはまる'
-    5 'とてもよくあてはまる'.
-
-VARIABLE LEVEL
-  Finished Gender_Code (NOMINAL)
-  Age DialogueTurns AI_Openness AI_Conscientiousness AI_Extraversion AI_Agreeableness AI_EmotionalStability AI_Neuroticism
-  Survey_Openness Survey_Conscientiousness Survey_Extraversion Survey_Agreeableness Survey_EmotionalStability Survey_Neuroticism
-  Diff_Openness Diff_Conscientiousness Diff_Extraversion Diff_Agreeableness Diff_EmotionalStability Diff_Neuroticism
-  STAR_Openness STAR_Conscientiousness STAR_Extraversion STAR_Agreeableness STAR_EmotionalStability
-  SJT_Openness SJT_Conscientiousness SJT_Extraversion SJT_Agreeableness SJT_EmotionalStability
-  Gap_Openness Gap_Conscientiousness Gap_Extraversion Gap_Agreeableness Gap_EmotionalStability
-  ${Array.from({ length: 30 }, (_, i) => `BFI_Q${String(i + 1).padStart(2, '0')}`).join(' ')} (SCALE).
-
-EXECUTE.
-`;
-      return new Response(spsContent, {
-        headers: {
-          'Content-Type': 'text/plain; charset=utf-8',
-          'Content-Disposition': `attachment; filename="llm5_spss_syntax_${nowIso}.sps"`,
-          'Cache-Control': 'no-store'
-        }
-      });
-    }
-
-    // 3. SPSS対応 CSV エクスポート (Q1〜Q30展開、SPSS準拠変数名、差分変数、デュアル評価変数)
+    // SPSS対応 CSV / シンタックス共通 変数定義
     const varNames = [
       'ResponseId',
       'RecordedDate',
@@ -271,6 +161,7 @@ EXECUTE.
       'Gap_Extraversion',
       'Gap_Agreeableness',
       'Gap_EmotionalStability',
+      'Gap_Neuroticism',
       // AI 15ファセット個別スコア
       'AI_O_Intellectual',
       'AI_O_Aesthetic',
@@ -353,6 +244,7 @@ EXECUTE.
       Gap_Extraversion: '判断ギャップ: 外向性 (SJT - STAR)',
       Gap_Agreeableness: '判断ギャップ: 協調性 (SJT - STAR)',
       Gap_EmotionalStability: '判断ギャップ: 情緒安定性 (SJT - STAR)',
+      Gap_Neuroticism: '判断ギャップ: 神経症傾向 (SJT - STAR)',
       AI_O_Intellectual: 'AIファセット: 知的好奇心',
       AI_O_Aesthetic: 'AIファセット: 美的好奇心',
       AI_O_Creative: 'AIファセット: 創造力',
@@ -378,6 +270,88 @@ EXECUTE.
       varLabels[`${qKey}_Scored`] = `設問${i}_反転後得点(1-5)`;
     }
 
+    // 1. JSONエクスポート
+    if (format === 'json') {
+      const formattedJson = dataRows.map(row => {
+        let messages = [];
+        try { if (row.chat_messages) messages = JSON.parse(row.chat_messages); } catch (_) {}
+
+        let aiResult = null;
+        try { if (row.ai_full_result) aiResult = JSON.parse(row.ai_full_result); } catch (_) {}
+
+        let surveyAnswers = null;
+        try { if (row.survey_raw_answers) surveyAnswers = JSON.parse(row.survey_raw_answers); } catch (_) {}
+
+        return {
+          ...row,
+          chat_messages: messages,
+          ai_full_result: aiResult,
+          survey_raw_answers: surveyAnswers
+        };
+      });
+
+      return new Response(JSON.stringify(formattedJson, null, 2), {
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Content-Disposition': `attachment; filename="llm5_dataset_${nowIso}.json"`,
+          'Cache-Control': 'no-store'
+        }
+      });
+    }
+
+    // 2. SPSSシンタックスファイル (.sps) 生成 (全変数の完全定義・尺度水準の同期)
+    if (format === 'sps') {
+      const nominalVars = ['ResponseId', 'RecordedDate', 'Finished', 'Gender_Code', 'Gender', 'AI_PersonalityTitle', 'AI_PersonalityType', 'R2_Saved', 'AI_Summary'];
+      const scaleVars = varNames.filter(v => !nominalVars.includes(v));
+
+      const spsContent = `* SPSS Syntax for LLM5 Big Five Dataset.
+* Generated at: ${new Date().toISOString()}.
+* Usage: SPSSで [ファイル] -> [開く] -> [シンタックス] で実行、またはCSV読み込み後に実行してください.
+
+VARIABLE LABELS
+  ${varNames.map(v => `${v} '${(varLabels[v] || v).replace(/'/g, "''")}'`).join('\n  ')}.
+
+VALUE LABELS
+  Finished
+    0 '未完了'
+    1 '完了'
+  /Gender_Code
+    1 '男性'
+    2 '女性'
+    3 'その他'
+    9 '無回答・未設定'
+  /R2_Saved
+    0 '未保存'
+    1 '保存済'
+  /${Array.from({ length: 30 }, (_, i) => `BFI_Q${String(i + 1).padStart(2, '0')}`).join(' ')}
+    1 '全くあてはまらない'
+    2 'あまりあてはまらない'
+    3 'どちらともいえない'
+    4 'ややあてはまる'
+    5 'とてもよくあてはまる'
+  /${Array.from({ length: 30 }, (_, i) => `BFI_Q${String(i + 1).padStart(2, '0')}_Scored`).join(' ')}
+    1 '低特性'
+    2 'やや低'
+    3 '中程度'
+    4 'やや高'
+    5 '高特性'.
+
+VARIABLE LEVEL
+  ${nominalVars.filter(v => varNames.includes(v)).join(' ')} (NOMINAL)
+  ${scaleVars.join(' ')} (SCALE).
+
+EXECUTE.
+`;
+      return new Response(spsContent, {
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Content-Disposition': `attachment; filename="llm5_spss_syntax_${nowIso}.sps"`,
+          'Cache-Control': 'no-store'
+        }
+      });
+    }
+
+    // 3. SPSS対応 CSV エクスポート (Q1〜Q30展開、SPSS準拠変数名、差分変数、デュアル評価変数)
     const csvLines: string[] = [];
 
     // ヘッダー行の構築
@@ -514,6 +488,7 @@ EXECUTE.
         Gap_Extraversion: dualScores?.gap_scores?.extraversion != null ? Math.round(dualScores.gap_scores.extraversion) : '',
         Gap_Agreeableness: dualScores?.gap_scores?.agreeableness != null ? Math.round(dualScores.gap_scores.agreeableness) : '',
         Gap_EmotionalStability: dualScores?.gap_scores?.neuroticism != null ? Math.round(dualScores.gap_scores.neuroticism) : '',
+        Gap_Neuroticism: dualScores?.gap_scores?.neuroticism != null ? Math.round(-dualScores.gap_scores.neuroticism) : '',
 
         // 15ファセット
         AI_O_Intellectual: facets?.openness?.intellectual ?? '',

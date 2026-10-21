@@ -9,7 +9,6 @@ interface ProfileModalProps {
 }
 
 export const ProfileModal: React.FC<ProfileModalProps> = ({ initialProfile, onSave, isOpen }) => {
-  const [studentId, setStudentId] = useState(initialProfile?.student_id || '');
   const [age, setAge] = useState<string>(initialProfile?.age ? String(initialProfile.age) : '20');
   const [gender, setGender] = useState<GenderType>((initialProfile?.gender as GenderType) || 'prefer_not_to_say');
   const [error, setError] = useState<string | null>(null);
@@ -18,21 +17,15 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ initialProfile, onSa
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmedId = studentId.trim();
     const numAge = parseInt(age, 10);
 
-    if (!trimmedId) {
-      setError('学籍番号を入力してください');
-      return;
-    }
-    if (isNaN(numAge) || numAge < 15 || numAge > 100) {
-      setError('正しい年齢（15〜100）を入力してください');
+    if (isNaN(numAge) || numAge < 10 || numAge > 120) {
+      setError('正しい年齢（10〜120）を入力してください');
       return;
     }
 
     setError(null);
     onSave({
-      student_id: trimmedId,
       age: numAge,
       gender
     });
@@ -58,23 +51,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({ initialProfile, onSa
               <span>{error}</span>
             </div>
           )}
-
-          <div className="form-group">
-            <label htmlFor="studentId" className="form-label">
-              学籍番号 <span className="text-red-500">*</span>
-            </label>
-            <input
-              id="studentId"
-              type="text"
-              value={studentId}
-              onChange={(e) => setStudentId(e.target.value)}
-              placeholder="例: AB12345 または 2024XXXX"
-              className="form-input"
-              required
-              autoFocus
-            />
-            <span className="form-help">対話履歴および分析結果の保存・照合に使用されます</span>
-          </div>
 
           <div className="form-row">
             <div className="form-group flex-1">

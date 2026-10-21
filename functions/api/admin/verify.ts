@@ -10,9 +10,18 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       password = body.password || '';
     } catch (_) {}
 
-    const expectedPassword = env.ADMIN_PASSWORD || 'llm5admin';
+    const expectedPassword = env.ADMIN_PASSWORD;
+    if (!expectedPassword) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'ADMIN_PASSWORD が環境変数に設定されていません'
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
 
-    // ヘッダーやURLクエリまたはボディのパスワードを照合
+    // ヘッダー（Authorization: Bearer / x-admin-password）またはボディのパスワードを照合
     const isAuthorized = verifyAdminPassword(request, env) || (password.trim() === expectedPassword);
 
     if (!isAuthorized) {

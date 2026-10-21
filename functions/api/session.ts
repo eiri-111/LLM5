@@ -49,9 +49,9 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       });
     }
 
-    // セキュリティ認証チェック: 管理者であるか、または正しい session_token が提供されているか検証
+    // セキュリティ認証チェック: 管理者であるか、または正しい session_token が提供されているか厳格に検証
     const isAdmin = verifyAdminPassword(request, env);
-    if (!isAdmin && row.session_token) {
+    if (!isAdmin) {
       const incomingToken =
         request.headers.get('x-session-token') ||
         (request.headers.get('Authorization')?.startsWith('Bearer ')
@@ -60,7 +60,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         url.searchParams.get('token') ||
         url.searchParams.get('session_token');
 
-      if (!incomingToken || incomingToken !== row.session_token) {
+      // トークン未登録（レガシーレコード等）またはトークン不一致の場合はアクセス拒否
+      if (!row.session_token || !incomingToken || incomingToken !== row.session_token) {
         return new Response(JSON.stringify({
           error: 'セッションへのアクセス権限がありません。有効なセッショントークンが必要です。'
         }), {

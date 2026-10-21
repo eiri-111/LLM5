@@ -2375,7 +2375,7 @@ export async function ensureDbSchema(db: D1Database): Promise<void> {
       CREATE TABLE IF NOT EXISTS assessment_sessions (
         id TEXT PRIMARY KEY,
         session_token TEXT,
-        student_id TEXT NOT NULL,
+        student_id TEXT DEFAULT '',
         age INTEGER NOT NULL,
         gender TEXT NOT NULL,
         created_at TEXT NOT NULL,
@@ -2416,6 +2416,7 @@ export async function ensureDbSchema(db: D1Database): Promise<void> {
 /**
  * 管理者認証ヘルパー関数
  * Authorization: Bearer <password> または x-admin-password ヘッダーで安全に照合
+ * （URLクエリパラメータ経由の平文認証はログ漏洩・履歴漏洩防止のため非許可）
  */
 export function verifyAdminPassword(request: Request, env: Env): boolean {
   const expectedPassword = env.ADMIN_PASSWORD;
@@ -2424,7 +2425,7 @@ export function verifyAdminPassword(request: Request, env: Env): boolean {
     return false;
   }
 
-  // 1. Authorization: Bearer <password> (最推奨・標準RFC 6750)
+  // 1. Authorization: Bearer <password> (RFC 6750 標準)
   const authHeader = request.headers.get('Authorization');
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const bearerToken = authHeader.substring(7).trim();
@@ -2438,15 +2439,6 @@ export function verifyAdminPassword(request: Request, env: Env): boolean {
   if (headerKey && headerKey.trim() === expectedPassword) {
     return true;
   }
-
-  // 3. 後方互換URLクエリパラメータ (?key=... or ?password=...)
-  try {
-    const url = new URL(request.url);
-    const queryKey = url.searchParams.get('key') || url.searchParams.get('password') || url.searchParams.get('token');
-    if (queryKey && queryKey.trim() === expectedPassword) {
-      return true;
-    }
-  } catch (_) {}
 
   return false;
 }

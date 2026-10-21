@@ -401,8 +401,11 @@ export const App: React.FC = () => {
     setChatMessages([]);
     const newId = generateSessionId();
     setSessionId(newId);
+    const newToken = generateSessionToken();
+    setSessionToken(newToken);
     try {
       localStorage.setItem('llm5_current_session_id', newId);
+      localStorage.setItem('llm5_current_session_token', newToken);
       localStorage.setItem('llm5_current_phase', 'chat');
       localStorage.removeItem('llm5_ai_result');
       localStorage.removeItem('llm5_survey_result');

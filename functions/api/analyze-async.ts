@@ -1,4 +1,4 @@
-import { Env, ChatMessage, runFinalAnalysis, ensureDbSchema } from './_gateway';
+import { Env, ChatMessage, runFinalAnalysis, ensureDbSchema, verifyAdminPassword } from './_gateway';
 
 interface AnalyzeAsyncRequestBody {
   session_id: string;
@@ -45,10 +45,35 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const timestamp = new Date().toISOString();
     const userCount = messages.filter(m => m.role === 'user').length;
 
-    // 1. D1へセッション初期レコードを即時保存（キャッシュ済みスキーマ確認でDDLオーバーヘッド排除）
+    // 1. D1へセッション初期レコードを即時保存（既存セッションの権限確認とキャッシュ済みスキーマ）
     if (env.DB) {
       try {
         await ensureDbSchema(env.DB);
+
+        const existingRow: any = await env.DB.prepare(`
+          SELECT session_token FROM assessment_sessions WHERE id = ?
+        `).bind(session_id).first();
+
+        const isAdmin = verifyAdminPassword(request, env);
+        if (existingRow && !isAdmin) {
+          if (!existingRow.session_token || !incomingToken || incomingToken !== existingRow.session_token) {
+            return new Response(JSON.stringify({
+              error: 'セッションの更新権限がありません。有効なセッショントークンが必要です。'
+            }), {
+              status: 403,
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+        }
+
+        if (!existingRow && !incomingToken && !isAdmin) {
+          return new Response(JSON.stringify({
+            error: '新規セッションの作成にはセッショントークン (session_token) が必要です。'
+          }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
 
         await env.DB.prepare(`
           INSERT INTO assessment_sessions (

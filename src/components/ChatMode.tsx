@@ -92,7 +92,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
             return true;
           }
           const savedReady = localStorage.getItem('llm5_chat_is_ready') === 'true';
-          if (savedReady && uCount >= 6) return true;
+          if (savedReady) return true;
         }
       }
     } catch (_) {}

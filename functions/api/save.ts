@@ -68,8 +68,8 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         `).bind(session_id).first();
 
         const isAdmin = verifyAdminPassword(request, env);
-        if (existingRow && existingRow.session_token && !isAdmin) {
-          if (!incomingToken || incomingToken !== existingRow.session_token) {
+        if (existingRow && !isAdmin) {
+          if (!existingRow.session_token || !incomingToken || incomingToken !== existingRow.session_token) {
             return new Response(JSON.stringify({
               error: 'セッションの更新権限がありません。有効なセッショントークンが必要です。'
             }), {
@@ -77,6 +77,15 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
               headers: { 'Content-Type': 'application/json' }
             });
           }
+        }
+
+        if (!existingRow && !incomingToken && !isAdmin) {
+          return new Response(JSON.stringify({
+            error: '新規セッションの保存にはセッショントークン (session_token) が必要です。'
+          }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' }
+          });
         }
 
         const effectiveToken = incomingToken || existingRow?.session_token || null;
