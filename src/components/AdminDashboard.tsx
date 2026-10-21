@@ -120,6 +120,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToApp }) =
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${pw}`,
           'x-admin-password': pw
         },
         body: JSON.stringify({ password: pw })
@@ -167,8 +168,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToApp }) =
     setIsLoading(true);
     setFetchError(null);
     try {
-      const res = await fetch('/api/admin/sessions', {
-        headers: { 'x-admin-password': pw }
+      const res = await fetch('/api/admin/sessions?limit=500', {
+        headers: {
+          'Authorization': `Bearer ${pw}`,
+          'x-admin-password': pw
+        }
       });
 
       if (!res.ok) {
@@ -201,7 +205,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToApp }) =
       setIsLoadingDetail(true);
       try {
         const res = await fetch(`/api/admin/sessions?id=${encodeURIComponent(session.id)}`, {
-          headers: { 'x-admin-password': password }
+          headers: {
+            'Authorization': `Bearer ${password}`,
+            'x-admin-password': password
+          }
         });
         if (res.ok) {
           const data: any = await res.json();
@@ -231,7 +238,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToApp }) =
     try {
       const res = await fetch(`/api/admin/sessions?id=${encodeURIComponent(sessionId)}`, {
         method: 'DELETE',
-        headers: { 'x-admin-password': password }
+        headers: {
+          'Authorization': `Bearer ${password}`,
+          'x-admin-password': password
+        }
       });
 
       if (!res.ok) {
@@ -247,48 +257,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToApp }) =
     }
   };
 
+  // 安全なBlobファイルダウンロード（URLにパスワードを露出させずAuthorizationヘッダーで取得）
+  const downloadSecureFile = async (urlPath: string, filename: string) => {
+    try {
+      const res = await fetch(urlPath, {
+        headers: {
+          'Authorization': `Bearer ${password}`,
+          'x-admin-password': password
+        }
+      });
+      if (!res.ok) {
+        throw new Error(`ダウンロードに失敗しました [${res.status}]`);
+      }
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err: any) {
+      alert(`ダウンロードエラー: ${err.message}`);
+    }
+  };
+
   // SPSS用フラットCSVダウンロード
   const handleDownloadSpssCsv = () => {
-    const url = `/api/admin/export?format=spss_csv&header=single&key=${encodeURIComponent(password)}`;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `llm5_spss_dataset_${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    downloadSecureFile('/api/admin/export?format=spss_csv&header=single', `llm5_spss_dataset_${new Date().toISOString().slice(0, 10)}.csv`);
   };
 
   // Qualtrics標準3行ヘッダーCSVダウンロード
   const handleDownloadQualtricsCsv = () => {
-    const url = `/api/admin/export?format=spss_csv&header=qualtrics&key=${encodeURIComponent(password)}`;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `llm5_qualtrics_format_${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    downloadSecureFile('/api/admin/export?format=spss_csv&header=qualtrics', `llm5_qualtrics_format_${new Date().toISOString().slice(0, 10)}.csv`);
   };
 
   // SPSSシンタックスファイル (.sps) ダウンロード
   const handleDownloadSpssSyntax = () => {
-    const url = `/api/admin/export?format=sps&key=${encodeURIComponent(password)}`;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `llm5_spss_syntax_${new Date().toISOString().slice(0, 10)}.sps`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    downloadSecureFile('/api/admin/export?format=sps', `llm5_spss_syntax_${new Date().toISOString().slice(0, 10)}.sps`);
   };
 
   // JSONダウンロード
   const handleDownloadJson = () => {
-    const url = `/api/admin/export?format=json&key=${encodeURIComponent(password)}`;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `llm5_research_data_${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    downloadSecureFile('/api/admin/export?format=json', `llm5_research_data_${new Date().toISOString().slice(0, 10)}.json`);
   };
 
   // 単一セッションJSONダウンロード
@@ -297,7 +309,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToApp }) =
     if (!session.parsed_messages || session.parsed_messages.length === 0) {
       try {
         const res = await fetch(`/api/admin/sessions?id=${encodeURIComponent(session.id)}`, {
-          headers: { 'x-admin-password': password }
+          headers: {
+            'Authorization': `Bearer ${password}`,
+            'x-admin-password': password
+          }
         });
         if (res.ok) {
           const data: any = await res.json();

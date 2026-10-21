@@ -28,9 +28,7 @@ function sanitizeMessage(text: string): string {
 function isAssistantCompletionReply(text: string): boolean {
   const clean = sanitizeMessage(text);
   if (!clean) return false;
-  const endsWithQuestion = /[？?]\s*$/.test(clean);
-  if (endsWithQuestion) return false;
-  return /(インタビューは.*終了|対話セッションは.*完了|次のステップ.*質問紙|お話を聞かせていただき.*ありがとうございました)/.test(clean);
+  return /(インタビューは.*終了|対話セッションは.*完了|次のステップ.*質問紙|お話を聞かせていただき.*ありがとうございました|質問紙へ進んで|アンケートへ進んで)/.test(clean);
 }
 
 export const ChatMode: React.FC<ChatModeProps> = ({
@@ -174,38 +172,51 @@ export const ChatMode: React.FC<ChatModeProps> = ({
         let readyFlagFromServer = false;
         let streamError: string | null = null;
 
+        const processSseLine = (line: string) => {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith('data:')) return;
+
+          const dataStr = trimmed.slice(5).trim();
+          if (dataStr === '[DONE]') return;
+
+          try {
+            const event = JSON.parse(dataStr);
+            if (event.type === 'chunk' && event.text) {
+              accumulatedText += event.text;
+              setStreamingText(accumulatedText);
+            } else if (event.type === 'done') {
+              if (event.is_ready_for_analysis) {
+                readyFlagFromServer = true;
+              }
+            } else if (event.type === 'error') {
+              streamError = event.error || 'ストリーム通信エラーが発生しました';
+            }
+          } catch (err: any) {
+            if (err.message && !err.message.includes('JSON')) {
+              console.warn('SSE event error:', err);
+            }
+          }
+        };
+
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            // 残存バッファの完全フラッシュ処理（doneイベントやreadyFlagFromServerの欠落を防止）
+            if (buffer.trim()) {
+              const remainingLines = buffer.split('\n');
+              for (const line of remainingLines) {
+                processSseLine(line);
+              }
+            }
+            break;
+          }
 
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n');
           buffer = lines.pop() || '';
 
           for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith('data:')) continue;
-
-            const dataStr = trimmed.slice(5).trim();
-            if (dataStr === '[DONE]') continue;
-
-            try {
-              const event = JSON.parse(dataStr);
-              if (event.type === 'chunk' && event.text) {
-                accumulatedText += event.text;
-                setStreamingText(accumulatedText);
-              } else if (event.type === 'done') {
-                if (event.is_ready_for_analysis) {
-                  readyFlagFromServer = true;
-                }
-              } else if (event.type === 'error') {
-                streamError = event.error || 'ストリーム通信エラーが発生しました';
-              }
-            } catch (err: any) {
-              if (err.message && !err.message.includes('JSON')) {
-                console.warn('SSE event error:', err);
-              }
-            }
+            processSseLine(line);
           }
           if (streamError) break;
         }
@@ -224,10 +235,11 @@ export const ChatMode: React.FC<ChatModeProps> = ({
         setMessages([...newMessages, { role: 'assistant', content: finalReply }]);
         setStreamingText('');
 
-        const endsWithQuestion = /[？?]\s*$/.test(finalReply);
+        // サーバー側の準備完了フラグ（readyFlagFromServer）または完了発話判定を最優先
         if (
-          (readyFlagFromServer && !endsWithQuestion && nextUserTurns >= 6) ||
-          isAssistantCompletionReply(finalReply)
+          readyFlagFromServer ||
+          isAssistantCompletionReply(finalReply) ||
+          nextUserTurns >= 8
         ) {
           setIsReady(true);
         }
@@ -241,10 +253,10 @@ export const ChatMode: React.FC<ChatModeProps> = ({
         }
 
         setMessages([...newMessages, { role: 'assistant', content: cleanReply }]);
-        const endsWithQuestion = /[？?]\s*$/.test(cleanReply);
         if (
-          (data.is_ready_for_analysis && !endsWithQuestion && nextUserTurns >= 6) ||
-          isAssistantCompletionReply(cleanReply)
+          data.is_ready_for_analysis ||
+          isAssistantCompletionReply(cleanReply) ||
+          nextUserTurns >= 8
         ) {
           setIsReady(true);
         }

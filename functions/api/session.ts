@@ -1,4 +1,4 @@
-import { Env, AnalysisResult, ChatMessage } from './_gateway';
+import { Env, AnalysisResult, ChatMessage, verifyAdminPassword } from './_gateway';
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
@@ -27,7 +27,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     // セッションレコードを取得
     const row: any = await env.DB.prepare(`
       SELECT 
-        id, student_id, age, gender, created_at, dialogue_turns,
+        id, session_token, student_id, age, gender, created_at, dialogue_turns,
         chat_messages, ai_personality_title, ai_personality_type, ai_summary,
         ai_openness, ai_conscientiousness, ai_extraversion, ai_agreeableness, ai_neuroticism,
         ai_full_result,
@@ -47,6 +47,27 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         status: 200,
         headers: { 'Content-Type': 'application/json' }
       });
+    }
+
+    // セキュリティ認証チェック: 管理者であるか、または正しい session_token が提供されているか検証
+    const isAdmin = verifyAdminPassword(request, env);
+    if (!isAdmin && row.session_token) {
+      const incomingToken =
+        request.headers.get('x-session-token') ||
+        (request.headers.get('Authorization')?.startsWith('Bearer ')
+          ? request.headers.get('Authorization')?.substring(7).trim()
+          : null) ||
+        url.searchParams.get('token') ||
+        url.searchParams.get('session_token');
+
+      if (!incomingToken || incomingToken !== row.session_token) {
+        return new Response(JSON.stringify({
+          error: 'セッションへのアクセス権限がありません。有効なセッショントークンが必要です。'
+        }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
     }
 
     // AI分析が完了しているか判定

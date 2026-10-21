@@ -486,13 +486,21 @@ export function getDetailedScenarioForFactor(factor?: string, _age?: number): {
       };
 
     case '外向性':
-    case '協調性':
       return {
         scenarioTitle: '集まりの計画・意見対立と意思決定',
         situationText:
           '友人や知人、仲間など3〜4人で、集まりで入る食事の店や行き先を決めている場面を想像してください。相談している最中、候補が2つ挙がってお互いに譲らず意見が真っ二つに分かれ、議論が平行線のまま気まずい沈黙が流れて決まらなくなってしまいました。',
         questionText:
           'もし過去に似たような場面のご経験があれば、その時その場のメンバーに対して実際にどう声をかけたり動いたりしたかを教えていただけますか？（もし思い当たる経験がなければ、「この状況になったらご自身なら具体的にどんなタイミングで何と声をかけるか」を教えてください。自分から折衷案を出して場を引っ張る、誰かの意見に同調して後押しする、場を和ませる雑談を挟む、周りの様子を見て決定に任せるなど、あなたが取る発言や立ち回りを教えてください）'
+      };
+
+    case '協調性':
+      return {
+        scenarioTitle: '仲間内での作業遅れ・困っている相手への関わりと協力',
+        situationText:
+          '友人や仲間、同僚など数人で一緒に作業や準備を進めている場面を想像してください。メンバーの1人が自分の担当分でつまずいて遅れており、焦りや疲れから周囲と少しギスギスした雰囲気になりかけています。一方で、あなた自身の作業もまだ残っている状態です。',
+        questionText:
+          'もし過去に似たような場面のご経験があれば、その時その相手や周囲に対して実際にどう声をかけたり行動したりしたかを教えていただけますか？（もし思い当たる経験がなければ、「この状況になったらご自身ならどう動くか」を教えてください。自分の手を止めてでも相手の作業を手伝う、角が立たないように声をかけてフォローする、相手を信じて見守り自分の役割に集中するなど、あなたの実際の接し方や判断基準を教えてください）'
       };
 
     case '開放性':
@@ -517,7 +525,7 @@ export function getDetailedScenarioForFactor(factor?: string, _age?: number): {
 }
 
 /**
- * これまでのユーザー発言から生活キーワード（大学、ゲーム、バイト等）を抽出し、
+ * これまでのユーザー発言から生活キーワード（大学、バイト等）を抽出し、
  * 「前話したこと」を忘れない文脈ブリッジ文を生成
  */
 export function buildContextBridge(messages: ChatMessage[]): string {
@@ -526,9 +534,6 @@ export function buildContextBridge(messages: ChatMessage[]): string {
     .map(m => m.content)
     .join(' ');
 
-  if (userText.includes('大学') && (userText.includes('休') || userText.includes('ゲーム'))) {
-    return '先ほど、今日は大学をお休みされてご自宅でゲームをしながらリラックスして過ごされていたとお話ししてくださいましたね。普段の過ごし方がよく分かりました、ありがとうございます！そうした普段の学生生活や日常に関連して、例えばこんな場面を想像してみてほしいのですが……';
-  }
   if (userText.includes('大学') || userText.includes('学校')) {
     return '先ほど、学校や大学について教えていただきありがとうございました！そうした日常に関連して、例えばこんな場面を想像してみてほしいのですが……';
   }
@@ -635,12 +640,25 @@ export function getPresentedFactors(messages: ChatMessage[]): Set<FactorNameJP> 
       const text = m.content;
       if (
         text.includes('週末の集まり') ||
+        text.includes('食事の店や行き先') ||
         text.includes('食事の店選び') ||
         text.includes('候補が2つ') ||
         text.includes('議論が平行線') ||
         text.includes('遠出して')
       ) {
         presented.add('外向性');
+      }
+      if (
+        text.includes('作業遅れ') ||
+        text.includes('つまずいて') ||
+        text.includes('ギスギス') ||
+        text.includes('作業を手伝う') ||
+        text.includes('フォローする') ||
+        text.includes('相手が良かれと思って提案') ||
+        text.includes('相手の気持ちを汲みつつ') ||
+        text.includes('考えとは違っていたり') ||
+        text.includes('すり合わせる')
+      ) {
         presented.add('協調性');
       }
       if (
@@ -651,10 +669,14 @@ export function getPresentedFactors(messages: ChatMessage[]): Set<FactorNameJP> 
         presented.add('開放性');
       }
       if (
-        text.includes('提出が必要な') ||
-        text.includes('手をつかないまま夜遅く') ||
+        text.includes('提出') ||
+        text.includes('手をつかない') ||
+        text.includes('夜遅く') ||
         text.includes('締切') ||
-        text.includes('課題')
+        text.includes('課題') ||
+        text.includes('スケジュール') ||
+        text.includes('徹夜') ||
+        text.includes('期日')
       ) {
         presented.add('誠実性');
       }
@@ -675,7 +697,7 @@ export function getPresentedFactors(messages: ChatMessage[]): Set<FactorNameJP> 
  * Clef-flashの15ファセット同時評価レスポンス（パターンC）を解析し、
  * 「同じエピソードの深掘り」または「未充足因子に応じた年齢別SJTシナリオ提示」を決定する
  */
-function parseClefPatternCDecision(
+export function parseClefPatternCDecision(
   resObj: any,
   messages: ChatMessage[],
   userCount: number,
@@ -762,7 +784,9 @@ function parseClefPatternCDecision(
   //    最低ターン数 (MIN_USER_TURNS: 6) 以上かつ、全5因子の測定標準誤差が目標以下 (全SEM <= 5.5)
   //    ※BFI-2の各因子3ファセットすべてについて行動エビデンス（情報量）が得られて初めてSEM <= 5.5が達成されるため、
   //      「2ファセットで打ち切られて残りの1ファセットが永久に測定されない」歪みが数学的に防止される。
-  const isPrecisionSatisfied = userCount >= MIN_USER_TURNS && uncoveredFactors.length === 0;
+  const isPrecisionSatisfied =
+    userCount >= MIN_USER_TURNS &&
+    (uncoveredFactors.length === 0 || (overallReadyProb >= 0.85 && totalEvidencedFacets >= 14));
 
   // 2) 安全停止ルール (Safety Stop / Maximum Turns):
   //    受検者の疲労・離脱（Fatigue bias / Attrition）を防ぐためのCAT標準の最大ターン数制限
@@ -869,19 +893,6 @@ function parseClefPatternCDecision(
     uncoveredFactors[0] ||
     '誠実性';
 
-  // もし未提示シナリオが存在しない場合は、無理に新シナリオを出さず完了へ
-  if (unpresentedAny.length === 0 && userCount >= 8) {
-    return {
-      focus_dimension: '完了',
-      target_question_strategy:
-        'すべてのシナリオについての確認が完了しました。追加の質問は行わず、直前の回答に感謝を伝えた上で、画面下のボタンから次の質問紙へ進むよう案内してください。',
-      is_ready_for_final_analysis: true,
-      action_mode: 'complete',
-      evidenced_facets_count: totalEvidencedFacets,
-      notes: `Clef-flash Pattern C [All scenarios presented] (turns: ${userCount})`
-    };
-  }
-
   // ターゲット因子内で測定精度が不足している未観測ファセットを優先抽出
   const missingFacetsInFactor = factorMetrics[targetFactor]?.unobservedFacets?.length
     ? factorMetrics[targetFactor].unobservedFacets
@@ -890,6 +901,37 @@ function parseClefPatternCDecision(
       );
   const targetFacets = (missingFacetsInFactor.length > 0 ? missingFacetsInFactor : contextualMissingFacets).slice(0, 3);
   const targetNames = targetFacets.map(f => `${f.factor}［${f.name}］`).join('・');
+
+  // もし5因子のSJTシナリオがすべて提示済み（unpresentedAny.length === 0）の場合:
+  // 同一シナリオの再提示は避け、未観測ファセットが残っていればターゲット深掘りプローブを投げ、全因子充足なら完了へ
+  if (unpresentedAny.length === 0) {
+    if (uncoveredFactors.length === 0 || userCount >= MAX_USER_TURNS) {
+      return {
+        focus_dimension: '完了',
+        target_question_strategy:
+          'すべてのシナリオについての確認が完了しました。追加の質問は行わず、直前の回答に感謝を伝えた上で、画面下のボタンから次の質問紙へ進むよう案内してください。',
+        is_ready_for_final_analysis: true,
+        action_mode: 'complete',
+        evidenced_facets_count: totalEvidencedFacets,
+        notes: `Clef-flash Pattern C [All scenarios presented & precision satisfied] (turns: ${userCount})`
+      };
+    }
+    const targetHints = targetFacets.map(f => `・${f.factor}（${f.name}）: ${f.probeHint}`).join('\n');
+    return {
+      focus_dimension: targetFactor,
+      action_mode: 'deepen_episode',
+      target_facets: targetFacets.map(f => f.name),
+      evidenced_facets_count: totalEvidencedFacets,
+      is_ready_for_final_analysis: false,
+      target_question_strategy: [
+        `【未観測ファセット（${targetNames}）のピンポイント行動プローブ】`,
+        `すべての基本シナリオは提示済みのため、同じシナリオの再提示はせず、これまでの会話の流れを受け止めた上で、以下の未確認の行動側面について「普段の生活やこれまでの経験で、具体的にどう行動しているか」を1つ尋ねてください。`,
+        targetHints,
+        `（※末尾は必ず『？』で終えてください）`
+      ].join('\n'),
+      notes: `Clef-flash Pattern C [Targeted_Facet_Probe:${targetFactor}] (evidenced: ${totalEvidencedFacets}/15, target: ${targetNames})`
+    };
+  }
 
   // 年齢に適応した詳細シナリオと文脈ブリッジを取得
   const scenario = getDetailedScenarioForFactor(targetFactor, parsedAge);
@@ -1200,96 +1242,110 @@ export async function runInterviewerStream(
       let rawAccumulatedText = '';
       let cleanAccumulatedText = '';
 
+      const processSseLine = (line: string) => {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith('data:')) return;
+
+        const dataStr = trimmed.slice(5).trim();
+        if (dataStr === '[DONE]') return;
+
+        try {
+          const parsed = JSON.parse(dataStr);
+          const content = parsed.choices?.[0]?.delta?.content;
+          if (content) {
+            rawAccumulatedText += content;
+
+            // 思考タグ (<thought>, <think>, <|channel>thought) のリアルタイム除去（大文字・小文字両対応）
+            let cleanChunk = '';
+            for (let i = 0; i < content.length; i++) {
+              const char = content[i];
+              if (!isInsideThinking) {
+                if (char === '<') {
+                  if (tagBuffer.length > 0) {
+                    cleanChunk += tagBuffer;
+                  }
+                  tagBuffer = '<';
+                } else if (tagBuffer.length > 0) {
+                  tagBuffer += char;
+                  const lowerTag = tagBuffer.toLowerCase();
+                  if (
+                    '<think>'.startsWith(lowerTag) ||
+                    '<thought>'.startsWith(lowerTag) ||
+                    '<|channel>thought'.startsWith(lowerTag)
+                  ) {
+                    if (
+                      lowerTag === '<think>' ||
+                      lowerTag === '<thought>' ||
+                      lowerTag === '<|channel>thought'
+                    ) {
+                      isInsideThinking = true;
+                      tagBuffer = '';
+                    }
+                  } else {
+                    cleanChunk += tagBuffer;
+                    tagBuffer = '';
+                  }
+                } else {
+                  cleanChunk += char;
+                }
+              } else {
+                if (char === '<') {
+                  tagBuffer = '<';
+                } else if (tagBuffer.length > 0) {
+                  tagBuffer += char;
+                  const lowerTag = tagBuffer.toLowerCase();
+                  if (
+                    '</think>'.startsWith(lowerTag) ||
+                    '</thought>'.startsWith(lowerTag) ||
+                    '<channel|>'.startsWith(lowerTag)
+                  ) {
+                    if (
+                      lowerTag === '</think>' ||
+                      lowerTag === '</thought>' ||
+                      lowerTag === '<channel|>'
+                    ) {
+                      isInsideThinking = false;
+                      tagBuffer = '';
+                    }
+                  } else {
+                    tagBuffer = '';
+                  }
+                }
+              }
+            }
+
+            if (cleanChunk) {
+              const sanitizedChunk = sanitizeJapaneseOutput(cleanChunk);
+              cleanAccumulatedText += sanitizedChunk;
+              const chunkEvent = JSON.stringify({ type: 'chunk', text: sanitizedChunk });
+              controller.enqueue(encoder.encode(`data: ${chunkEvent}\n\n`));
+            }
+          }
+        } catch (e) {
+          // 行パース失敗時は無視
+        }
+      };
+
       try {
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) {
+            buffer += decoder.decode();
+            if (buffer.trim()) {
+              for (const line of buffer.split('\n')) {
+                processSseLine(line);
+              }
+              buffer = '';
+            }
+            break;
+          }
 
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split('\n');
           buffer = lines.pop() || '';
 
           for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith('data:')) continue;
-
-            const dataStr = trimmed.slice(5).trim();
-            if (dataStr === '[DONE]') continue;
-
-            try {
-              const parsed = JSON.parse(dataStr);
-              const content = parsed.choices?.[0]?.delta?.content;
-              if (content) {
-                rawAccumulatedText += content;
-
-                // 思考タグ (<thought>, <think>, <|channel>thought) のリアルタイム除去
-                let cleanChunk = '';
-                for (let i = 0; i < content.length; i++) {
-                  const char = content[i];
-                  if (!isInsideThinking) {
-                    if (char === '<') {
-                      tagBuffer = '<';
-                    } else if (tagBuffer.length > 0) {
-                      tagBuffer += char;
-                      if (
-                        '<think>'.startsWith(tagBuffer) ||
-                        '<thought>'.startsWith(tagBuffer) ||
-                        '<|channel>thought'.startsWith(tagBuffer)
-                      ) {
-                        if (
-                          tagBuffer === '<think>' ||
-                          tagBuffer === '<thought>' ||
-                          tagBuffer === '<|channel>thought'
-                        ) {
-                          isInsideThinking = true;
-                          tagBuffer = '';
-                        }
-                      } else {
-                        cleanChunk += tagBuffer;
-                        tagBuffer = '';
-                      }
-                    } else {
-                      cleanChunk += char;
-                    }
-                  } else {
-                    if (char === '<') {
-                      tagBuffer = '<';
-                    } else if (tagBuffer.length > 0) {
-                      tagBuffer += char;
-                      if (
-                        '</think>'.startsWith(tagBuffer) ||
-                        '</thought>'.startsWith(tagBuffer) ||
-                        '<channel|>'.startsWith(tagBuffer)
-                      ) {
-                        if (
-                          tagBuffer === '</think>' ||
-                          tagBuffer === '</thought>' ||
-                          tagBuffer === '<channel|>'
-                        ) {
-                          isInsideThinking = false;
-                          tagBuffer = '';
-                        }
-                      } else if (
-                        !tagBuffer.startsWith('</think>') &&
-                        !tagBuffer.startsWith('</thought>') &&
-                        !tagBuffer.startsWith('<channel|>')
-                      ) {
-                        tagBuffer = '';
-                      }
-                    }
-                  }
-                }
-
-                if (cleanChunk) {
-                  const sanitizedChunk = sanitizeJapaneseOutput(cleanChunk);
-                  cleanAccumulatedText += sanitizedChunk;
-                  const chunkEvent = JSON.stringify({ type: 'chunk', text: sanitizedChunk });
-                  controller.enqueue(encoder.encode(`data: ${chunkEvent}\n\n`));
-                }
-              }
-            } catch (e) {
-              // 行パース失敗時は無視
-            }
+            processSseLine(line);
           }
         }
       } catch (err: any) {
@@ -1297,12 +1353,13 @@ export async function runInterviewerStream(
         const errEvent = JSON.stringify({ type: 'error', error: err.message || 'Stream error' });
         controller.enqueue(encoder.encode(`data: ${errEvent}\n\n`));
       } finally {
+        const lowerRemainingTag = tagBuffer.toLowerCase();
         if (
           !isInsideThinking &&
           tagBuffer.length > 0 &&
-          !tagBuffer.startsWith('<think') &&
-          !tagBuffer.startsWith('<thought') &&
-          !tagBuffer.startsWith('<|channel>thought')
+          !lowerRemainingTag.startsWith('<think') &&
+          !lowerRemainingTag.startsWith('<thought') &&
+          !lowerRemainingTag.startsWith('<|channel>thought')
         ) {
           cleanAccumulatedText += tagBuffer;
           const chunkEvent = JSON.stringify({ type: 'chunk', text: tagBuffer });
@@ -1318,15 +1375,23 @@ export async function runInterviewerStream(
           }
         }
 
-        // 完了モード以外で、万一テキストが空、または質問記号（？）が含まれていない場合の自動補完
+        // 完了モード以外で、万一テキストが空、または疑問表現が一切含まれていない場合の自動補完
+        const hasQuestionPattern = (txt: string) =>
+          txt.includes('？') ||
+          txt.includes('?') ||
+          /(?:でしょうか|ますか|ですか|ませんか|いただけますか|ください|いかがですか|どうですか)[。！!\s」』）)]*$/.test(txt.trim());
+
         if (!isReady && strategy.action_mode !== 'complete') {
           const userAge = typeof userProfile?.age === 'number' ? userProfile.age : (userProfile?.age ? parseInt(String(userProfile.age), 10) : undefined);
           const scenario = getDetailedScenarioForFactor(strategy.focus_dimension, userAge);
           if (!cleanAccumulatedText.trim()) {
             const fallbackReply = `お答えいただきありがとうございます！\n少し場面を変えて、次の具体的なシチュエーションについて伺わせてください。\n\n【状況】\n${scenario.situationText}\n\n${scenario.questionText}`;
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'chunk', text: fallbackReply })}\n\n`));
-          } else if (!cleanAccumulatedText.includes('？') && !cleanAccumulatedText.includes('?')) {
-            const followUpQuestion = `\n\nちなみに、もし「${scenario.situationText.slice(0, 45)}...」という状況なら、あなたなら具体的にどう動きますか？`;
+          } else if (!hasQuestionPattern(cleanAccumulatedText)) {
+            const followUpQuestion =
+              strategy.action_mode === 'deepen_episode'
+                ? `\n\nちなみに、その場面で具体的にどのような言葉を交わし、どう行動されたのかもう少し詳しく教えていただけますか？`
+                : `\n\nちなみに、もし「${scenario.situationText.slice(0, 45)}...」という状況なら、あなたなら具体的にどう動きますか？`;
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'chunk', text: followUpQuestion })}\n\n`));
           }
         }
@@ -1382,10 +1447,17 @@ export async function runInterviewer(
       let reply = sanitizeJapaneseOutput(extractResponseText(data));
       const userAge = typeof userProfile?.age === 'number' ? userProfile.age : (userProfile?.age ? parseInt(String(userProfile.age), 10) : undefined);
       const scenario = getDetailedScenarioForFactor(strategy.focus_dimension, userAge);
+      const hasQuestionPattern =
+        reply.includes('？') ||
+        reply.includes('?') ||
+        /(?:でしょうか|ますか|ですか|ませんか|いただけますか|ください|いかがですか|どうですか)[。！!\s」』）)]*$/.test(reply.trim());
       if (!reply.trim()) {
         reply = `お答えいただきありがとうございます！\n少し場面を変えて、次の具体的なシチュエーションについて伺わせてください。\n\n【状況】\n${scenario.situationText}\n\n${scenario.questionText}`;
-      } else if (!isReady && strategy.action_mode !== 'complete' && !reply.includes('？') && !reply.includes('?')) {
-        reply += `\n\nちなみに、もし「${scenario.situationText.slice(0, 45)}...」という状況なら、あなたなら具体的にどう動きますか？`;
+      } else if (!isReady && strategy.action_mode !== 'complete' && !hasQuestionPattern) {
+        reply +=
+          strategy.action_mode === 'deepen_episode'
+            ? `\n\nちなみに、その場面で具体的にどのような言葉を交わし、どう行動されたのかもう少し詳しく教えていただけますか？`
+            : `\n\nちなみに、もし「${scenario.situationText.slice(0, 45)}...」という状況なら、あなたなら具体的にどう動きますか？`;
       }
       return { reply, isReady };
     } else {
@@ -1713,7 +1785,7 @@ function parseClefScoringResponse(
     }
     facetWeights[cfg.key] = w;
 
-    // スコア算出: 50 + Δ * 50 * w
+    // スコア算出: 50 + Δ * 50
     let delta = 0;
     if (pPos !== null && pNeg !== null) {
       delta = pPos - pNeg; // -1.0 〜 +1.0
@@ -1722,7 +1794,9 @@ function parseClefScoringResponse(
     } else if (pNeg !== null) {
       delta = (0.5 - pNeg) * 2;
     }
-    const score = Math.min(100, Math.max(0, Math.round(50 + delta * 50 * w)));
+    // 特性の点推定は0〜100フルスケールで算出（SJT状況判断であっても質問紙と同一尺度で比較可能にし、人工的格差を排除）
+    // 不確実性や社会的望ましさバイアスはSEM拡大（SEM=11.0）と95%信頼区間の広がりとして適切に反映
+    const score = Math.min(100, Math.max(0, Math.round(50 + delta * 50)));
     facetScores[cfg.key] = score;
 
     // アプローチC: 確信度および測定標準誤差 (SEM) / 信頼区間の差別化
@@ -2289,20 +2363,68 @@ ${confirmedScoresBlock}
   }
 }
 
+let isSchemaEnsured = false;
+
+/**
+ * D1データベースのテーブル・カラム存在を安全に初回のみ保証（ホットパスでのDDL過負荷・ロック防止）
+ */
+export async function ensureDbSchema(db: D1Database): Promise<void> {
+  if (isSchemaEnsured) return;
+  try {
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS assessment_sessions (
+        id TEXT PRIMARY KEY,
+        session_token TEXT,
+        student_id TEXT NOT NULL,
+        age INTEGER NOT NULL,
+        gender TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        dialogue_turns INTEGER DEFAULT 0,
+        chat_messages TEXT,
+        ai_personality_title TEXT,
+        ai_personality_type TEXT,
+        ai_summary TEXT,
+        ai_openness REAL,
+        ai_conscientiousness REAL,
+        ai_extraversion REAL,
+        ai_agreeableness REAL,
+        ai_neuroticism REAL,
+        ai_full_result TEXT,
+        survey_scale_type TEXT,
+        survey_scale_name TEXT,
+        survey_raw_answers TEXT,
+        survey_openness REAL,
+        survey_conscientiousness REAL,
+        survey_extraversion REAL,
+        survey_agreeableness REAL,
+        survey_neuroticism REAL,
+        survey_completed_at TEXT,
+        r2_saved INTEGER DEFAULT 0,
+        r2_key TEXT
+      )
+    `).run();
+
+    try { await db.prepare(`ALTER TABLE assessment_sessions ADD COLUMN session_token TEXT`).run(); } catch (_) {}
+    try { await db.prepare(`ALTER TABLE assessment_sessions ADD COLUMN r2_saved INTEGER DEFAULT 0`).run(); } catch (_) {}
+    try { await db.prepare(`ALTER TABLE assessment_sessions ADD COLUMN r2_key TEXT`).run(); } catch (_) {}
+    isSchemaEnsured = true;
+  } catch (err) {
+    console.error('ensureDbSchema error:', err);
+  }
+}
+
 /**
  * 管理者認証ヘルパー関数
- * 環境変数 ADMIN_PASSWORD またはデフォルトパスワード 'llm5admin' で照合
+ * Authorization: Bearer <password> または x-admin-password ヘッダーで安全に照合
  */
 export function verifyAdminPassword(request: Request, env: Env): boolean {
-  const expectedPassword = env.ADMIN_PASSWORD || 'llm5admin';
-
-  // 1. x-admin-password ヘッダー
-  const headerKey = request.headers.get('x-admin-password');
-  if (headerKey && headerKey.trim() === expectedPassword) {
-    return true;
+  const expectedPassword = env.ADMIN_PASSWORD;
+  if (!expectedPassword) {
+    console.error('ADMIN_PASSWORD is not configured in environment variables');
+    return false;
   }
 
-  // 2. Authorization: Bearer <password>
+  // 1. Authorization: Bearer <password> (最推奨・標準RFC 6750)
   const authHeader = request.headers.get('Authorization');
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const bearerToken = authHeader.substring(7).trim();
@@ -2311,14 +2433,20 @@ export function verifyAdminPassword(request: Request, env: Env): boolean {
     }
   }
 
-  // 3. URLクエリパラメータ (?key=... or ?password=...)
+  // 2. x-admin-password ヘッダー
+  const headerKey = request.headers.get('x-admin-password');
+  if (headerKey && headerKey.trim() === expectedPassword) {
+    return true;
+  }
+
+  // 3. 後方互換URLクエリパラメータ (?key=... or ?password=...)
   try {
     const url = new URL(request.url);
     const queryKey = url.searchParams.get('key') || url.searchParams.get('password') || url.searchParams.get('token');
     if (queryKey && queryKey.trim() === expectedPassword) {
       return true;
     }
-  } catch (_) { }
+  } catch (_) {}
 
   return false;
 }

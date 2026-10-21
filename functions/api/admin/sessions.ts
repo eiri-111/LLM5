@@ -1,4 +1,4 @@
-import { Env, verifyAdminPassword } from '../_gateway';
+import { Env, verifyAdminPassword, ensureDbSchema } from '../_gateway';
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
   const { request, env } = context;
@@ -27,16 +27,15 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     try {
       // 1-1. R2 から取得を試行 (優先)
       if (r2Bucket) {
-        // 標準キー sessions/{session_id}.json
+        // 標準キー sessions/{session_id}.json から直接O(1)取得
         let r2Obj = await r2Bucket.get(`sessions/${sessionId}.json`);
         
-        // 旧形式キー sessions/{student_id}_{session_id}.json のフォールバック探索
-        if (!r2Obj) {
+        // D1に記録されたr2_keyがあれば直接取得 (フルバケットスキャン廃止)
+        if (!r2Obj && env.DB) {
           try {
-            const listRes = await r2Bucket.list({ prefix: 'sessions/' });
-            const matchedKey = listRes.objects.find(o => o.key.endsWith(`_${sessionId}.json`))?.key;
-            if (matchedKey) {
-              r2Obj = await r2Bucket.get(matchedKey);
+            const dbRow: any = await env.DB.prepare('SELECT r2_key FROM assessment_sessions WHERE id = ?').bind(sessionId).first();
+            if (dbRow?.r2_key) {
+              r2Obj = await r2Bucket.get(dbRow.r2_key);
             }
           } catch (_) {}
         }
@@ -161,50 +160,17 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   }
 
   try {
-    // テーブルが存在しない場合に備えて確認
-    try {
-      await env.DB.prepare(`
-        CREATE TABLE IF NOT EXISTS assessment_sessions (
-          id TEXT PRIMARY KEY,
-          student_id TEXT NOT NULL,
-          age INTEGER NOT NULL,
-          gender TEXT NOT NULL,
-          created_at TEXT NOT NULL,
-          dialogue_turns INTEGER DEFAULT 0,
-          chat_messages TEXT,
-          ai_personality_title TEXT,
-          ai_personality_type TEXT,
-          ai_summary TEXT,
-          ai_openness REAL,
-          ai_conscientiousness REAL,
-          ai_extraversion REAL,
-          ai_agreeableness REAL,
-          ai_neuroticism REAL,
-          ai_full_result TEXT,
-          survey_scale_type TEXT,
-          survey_scale_name TEXT,
-          survey_raw_answers TEXT,
-          survey_openness REAL,
-          survey_conscientiousness REAL,
-          survey_extraversion REAL,
-          survey_agreeableness REAL,
-          survey_neuroticism REAL,
-          survey_completed_at TEXT,
-          r2_saved INTEGER DEFAULT 0,
-          r2_key TEXT
-        )
-      `).run();
-    } catch (_) {}
+    await ensureDbSchema(env.DB);
 
-    // カラム安全追加
-    try {
-      await env.DB.prepare(`ALTER TABLE assessment_sessions ADD COLUMN r2_saved INTEGER DEFAULT 0`).run();
-    } catch (_) {}
-    try {
-      await env.DB.prepare(`ALTER TABLE assessment_sessions ADD COLUMN r2_key TEXT`).run();
-    } catch (_) {}
+    const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
+    const limitParam = url.searchParams.get('limit');
+    const limit = limitParam ? Math.min(Math.max(1, parseInt(limitParam, 10)), 500) : 100;
+    const offset = (page - 1) * limit;
 
-    // 巨大な chat_messages, ai_full_result, survey_raw_answers を除外して高速取得！
+    const countRes: any = await env.DB.prepare('SELECT COUNT(*) as count FROM assessment_sessions').first();
+    const totalCount = countRes?.count ? Number(countRes.count) : 0;
+
+    // 巨大な chat_messages, ai_full_result, survey_raw_answers を除外して高速・ページネーション取得！
     const queryResult = await env.DB.prepare(`
       SELECT 
         id,
@@ -233,8 +199,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         r2_key
       FROM assessment_sessions
       ORDER BY created_at DESC
-      LIMIT 1000
-    `).all();
+      LIMIT ? OFFSET ?
+    `).bind(limit, offset).all();
 
     const rawRows = (queryResult.results || []) as any[];
 
@@ -255,7 +221,10 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       success: true,
       is_db_connected: true,
       is_r2_connected: isR2Connected,
-      total: sessions.length,
+      total: totalCount,
+      page,
+      limit,
+      total_pages: Math.ceil(totalCount / limit),
       sessions
     }), {
       status: 200,
@@ -310,28 +279,29 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
 
     const deleteResults: string[] = [];
 
+    let storedR2Key: string | null = null;
+
     // 1. D1 から削除
     if (env.DB) {
+      try {
+        const row: any = await env.DB.prepare('SELECT r2_key FROM assessment_sessions WHERE id = ?').bind(sessionId).first();
+        storedR2Key = row?.r2_key || null;
+      } catch (_) {}
       await env.DB.prepare('DELETE FROM assessment_sessions WHERE id = ?').bind(sessionId).run();
       deleteResults.push('D1');
     }
 
-    // 2. R2 から削除 (クリーンアップ連動)
+    // 2. R2 から削除 (フルスキャンlist廃止、直接キー削除)
     const r2Bucket = env.BUCKET || env.R2;
     if (r2Bucket) {
       try {
         // 標準キー削除
         await r2Bucket.delete(`sessions/${sessionId}.json`);
+        // 保存されていた別名キーがあれば直接削除
+        if (storedR2Key && storedR2Key !== `sessions/${sessionId}.json`) {
+          await r2Bucket.delete(storedR2Key);
+        }
         deleteResults.push('R2');
-
-        // 旧プレフィックスのクリーンアップ探索
-        try {
-          const listRes = await r2Bucket.list({ prefix: 'sessions/' });
-          const matches = listRes.objects.filter(o => o.key.endsWith(`_${sessionId}.json`));
-          for (const match of matches) {
-            await r2Bucket.delete(match.key);
-          }
-        } catch (_) {}
       } catch (r2Err) {
         console.error('R2 deletion error:', r2Err);
       }

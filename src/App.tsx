@@ -15,10 +15,21 @@ import { Loader2 } from 'lucide-react';
 import { AdminDashboard } from './components/AdminDashboard';
 
 function generateSessionId(): string {
-  // 分析時（SPSS/Excel/R）に見やすい短縮レスポンスID（例: R_k8m2p9qa 計10文字）
-  const rand = Math.random().toString(36).substring(2, 6);
-  const timeSuffix = Date.now().toString(36).slice(-4);
-  return `R_${timeSuffix}${rand}`;
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return `R_${crypto.randomUUID()}`;
+  }
+  const array = new Uint8Array(16);
+  crypto.getRandomValues(array);
+  return 'R_' + Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function generateSessionToken(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  const array = new Uint8Array(16);
+  crypto.getRandomValues(array);
+  return Array.from(array, b => b.toString(16).padStart(2, '0')).join('');
 }
 
 type AppPhase = 'chat' | 'survey' | 'result';
@@ -61,6 +72,18 @@ export const App: React.FC = () => {
       localStorage.setItem('llm5_current_session_id', newId);
     } catch (_) {}
     return newId;
+  });
+
+  const [sessionToken, setSessionToken] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('llm5_current_session_token');
+      if (saved) return saved;
+    } catch (_) {}
+    const newToken = generateSessionToken();
+    try {
+      localStorage.setItem('llm5_current_session_token', newToken);
+    } catch (_) {}
+    return newToken;
   });
 
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
@@ -237,9 +260,13 @@ export const App: React.FC = () => {
     try {
       fetch('/api/analyze-async', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-session-token': sessionToken
+        },
         body: JSON.stringify({
           session_id: sessionId,
+          session_token: sessionToken,
           user_profile: userProfile || undefined,
           messages: messages
         })
@@ -263,14 +290,18 @@ export const App: React.FC = () => {
     showToast('AI対話分析と質問紙スコアを照合しています...');
 
     let attempts = 0;
-    const maxAttempts = 8; // 2秒 x 8回 = 最大16秒ポーリング
+    const maxAttempts = 25; // 2秒 x 25回 = 最大50秒ポーリング (バックグラウンド分析完了を確実に待機し重複実行を回避)
     let finalAiResult: AnalysisResult | null = aiAnalysisResult;
 
     const fetchAiAnalysisResult = async (): Promise<AnalysisResult | null> => {
       while (attempts < maxAttempts) {
         attempts++;
         try {
-          const res = await fetch(`/api/session?session_id=${encodeURIComponent(sessionId)}`);
+          const res = await fetch(`/api/session?session_id=${encodeURIComponent(sessionId)}`, {
+            headers: {
+              'x-session-token': sessionToken
+            }
+          });
           if (res.ok) {
             const data: any = await res.json();
             if (data.found && data.status === 'completed' && data.ai_result) {
@@ -290,15 +321,19 @@ export const App: React.FC = () => {
       finalAiResult = await fetchAiAnalysisResult();
     }
 
-    // 2. バックグラウンド分析が未完了/失敗だった場合、直接分析API (/api/analyze) で対話ログから即時生成
+    // 2. バックグラウンド分析が未完了/失敗だった場合のみ、直接分析API (/api/analyze) で対話ログから即時生成
     if (!finalAiResult && chatMessages.length >= 2) {
       showToast('AI分析を直接生成中...');
       try {
         const analyzeRes = await fetch('/api/analyze', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-session-token': sessionToken
+          },
           body: JSON.stringify({
             session_id: sessionId,
+            session_token: sessionToken,
             user_profile: userProfile || undefined,
             messages: chatMessages,
             survey_result: surveyData
@@ -327,9 +362,13 @@ export const App: React.FC = () => {
       try {
         await fetch('/api/save', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-session-token': sessionToken
+          },
           body: JSON.stringify({
             session_id: sessionId,
+            session_token: sessionToken,
             user_profile: userProfile || undefined,
             messages: chatMessages,
             ai_result: finalAiResult,

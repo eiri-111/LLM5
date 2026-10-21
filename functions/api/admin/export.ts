@@ -63,19 +63,31 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   }
 
   try {
-    const { results } = await env.DB.prepare(`
-      SELECT 
-        id, age, gender, created_at, dialogue_turns,
-        ai_personality_title, ai_personality_type, ai_summary,
-        ai_openness, ai_conscientiousness, ai_extraversion, ai_agreeableness, ai_neuroticism,
-        survey_scale_type, survey_scale_name,
-        survey_openness, survey_conscientiousness, survey_extraversion, survey_agreeableness, survey_neuroticism,
-        survey_completed_at,
-        COALESCE(r2_saved, 0) AS r2_saved, r2_key,
-        chat_messages, ai_full_result, survey_raw_answers
-      FROM assessment_sessions
-      ORDER BY created_at DESC
-    `).all();
+    const selectQuery = format === 'json'
+      ? `SELECT 
+          id, age, gender, created_at, dialogue_turns,
+          ai_personality_title, ai_personality_type, ai_summary,
+          ai_openness, ai_conscientiousness, ai_extraversion, ai_agreeableness, ai_neuroticism,
+          survey_scale_type, survey_scale_name,
+          survey_openness, survey_conscientiousness, survey_extraversion, survey_agreeableness, survey_neuroticism,
+          survey_completed_at,
+          COALESCE(r2_saved, 0) AS r2_saved, r2_key,
+          chat_messages, ai_full_result, survey_raw_answers
+        FROM assessment_sessions
+        ORDER BY created_at DESC`
+      : `SELECT 
+          id, age, gender, created_at, dialogue_turns,
+          ai_personality_title, ai_personality_type, ai_summary,
+          ai_openness, ai_conscientiousness, ai_extraversion, ai_agreeableness, ai_neuroticism,
+          survey_scale_type, survey_scale_name,
+          survey_openness, survey_conscientiousness, survey_extraversion, survey_agreeableness, survey_neuroticism,
+          survey_completed_at,
+          COALESCE(r2_saved, 0) AS r2_saved, r2_key,
+          ai_full_result, survey_raw_answers
+        FROM assessment_sessions
+        ORDER BY created_at DESC`;
+
+    const { results } = await env.DB.prepare(selectQuery).all();
 
     const dataRows = (results || []) as any[];
     const nowIso = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -127,17 +139,35 @@ VARIABLE LABELS
   AI_Conscientiousness 'AI推定スコア: 誠実性 (0-100)'
   AI_Extraversion 'AI推定スコア: 外向性 (0-100)'
   AI_Agreeableness 'AI推定スコア: 協調性 (0-100)'
-  AI_Neuroticism 'AI推定スコア: 情緒安定性 (0-100)'
+  AI_EmotionalStability 'AI推定スコア: 情緒安定性 (0-100, 高=安定)'
+  AI_Neuroticism 'AI推定スコア: 神経症傾向 (0-100, 高=敏感/不安)'
   Survey_Openness 'BFI-2-S尺度スコア: 開放性 (0-100)'
   Survey_Conscientiousness 'BFI-2-S尺度スコア: 誠実性 (0-100)'
   Survey_Extraversion 'BFI-2-S尺度スコア: 外向性 (0-100)'
   Survey_Agreeableness 'BFI-2-S尺度スコア: 協調性 (0-100)'
-  Survey_Neuroticism 'BFI-2-S尺度スコア: 情緒安定性 (0-100)'
+  Survey_EmotionalStability 'BFI-2-S尺度スコア: 情緒安定性 (0-100, 高=安定)'
+  Survey_Neuroticism 'BFI-2-S尺度スコア: 神経症傾向 (0-100, 高=敏感/不安)'
   Diff_Openness '差分: 開放性 (AI - Survey)'
   Diff_Conscientiousness '差分: 誠実性 (AI - Survey)'
   Diff_Extraversion '差分: 外向性 (AI - Survey)'
   Diff_Agreeableness '差分: 協調性 (AI - Survey)'
-  Diff_Neuroticism '差分: 情緒安定性 (AI - Survey)'
+  Diff_EmotionalStability '差分: 情緒安定性 (AI - Survey)'
+  Diff_Neuroticism '差分: 神経症傾向 (AI - Survey)'
+  STAR_Openness 'STAR法行動実績スコア: 開放性 (0-100)'
+  STAR_Conscientiousness 'STAR法行動実績スコア: 誠実性 (0-100)'
+  STAR_Extraversion 'STAR法行動実績スコア: 外向性 (0-100)'
+  STAR_Agreeableness 'STAR法行動実績スコア: 協調性 (0-100)'
+  STAR_EmotionalStability 'STAR法行動実績スコア: 情緒安定性 (0-100)'
+  SJT_Openness 'SJT状況判断スコア: 開放性 (0-100)'
+  SJT_Conscientiousness 'SJT状況判断スコア: 誠実性 (0-100)'
+  SJT_Extraversion 'SJT状況判断スコア: 外向性 (0-100)'
+  SJT_Agreeableness 'SJT状況判断スコア: 協調性 (0-100)'
+  SJT_EmotionalStability 'SJT状況判断スコア: 情緒安定性 (0-100)'
+  Gap_Openness '言行判断ギャップ: 開放性 (SJT - STAR)'
+  Gap_Conscientiousness '言行判断ギャップ: 誠実性 (SJT - STAR)'
+  Gap_Extraversion '言行判断ギャップ: 外向性 (SJT - STAR)'
+  Gap_Agreeableness '言行判断ギャップ: 協調性 (SJT - STAR)'
+  Gap_EmotionalStability '言行判断ギャップ: 情緒安定性 (SJT - STAR)'
   ${Array.from({ length: 30 }, (_, i) => `BFI_Q${String(i + 1).padStart(2, '0')} '${QUESTION_LABELS[i + 1]}'`).join('\n  ')}.
 
 VALUE LABELS
@@ -158,9 +188,12 @@ VALUE LABELS
 
 VARIABLE LEVEL
   Finished Gender_Code (NOMINAL)
-  Age DialogueTurns AI_Openness AI_Conscientiousness AI_Extraversion AI_Agreeableness AI_Neuroticism
-  Survey_Openness Survey_Conscientiousness Survey_Extraversion Survey_Agreeableness Survey_Neuroticism
-  Diff_Openness Diff_Conscientiousness Diff_Extraversion Diff_Agreeableness Diff_Neuroticism
+  Age DialogueTurns AI_Openness AI_Conscientiousness AI_Extraversion AI_Agreeableness AI_EmotionalStability AI_Neuroticism
+  Survey_Openness Survey_Conscientiousness Survey_Extraversion Survey_Agreeableness Survey_EmotionalStability Survey_Neuroticism
+  Diff_Openness Diff_Conscientiousness Diff_Extraversion Diff_Agreeableness Diff_EmotionalStability Diff_Neuroticism
+  STAR_Openness STAR_Conscientiousness STAR_Extraversion STAR_Agreeableness STAR_EmotionalStability
+  SJT_Openness SJT_Conscientiousness SJT_Extraversion SJT_Agreeableness SJT_EmotionalStability
+  Gap_Openness Gap_Conscientiousness Gap_Extraversion Gap_Agreeableness Gap_EmotionalStability
   ${Array.from({ length: 30 }, (_, i) => `BFI_Q${String(i + 1).padStart(2, '0')}`).join(' ')} (SCALE).
 
 EXECUTE.
@@ -174,7 +207,7 @@ EXECUTE.
       });
     }
 
-    // 3. SPSS対応 CSV エクスポート (Q1〜Q30展開、SPSS準拠変数名、差分変数)
+    // 3. SPSS対応 CSV エクスポート (Q1〜Q30展開、SPSS準拠変数名、差分変数、デュアル評価変数)
     const varNames = [
       'ResponseId',
       'RecordedDate',
@@ -185,36 +218,59 @@ EXECUTE.
       'Gender',
       'AI_PersonalityTitle',
       'AI_PersonalityType',
-      // AI 5因子スコア (案1: 3ファセット平均)
+      // AI 5因子スコア (情緒安定性と神経症傾向の双方を明示)
       'AI_Openness',
       'AI_Conscientiousness',
       'AI_Extraversion',
       'AI_Agreeableness',
+      'AI_EmotionalStability',
       'AI_Neuroticism',
       // AI 5因子直接スコア (案2: 比較検証用)
       'AI_Dir_Openness',
       'AI_Dir_Conscientiousness',
       'AI_Dir_Extraversion',
       'AI_Dir_Agreeableness',
+      'AI_Dir_EmotionalStability',
       'AI_Dir_Neuroticism',
       // 質問紙 5因子スコア (0-100正規化)
       'Survey_Openness',
       'Survey_Conscientiousness',
       'Survey_Extraversion',
       'Survey_Agreeableness',
+      'Survey_EmotionalStability',
       'Survey_Neuroticism',
       // AI vs 質問紙 差分 (AI - Survey)
       'Diff_Openness',
       'Diff_Conscientiousness',
       'Diff_Extraversion',
       'Diff_Agreeableness',
+      'Diff_EmotionalStability',
       'Diff_Neuroticism',
       // AI vs 質問紙 絶対差分 (|AI - Survey|)
       'AbsDiff_Openness',
       'AbsDiff_Conscientiousness',
       'AbsDiff_Extraversion',
       'AbsDiff_Agreeableness',
+      'AbsDiff_EmotionalStability',
       'AbsDiff_Neuroticism',
+      // 完全二元化評価スコア (STAR行動実績 vs SJT状況判断 vs ギャップ)
+      'STAR_Openness',
+      'STAR_Conscientiousness',
+      'STAR_Extraversion',
+      'STAR_Agreeableness',
+      'STAR_EmotionalStability',
+      'STAR_Neuroticism',
+      'SJT_Openness',
+      'SJT_Conscientiousness',
+      'SJT_Extraversion',
+      'SJT_Agreeableness',
+      'SJT_EmotionalStability',
+      'SJT_Neuroticism',
+      'Gap_Openness',
+      'Gap_Conscientiousness',
+      'Gap_Extraversion',
+      'Gap_Agreeableness',
+      'Gap_EmotionalStability',
       // AI 15ファセット個別スコア
       'AI_O_Intellectual',
       'AI_O_Aesthetic',
@@ -254,27 +310,49 @@ EXECUTE.
       AI_Conscientiousness: 'AI誠実性スコア (0-100)',
       AI_Extraversion: 'AI外向性スコア (0-100)',
       AI_Agreeableness: 'AI協調性スコア (0-100)',
-      AI_Neuroticism: 'AI情緒安定性スコア (0-100)',
+      AI_EmotionalStability: 'AI情緒安定性スコア (0-100, 高=安定)',
+      AI_Neuroticism: 'AI神経症傾向スコア (0-100, 高=敏感/不安)',
       AI_Dir_Openness: 'AI直接開放性スコア (0-100)',
       AI_Dir_Conscientiousness: 'AI直接誠実性スコア (0-100)',
       AI_Dir_Extraversion: 'AI直接外向性スコア (0-100)',
       AI_Dir_Agreeableness: 'AI直接協調性スコア (0-100)',
-      AI_Dir_Neuroticism: 'AI直接情緒安定性スコア (0-100)',
+      AI_Dir_EmotionalStability: 'AI直接情緒安定性スコア (0-100)',
+      AI_Dir_Neuroticism: 'AI直接神経症傾向スコア (0-100)',
       Survey_Openness: '質問紙開放性スコア (0-100)',
       Survey_Conscientiousness: '質問紙誠実性スコア (0-100)',
       Survey_Extraversion: '質問紙外向性スコア (0-100)',
       Survey_Agreeableness: '質問紙協調性スコア (0-100)',
-      Survey_Neuroticism: '質問紙情緒安定性スコア (0-100)',
+      Survey_EmotionalStability: '質問紙情緒安定性スコア (0-100, 高=安定)',
+      Survey_Neuroticism: '質問紙神経症傾向スコア (0-100, 高=敏感/不安)',
       Diff_Openness: '開放性差分 (AI - Survey)',
       Diff_Conscientiousness: '誠実性差分 (AI - Survey)',
       Diff_Extraversion: '外向性差分 (AI - Survey)',
       Diff_Agreeableness: '協調性差分 (AI - Survey)',
-      Diff_Neuroticism: '情緒安定性差分 (AI - Survey)',
+      Diff_EmotionalStability: '情緒安定性差分 (AI - Survey)',
+      Diff_Neuroticism: '神経症傾向差分 (AI - Survey)',
       AbsDiff_Openness: '開放性絶対差分 (|AI - Survey|)',
       AbsDiff_Conscientiousness: '誠実性絶対差分 (|AI - Survey|)',
       AbsDiff_Extraversion: '外向性絶対差分 (|AI - Survey|)',
       AbsDiff_Agreeableness: '協調性絶対差分 (|AI - Survey|)',
-      AbsDiff_Neuroticism: '情緒安定性絶対差分 (|AI - Survey|)',
+      AbsDiff_EmotionalStability: '情緒安定性絶対差分 (|AI - Survey|)',
+      AbsDiff_Neuroticism: '神経症傾向絶対差分 (|AI - Survey|)',
+      STAR_Openness: 'STAR法行動実績: 開放性 (0-100)',
+      STAR_Conscientiousness: 'STAR法行動実績: 誠実性 (0-100)',
+      STAR_Extraversion: 'STAR法行動実績: 外向性 (0-100)',
+      STAR_Agreeableness: 'STAR法行動実績: 協調性 (0-100)',
+      STAR_EmotionalStability: 'STAR法行動実績: 情緒安定性 (0-100)',
+      STAR_Neuroticism: 'STAR法行動実績: 神経症傾向 (0-100)',
+      SJT_Openness: 'SJT状況判断: 開放性 (0-100)',
+      SJT_Conscientiousness: 'SJT状況判断: 誠実性 (0-100)',
+      SJT_Extraversion: 'SJT状況判断: 外向性 (0-100)',
+      SJT_Agreeableness: 'SJT状況判断: 協調性 (0-100)',
+      SJT_EmotionalStability: 'SJT状況判断: 情緒安定性 (0-100)',
+      SJT_Neuroticism: 'SJT状況判断: 神経症傾向 (0-100)',
+      Gap_Openness: '判断ギャップ: 開放性 (SJT - STAR)',
+      Gap_Conscientiousness: '判断ギャップ: 誠実性 (SJT - STAR)',
+      Gap_Extraversion: '判断ギャップ: 外向性 (SJT - STAR)',
+      Gap_Agreeableness: '判断ギャップ: 協調性 (SJT - STAR)',
+      Gap_EmotionalStability: '判断ギャップ: 情緒安定性 (SJT - STAR)',
       AI_O_Intellectual: 'AIファセット: 知的好奇心',
       AI_O_Aesthetic: 'AIファセット: 美的好奇心',
       AI_O_Creative: 'AIファセット: 創造力',
@@ -325,6 +403,7 @@ EXECUTE.
 
       const directScores = parsedAi?.clef_scoring_data?.direct_scores;
       const facets = parsedAi?.clef_scoring_data?.facets;
+      const dualScores = parsedAi?.clef_scoring_data?.dual_scores;
 
       // 性別コード変換
       let genderCode = 9;
@@ -356,6 +435,14 @@ EXECUTE.
 
       const isFinished = Boolean(row.survey_completed_at && (row.ai_openness != null || row.ai_personality_title)) ? 1 : 0;
 
+      // 情緒安定性（高=安定）と神経症傾向（高=敏感/不安）の双方向算出
+      const aiES = row.ai_neuroticism != null ? Math.round(row.ai_neuroticism) : '';
+      const aiN = row.ai_neuroticism != null ? Math.round(100 - row.ai_neuroticism) : '';
+      const dirES = directScores?.neuroticism != null ? Math.round(directScores.neuroticism) : '';
+      const dirN = directScores?.neuroticism != null ? Math.round(100 - directScores.neuroticism) : '';
+      const surveyES = row.survey_neuroticism != null ? Math.round(row.survey_neuroticism) : '';
+      const surveyN = row.survey_neuroticism != null ? Math.round(100 - row.survey_neuroticism) : '';
+
       const record: Record<string, any> = {
         ResponseId: row.id,
         RecordedDate: row.created_at,
@@ -372,35 +459,61 @@ EXECUTE.
         AI_Conscientiousness: row.ai_conscientiousness != null ? Math.round(row.ai_conscientiousness) : '',
         AI_Extraversion: row.ai_extraversion != null ? Math.round(row.ai_extraversion) : '',
         AI_Agreeableness: row.ai_agreeableness != null ? Math.round(row.ai_agreeableness) : '',
-        AI_Neuroticism: row.ai_neuroticism != null ? Math.round(row.ai_neuroticism) : '',
+        AI_EmotionalStability: aiES,
+        AI_Neuroticism: aiN,
 
         // AI 直接スコア
         AI_Dir_Openness: directScores?.openness != null ? Math.round(directScores.openness) : '',
         AI_Dir_Conscientiousness: directScores?.conscientiousness != null ? Math.round(directScores.conscientiousness) : '',
         AI_Dir_Extraversion: directScores?.extraversion != null ? Math.round(directScores.extraversion) : '',
         AI_Dir_Agreeableness: directScores?.agreeableness != null ? Math.round(directScores.agreeableness) : '',
-        AI_Dir_Neuroticism: directScores?.neuroticism != null ? Math.round(directScores.neuroticism) : '',
+        AI_Dir_EmotionalStability: dirES,
+        AI_Dir_Neuroticism: dirN,
 
         // 質問紙 5因子スコア (0-100)
         Survey_Openness: row.survey_openness != null ? Math.round(row.survey_openness) : '',
         Survey_Conscientiousness: row.survey_conscientiousness != null ? Math.round(row.survey_conscientiousness) : '',
         Survey_Extraversion: row.survey_extraversion != null ? Math.round(row.survey_extraversion) : '',
         Survey_Agreeableness: row.survey_agreeableness != null ? Math.round(row.survey_agreeableness) : '',
-        Survey_Neuroticism: row.survey_neuroticism != null ? Math.round(row.survey_neuroticism) : '',
+        Survey_EmotionalStability: surveyES,
+        Survey_Neuroticism: surveyN,
 
         // 差分 (AI - Survey)
         Diff_Openness: calcDiff(row.ai_openness, row.survey_openness),
         Diff_Conscientiousness: calcDiff(row.ai_conscientiousness, row.survey_conscientiousness),
         Diff_Extraversion: calcDiff(row.ai_extraversion, row.survey_extraversion),
         Diff_Agreeableness: calcDiff(row.ai_agreeableness, row.survey_agreeableness),
-        Diff_Neuroticism: calcDiff(row.ai_neuroticism, row.survey_neuroticism),
+        Diff_EmotionalStability: calcDiff(aiES, surveyES),
+        Diff_Neuroticism: calcDiff(aiN, surveyN),
 
         // 絶対差分 (|AI - Survey|)
         AbsDiff_Openness: calcAbsDiff(row.ai_openness, row.survey_openness),
         AbsDiff_Conscientiousness: calcAbsDiff(row.ai_conscientiousness, row.survey_conscientiousness),
         AbsDiff_Extraversion: calcAbsDiff(row.ai_extraversion, row.survey_extraversion),
         AbsDiff_Agreeableness: calcAbsDiff(row.ai_agreeableness, row.survey_agreeableness),
-        AbsDiff_Neuroticism: calcAbsDiff(row.ai_neuroticism, row.survey_neuroticism),
+        AbsDiff_EmotionalStability: calcAbsDiff(aiES, surveyES),
+        AbsDiff_Neuroticism: calcAbsDiff(aiN, surveyN),
+
+        // 完全二元化評価スコア (STAR行動実績 vs SJT状況判断 vs ギャップ)
+        STAR_Openness: dualScores?.star_scores?.openness != null ? Math.round(dualScores.star_scores.openness) : '',
+        STAR_Conscientiousness: dualScores?.star_scores?.conscientiousness != null ? Math.round(dualScores.star_scores.conscientiousness) : '',
+        STAR_Extraversion: dualScores?.star_scores?.extraversion != null ? Math.round(dualScores.star_scores.extraversion) : '',
+        STAR_Agreeableness: dualScores?.star_scores?.agreeableness != null ? Math.round(dualScores.star_scores.agreeableness) : '',
+        STAR_EmotionalStability: dualScores?.star_scores?.neuroticism != null ? Math.round(dualScores.star_scores.neuroticism) : '',
+        STAR_Neuroticism: dualScores?.star_scores?.neuroticism != null ? Math.round(100 - dualScores.star_scores.neuroticism) : '',
+
+        SJT_Openness: dualScores?.sjt_scores?.openness != null ? Math.round(dualScores.sjt_scores.openness) : '',
+        SJT_Conscientiousness: dualScores?.sjt_scores?.conscientiousness != null ? Math.round(dualScores.sjt_scores.conscientiousness) : '',
+        SJT_Extraversion: dualScores?.sjt_scores?.extraversion != null ? Math.round(dualScores.sjt_scores.extraversion) : '',
+        SJT_Agreeableness: dualScores?.sjt_scores?.agreeableness != null ? Math.round(dualScores.sjt_scores.agreeableness) : '',
+        SJT_EmotionalStability: dualScores?.sjt_scores?.neuroticism != null ? Math.round(dualScores.sjt_scores.neuroticism) : '',
+        SJT_Neuroticism: dualScores?.sjt_scores?.neuroticism != null ? Math.round(100 - dualScores.sjt_scores.neuroticism) : '',
+
+        Gap_Openness: dualScores?.gap_scores?.openness != null ? Math.round(dualScores.gap_scores.openness) : '',
+        Gap_Conscientiousness: dualScores?.gap_scores?.conscientiousness != null ? Math.round(dualScores.gap_scores.conscientiousness) : '',
+        Gap_Extraversion: dualScores?.gap_scores?.extraversion != null ? Math.round(dualScores.gap_scores.extraversion) : '',
+        Gap_Agreeableness: dualScores?.gap_scores?.agreeableness != null ? Math.round(dualScores.gap_scores.agreeableness) : '',
+        Gap_EmotionalStability: dualScores?.gap_scores?.neuroticism != null ? Math.round(dualScores.gap_scores.neuroticism) : '',
 
         // 15ファセット
         AI_O_Intellectual: facets?.openness?.intellectual ?? '',

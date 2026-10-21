@@ -1,7 +1,8 @@
-import { Env, ChatMessage, AnalysisResult } from './_gateway';
+import { Env, ChatMessage, AnalysisResult, ensureDbSchema, verifyAdminPassword } from './_gateway';
 
 interface SaveRequestBody {
   session_id: string;
+  session_token?: string;
   user_profile?: {
     student_id?: string;
     age?: number | string;
@@ -23,7 +24,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
   try {
     const body: SaveRequestBody = await request.json();
-    const { session_id, user_profile, messages = [], ai_result, survey_result } = body;
+    const { session_id, session_token, user_profile, messages = [], ai_result, survey_result } = body;
 
     if (!session_id) {
       return new Response(JSON.stringify({ error: 'セッションIDは必須です' }), {
@@ -31,6 +32,13 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         headers: { 'Content-Type': 'application/json' }
       });
     }
+
+    const incomingToken =
+      session_token ||
+      request.headers.get('x-session-token') ||
+      (request.headers.get('Authorization')?.startsWith('Bearer ')
+        ? request.headers.get('Authorization')?.substring(7).trim()
+        : null);
 
     const effectiveStudentId = user_profile?.student_id || `user_${session_id.slice(-8)}`;
 
@@ -49,103 +57,34 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const savedTargets: string[] = [];
     const timestamp = new Date().toISOString();
 
-    // 1. Cloudflare R2 保存処理 (大容量完全ログ・オブジェクトストレージ)
-    const r2Bucket = env.BUCKET || env.R2;
-    let r2Saved = 0;
-    const r2Key = `sessions/${session_id}.json`;
-
-    if (r2Bucket) {
-      try {
-        const fullPayload = {
-          version: '2.0',
-          session_id,
-          user_profile: {
-            student_id: effectiveStudentId,
-            age: effectiveAge,
-            gender: effectiveGender
-          },
-          dialogue_turns: messages.filter(m => m.role === 'user').length,
-          messages,
-          ai_result,
-          survey_result,
-          saved_at: timestamp
-        };
-
-        // 標準キーで保存 (sessions/{session_id}.json)
-        await r2Bucket.put(r2Key, JSON.stringify(fullPayload, null, 2), {
-          httpMetadata: { contentType: 'application/json' },
-          customMetadata: {
-            studentId: effectiveStudentId,
-            savedAt: timestamp
-          }
-        });
-
-        // 過去バージョン互換キーも書き込み (student_id付き)
-        const legacyKey = `sessions/${effectiveStudentId}_${session_id}.json`;
-        if (legacyKey !== r2Key) {
-          try {
-            await r2Bucket.put(legacyKey, JSON.stringify(fullPayload, null, 2), {
-              httpMetadata: { contentType: 'application/json' }
-            });
-          } catch (_) {}
-        }
-
-        r2Saved = 1;
-        savedTargets.push('R2');
-      } catch (r2Err: any) {
-        console.error('R2 save error:', r2Err);
-      }
-    }
-
-    // 2. Cloudflare D1 保存処理 (高速検索メタデータ & インデックス)
+    // 1. Cloudflare D1 保存処理 (メタデータ＆認証整合性チェック)
     if (env.DB) {
       try {
-        // テーブルが存在しない場合に備えて自動作成 (Auto-Migration)
-        await env.DB.prepare(`
-          CREATE TABLE IF NOT EXISTS assessment_sessions (
-            id TEXT PRIMARY KEY,
-            student_id TEXT NOT NULL,
-            age INTEGER NOT NULL,
-            gender TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            dialogue_turns INTEGER DEFAULT 0,
-            chat_messages TEXT,
-            ai_personality_title TEXT,
-            ai_personality_type TEXT,
-            ai_summary TEXT,
-            ai_openness REAL,
-            ai_conscientiousness REAL,
-            ai_extraversion REAL,
-            ai_agreeableness REAL,
-            ai_neuroticism REAL,
-            ai_full_result TEXT,
-            survey_scale_type TEXT,
-            survey_scale_name TEXT,
-            survey_raw_answers TEXT,
-            survey_openness REAL,
-            survey_conscientiousness REAL,
-            survey_extraversion REAL,
-            survey_agreeableness REAL,
-            survey_neuroticism REAL,
-            survey_completed_at TEXT,
-            r2_saved INTEGER DEFAULT 0,
-            r2_key TEXT
-          )
-        `).run();
+        await ensureDbSchema(env.DB);
 
-        // 既存テーブルに新カラムが無い場合の安全マイグレーション
-        try {
-          await env.DB.prepare(`ALTER TABLE assessment_sessions ADD COLUMN r2_saved INTEGER DEFAULT 0`).run();
-        } catch (_) {}
-        try {
-          await env.DB.prepare(`ALTER TABLE assessment_sessions ADD COLUMN r2_key TEXT`).run();
-        } catch (_) {}
+        // 既存セッションのトークン照合（なりすまし・改ざん上書き防止）
+        const existingRow: any = await env.DB.prepare(`
+          SELECT session_token FROM assessment_sessions WHERE id = ?
+        `).bind(session_id).first();
 
+        const isAdmin = verifyAdminPassword(request, env);
+        if (existingRow && existingRow.session_token && !isAdmin) {
+          if (!incomingToken || incomingToken !== existingRow.session_token) {
+            return new Response(JSON.stringify({
+              error: 'セッションの更新権限がありません。有効なセッショントークンが必要です。'
+            }), {
+              status: 403,
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
+        }
+
+        const effectiveToken = incomingToken || existingRow?.session_token || null;
         const userCount = messages.filter(m => m.role === 'user').length;
         
         await env.DB.prepare(`
           INSERT INTO assessment_sessions (
-            id, student_id, age, gender, created_at,
+            id, session_token, student_id, age, gender, created_at,
             dialogue_turns, chat_messages,
             ai_personality_title, ai_personality_type, ai_summary,
             ai_openness, ai_conscientiousness, ai_extraversion, ai_agreeableness, ai_neuroticism,
@@ -154,8 +93,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             survey_openness, survey_conscientiousness, survey_extraversion, survey_agreeableness, survey_neuroticism,
             survey_completed_at,
             r2_saved, r2_key
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(id) DO UPDATE SET
+            session_token = COALESCE(assessment_sessions.session_token, excluded.session_token),
             dialogue_turns = COALESCE(excluded.dialogue_turns, assessment_sessions.dialogue_turns),
             chat_messages = COALESCE(excluded.chat_messages, assessment_sessions.chat_messages),
             ai_personality_title = COALESCE(excluded.ai_personality_title, assessment_sessions.ai_personality_title),
@@ -180,6 +120,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             r2_key = COALESCE(excluded.r2_key, assessment_sessions.r2_key)
         `).bind(
           session_id,
+          effectiveToken,
           effectiveStudentId,
           effectiveAge,
           effectiveGender,
@@ -204,13 +145,55 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
           survey_result?.scores?.agreeableness?.normalizedScore ?? null,
           survey_result?.scores?.neuroticism?.normalizedScore ?? null,
           survey_result?.completedAt || null,
-          r2Saved,
-          r2Saved ? r2Key : null
+          0,
+          null
         ).run();
 
         savedTargets.push('D1');
       } catch (dbErr: any) {
         console.error('D1 save error:', dbErr);
+      }
+    }
+
+    // 2. Cloudflare R2 保存処理 (標準単一キー sessions/{session_id}.json のみ保存、重複書き込み廃止)
+    const r2Bucket = env.BUCKET || env.R2;
+    if (r2Bucket) {
+      try {
+        const r2Key = `sessions/${session_id}.json`;
+        const fullPayload = {
+          version: '2.0',
+          session_id,
+          user_profile: {
+            student_id: effectiveStudentId,
+            age: effectiveAge,
+            gender: effectiveGender
+          },
+          dialogue_turns: messages.filter(m => m.role === 'user').length,
+          messages,
+          ai_result,
+          survey_result,
+          saved_at: timestamp
+        };
+
+        await r2Bucket.put(r2Key, JSON.stringify(fullPayload, null, 2), {
+          httpMetadata: { contentType: 'application/json' },
+          customMetadata: {
+            savedAt: timestamp
+          }
+        });
+
+        // D1のr2_savedフラグを更新
+        if (env.DB) {
+          try {
+            await env.DB.prepare(`
+              UPDATE assessment_sessions SET r2_saved = 1, r2_key = ? WHERE id = ?
+            `).bind(r2Key, session_id).run();
+          } catch (_) {}
+        }
+
+        savedTargets.push('R2');
+      } catch (r2Err: any) {
+        console.error('R2 save error:', r2Err);
       }
     }
 

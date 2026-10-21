@@ -26,18 +26,29 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
   }
 
   try {
-    const { results } = await env.DB.prepare(`
-      SELECT 
-        id, student_id, age, gender, created_at, dialogue_turns,
-        ai_personality_title, ai_personality_type,
-        ai_openness, ai_conscientiousness, ai_extraversion, ai_agreeableness, ai_neuroticism,
-        survey_scale_type, survey_scale_name,
-        survey_openness, survey_conscientiousness, survey_extraversion, survey_agreeableness, survey_neuroticism,
-        survey_completed_at,
-        chat_messages, ai_full_result, survey_raw_answers
-      FROM assessment_sessions
-      ORDER BY created_at DESC
-    `).all();
+    const selectQuery = format === 'json'
+      ? `SELECT 
+          id, student_id, age, gender, created_at, dialogue_turns,
+          ai_personality_title, ai_personality_type,
+          ai_openness, ai_conscientiousness, ai_extraversion, ai_agreeableness, ai_neuroticism,
+          survey_scale_type, survey_scale_name,
+          survey_openness, survey_conscientiousness, survey_extraversion, survey_agreeableness, survey_neuroticism,
+          survey_completed_at,
+          chat_messages, ai_full_result, survey_raw_answers
+        FROM assessment_sessions
+        ORDER BY created_at DESC`
+      : `SELECT 
+          id, student_id, age, gender, created_at, dialogue_turns,
+          ai_personality_title, ai_personality_type,
+          ai_openness, ai_conscientiousness, ai_extraversion, ai_agreeableness, ai_neuroticism,
+          survey_scale_type, survey_scale_name,
+          survey_openness, survey_conscientiousness, survey_extraversion, survey_agreeableness, survey_neuroticism,
+          survey_completed_at,
+          ai_full_result, survey_raw_answers
+        FROM assessment_sessions
+        ORDER BY created_at DESC`;
+
+    const { results } = await env.DB.prepare(selectQuery).all();
 
     if (format === 'csv') {
       const headers = [

@@ -1,7 +1,8 @@
-import { Env, ChatMessage, runFinalAnalysis } from './_gateway';
+import { Env, ChatMessage, runFinalAnalysis, ensureDbSchema } from './_gateway';
 
 interface AnalyzeAsyncRequestBody {
   session_id: string;
+  session_token?: string;
   user_profile?: {
     student_id?: string;
     age?: number | string;
@@ -15,7 +16,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
   try {
     const body: AnalyzeAsyncRequestBody = await request.json();
-    const { session_id, user_profile, messages = [] } = body;
+    const { session_id, session_token, user_profile, messages = [] } = body;
 
     if (!session_id) {
       return new Response(JSON.stringify({ error: 'セッションIDは必須です' }), {
@@ -31,51 +32,31 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       });
     }
 
+    const incomingToken =
+      session_token ||
+      request.headers.get('x-session-token') ||
+      (request.headers.get('Authorization')?.startsWith('Bearer ')
+        ? request.headers.get('Authorization')?.substring(7).trim()
+        : null);
+
     const effectiveStudentId = user_profile?.student_id || `user_${session_id.slice(-8)}`;
     const effectiveAge = typeof user_profile?.age === 'number' ? user_profile.age : 0;
     const effectiveGender = user_profile?.gender || 'unspecified';
     const timestamp = new Date().toISOString();
     const userCount = messages.filter(m => m.role === 'user').length;
 
-    // 1. D1へセッション初期レコードを即時保存（テーブル自動生成も含む）
+    // 1. D1へセッション初期レコードを即時保存（キャッシュ済みスキーマ確認でDDLオーバーヘッド排除）
     if (env.DB) {
       try {
-        await env.DB.prepare(`
-          CREATE TABLE IF NOT EXISTS assessment_sessions (
-            id TEXT PRIMARY KEY,
-            student_id TEXT NOT NULL,
-            age INTEGER NOT NULL,
-            gender TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            dialogue_turns INTEGER DEFAULT 0,
-            chat_messages TEXT,
-            ai_personality_title TEXT,
-            ai_personality_type TEXT,
-            ai_summary TEXT,
-            ai_openness REAL,
-            ai_conscientiousness REAL,
-            ai_extraversion REAL,
-            ai_agreeableness REAL,
-            ai_neuroticism REAL,
-            ai_full_result TEXT,
-            survey_scale_type TEXT,
-            survey_scale_name TEXT,
-            survey_raw_answers TEXT,
-            survey_openness REAL,
-            survey_conscientiousness REAL,
-            survey_extraversion REAL,
-            survey_agreeableness REAL,
-            survey_neuroticism REAL,
-            survey_completed_at TEXT
-          )
-        `).run();
+        await ensureDbSchema(env.DB);
 
         await env.DB.prepare(`
           INSERT INTO assessment_sessions (
-            id, student_id, age, gender, created_at,
+            id, session_token, student_id, age, gender, created_at,
             dialogue_turns, chat_messages
-          ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(id) DO UPDATE SET
+            session_token = COALESCE(assessment_sessions.session_token, excluded.session_token),
             student_id = excluded.student_id,
             age = CASE WHEN excluded.age > 0 THEN excluded.age ELSE assessment_sessions.age END,
             gender = CASE WHEN excluded.gender != 'unspecified' THEN excluded.gender ELSE assessment_sessions.gender END,
@@ -83,6 +64,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             chat_messages = excluded.chat_messages
         `).bind(
           session_id,
+          incomingToken || null,
           effectiveStudentId,
           effectiveAge,
           effectiveGender,
@@ -159,10 +141,15 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             ai_result: aiResult,
             saved_at: new Date().toISOString()
           };
-          const key = `sessions/${effectiveStudentId}_${session_id}.json`;
+          const key = `sessions/${session_id}.json`;
           await r2Bucket.put(key, JSON.stringify(fullPayload, null, 2), {
             httpMetadata: { contentType: 'application/json' }
           });
+          if (env.DB) {
+            try {
+              await env.DB.prepare('UPDATE assessment_sessions SET r2_saved = 1, r2_key = ? WHERE id = ?').bind(key, session_id).run();
+            } catch (_) {}
+          }
           console.log(`[analyze-async] Saved payload to R2 for session: ${session_id}`);
         }
       } catch (bgErr) {

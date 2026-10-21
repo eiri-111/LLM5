@@ -1,8 +1,9 @@
-import { Env, ChatMessage, runFinalAnalysis } from './_gateway';
+import { Env, ChatMessage, runFinalAnalysis, ensureDbSchema, verifyAdminPassword } from './_gateway';
 
 interface AnalyzeRequestBody {
   mode?: 'chat';
   session_id?: string;
+  session_token?: string;
   user_profile?: {
     student_id?: string;
     age?: number | string;
@@ -17,7 +18,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
   try {
     const body: AnalyzeRequestBody = await request.json();
-    const { session_id, user_profile, messages, survey_result } = body;
+    const { session_id, session_token, user_profile, messages, survey_result } = body;
 
     if (!messages || messages.length < 2) {
       return new Response(JSON.stringify({ error: '対話履歴が不足しています。最低2往復以上の対話が必要です。' }), {
@@ -26,12 +27,38 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       });
     }
 
+    const incomingToken =
+      session_token ||
+      request.headers.get('x-session-token') ||
+      (request.headers.get('Authorization')?.startsWith('Bearer ')
+        ? request.headers.get('Authorization')?.substring(7).trim()
+        : null);
+
     // ステップ3: 最終性格分析 (Route: dynamic/llm5-analyst ※Gemini, 自動フォールバック対応)
     const result = await runFinalAnalysis(env, messages);
 
     // セッションIDがある場合はD1/R2にも即座に保存・更新（バックグラウンド分析が未完了だった場合のリカバリー同期保存）
     if (session_id && env.DB) {
       try {
+        await ensureDbSchema(env.DB);
+
+        // 既存トークンのチェック
+        const existingRow: any = await env.DB.prepare(
+          'SELECT session_token FROM assessment_sessions WHERE id = ?'
+        ).bind(session_id).first();
+
+        const isAdmin = verifyAdminPassword(request, env);
+        if (existingRow && existingRow.session_token && !isAdmin) {
+          if (!incomingToken || incomingToken !== existingRow.session_token) {
+            console.warn('Unauthorized attempt to update session in /api/analyze');
+            // 分析結果自体は返す（オンザフライ）がD1上書きは拒否
+            return new Response(JSON.stringify(result), {
+              headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
+            });
+          }
+        }
+
+        const effectiveToken = incomingToken || existingRow?.session_token || null;
         const effectiveStudentId = user_profile?.student_id || `user_${session_id.slice(-8)}`;
         const effectiveAge = typeof user_profile?.age === 'number' ? user_profile.age : 0;
         const effectiveGender = user_profile?.gender || 'unspecified';
