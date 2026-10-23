@@ -778,49 +778,11 @@ export function parseClefPatternCDecision(
   const isStuck = isStuckOrNegativeResponse(messages);
 
   // -------------------------------------------------------------
-  // CAT (コンピュータ適応型テスト) 項目反応理論 (IRT) 停止ルール
+  // ターン数制限・自動早期終了の無効化（ユーザー主導で質問紙へ進む運用）
   // -------------------------------------------------------------
-  // 1) 統計的測定精度停止ルール (Precision Criterion):
-  //    最低ターン数 (MIN_USER_TURNS: 6) 以上かつ、全5因子の測定標準誤差が目標以下 (全SEM <= 5.5)
-  //    ※BFI-2の各因子3ファセットすべてについて行動エビデンス（情報量）が得られて初めてSEM <= 5.5が達成されるため、
-  //      「2ファセットで打ち切られて残りの1ファセットが永久に測定されない」歪みが数学的に防止される。
-  const isPrecisionSatisfied =
-    userCount >= MIN_USER_TURNS &&
-    (uncoveredFactors.length === 0 || (overallReadyProb >= 0.85 && totalEvidencedFacets >= 14));
-
-  // 2) 安全停止ルール (Safety Stop / Maximum Turns):
-  //    受検者の疲労・離脱（Fatigue bias / Attrition）を防ぐためのCAT標準の最大ターン数制限
-  const isMaxTurnsReached = userCount >= MAX_USER_TURNS;
-
-  // 3) 情報利得サチュレーション停止ルール (Information Gain Saturation / Plateau Stop):
-  //    十分なターン数 (8ターン以上) を経て全シナリオが提示済みであり、かつ
-  //    ユーザーの回答が手詰まり・拒絶等でこれ以上の追加情報量が得られない場合
-  const isSaturationSatisfied =
-    userCount >= 8 &&
-    unpresentedAny.length === 0 &&
-    (isStuck || userSaidNoEpisode) &&
-    totalEvidencedFacets >= 8;
-
-  const isReady = isPrecisionSatisfied || isMaxTurnsReached || isSaturationSatisfied;
-
-  if (isReady) {
-    const semSummary = allFactors.map(f => `${f}:SE${factorMetrics[f].sem}`).join(', ');
-    const stopReason = isPrecisionSatisfied
-      ? `Precision achieved (All SEM <= ${CAT_TARGET_FACTOR_SEM}, evidencedFacets: ${totalEvidencedFacets}/15)`
-      : isMaxTurnsReached
-      ? `Max turns safety stop (${userCount} turns reached)`
-      : `Information saturation stop (turns: ${userCount})`;
-
-    return {
-      focus_dimension: '完了',
-      target_question_strategy:
-        'すべての測定が完了しました。新たな質問は一切行わず、直前の回答に温かく共感・感謝した上で、画面下のボタンから次の質問紙（BFI-2-S）へ進むよう案内してください。',
-      is_ready_for_final_analysis: true,
-      action_mode: 'complete',
-      evidenced_facets_count: totalEvidencedFacets,
-      notes: `Clef-flash CAT Pattern C Complete [${stopReason}] (${semSummary})`
-    };
-  }
+  // 最小ターン数・最大ターン数および精度判定による自動打ち切りは行わず、
+  // ユーザーが自分の意思で質問紙に進むまでAIは対話を継続する。
+  const isReady = false;
 
   // 「断片的ヒント（0.50 <= prob < 0.70）」が出ているファセット（あと1問深掘りすれば0.70を超える有望ファセット）
   const partialFacets = FACET_DEFINITIONS.filter(
@@ -903,33 +865,24 @@ export function parseClefPatternCDecision(
   const targetNames = targetFacets.map(f => `${f.factor}［${f.name}］`).join('・');
 
   // もし5因子のSJTシナリオがすべて提示済み（unpresentedAny.length === 0）の場合:
-  // 同一シナリオの再提示は避け、未観測ファセットが残っていればターゲット深掘りプローブを投げ、全因子充足なら完了へ
+  // 同一シナリオの再提示は避け、ターゲット深掘りプローブまたは日常行動の深掘りを継続する
   if (unpresentedAny.length === 0) {
-    if (uncoveredFactors.length === 0 || userCount >= MAX_USER_TURNS) {
-      return {
-        focus_dimension: '完了',
-        target_question_strategy:
-          'すべてのシナリオについての確認が完了しました。追加の質問は行わず、直前の回答に感謝を伝えた上で、画面下のボタンから次の質問紙へ進むよう案内してください。',
-        is_ready_for_final_analysis: true,
-        action_mode: 'complete',
-        evidenced_facets_count: totalEvidencedFacets,
-        notes: `Clef-flash Pattern C [All scenarios presented & precision satisfied] (turns: ${userCount})`
-      };
-    }
-    const targetHints = targetFacets.map(f => `・${f.factor}（${f.name}）: ${f.probeHint}`).join('\n');
+    const targetHints = targetFacets.length > 0
+      ? targetFacets.map(f => `・${f.factor}（${f.name}）: ${f.probeHint}`).join('\n')
+      : '・これまでの話題をさらに深掘りし、その時の気持ちや大切にしている考え方を尋ねてください。';
     return {
-      focus_dimension: targetFactor,
+      focus_dimension: targetFactor || '行動傾向の深掘り',
       action_mode: 'deepen_episode',
       target_facets: targetFacets.map(f => f.name),
       evidenced_facets_count: totalEvidencedFacets,
       is_ready_for_final_analysis: false,
       target_question_strategy: [
-        `【未観測ファセット（${targetNames}）のピンポイント行動プローブ】`,
-        `すべての基本シナリオは提示済みのため、同じシナリオの再提示はせず、これまでの会話の流れを受け止めた上で、以下の未確認の行動側面について「普段の生活やこれまでの経験で、具体的にどう行動しているか」を1つ尋ねてください。`,
+        `【行動・価値観の深掘りプローブ】`,
+        `これまでの会話の流れを受け止めた上で、普段の生活やこれまでの経験において、具体的にどのような場面でどのように行動・判断することが多いかを1つ自然に尋ねてください。`,
         targetHints,
         `（※末尾は必ず『？』で終えてください）`
       ].join('\n'),
-      notes: `Clef-flash Pattern C [Targeted_Facet_Probe:${targetFactor}] (evidenced: ${totalEvidencedFacets}/15, target: ${targetNames})`
+      notes: `Clef-flash Pattern C [Continuous_Probe] (evidenced: ${totalEvidencedFacets}/15, target: ${targetNames})`
     };
   }
 

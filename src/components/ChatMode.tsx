@@ -25,12 +25,6 @@ function sanitizeMessage(text: string): string {
     .trim();
 }
 
-function isAssistantCompletionReply(text: string): boolean {
-  const clean = sanitizeMessage(text);
-  if (!clean) return false;
-  return /(インタビューは.*終了|対話セッションは.*完了|次のステップ.*質問紙|お話を聞かせていただき.*ありがとうございました|質問紙へ進んで|アンケートへ進んで)/.test(clean);
-}
-
 export const ChatMode: React.FC<ChatModeProps> = ({
   userProfile,
   onStartSurvey,
@@ -80,24 +74,12 @@ export const ChatMode: React.FC<ChatModeProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [streamingText, setStreamingText] = useState('');
 
-  const [isReady, setIsReady] = useState<boolean>(() => {
+  // 旧キャッシュのクリーンアップ
+  useEffect(() => {
     try {
-      const savedMsgs = localStorage.getItem('llm5_chat_messages');
-      if (savedMsgs) {
-        const parsed = JSON.parse(savedMsgs);
-        if (Array.isArray(parsed)) {
-          const uCount = parsed.filter((m: ChatMessage) => m.role === 'user').length;
-          const lastAssistant = [...parsed].reverse().find((m: ChatMessage) => m.role === 'assistant');
-          if (lastAssistant && isAssistantCompletionReply(lastAssistant.content)) {
-            return true;
-          }
-          const savedReady = localStorage.getItem('llm5_chat_is_ready') === 'true';
-          if (savedReady) return true;
-        }
-      }
+      localStorage.removeItem('llm5_chat_is_ready');
     } catch (_) {}
-    return false;
-  });
+  }, []);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -106,17 +88,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
     try {
       localStorage.setItem('llm5_chat_messages', JSON.stringify(messages));
     } catch (_) {}
-    const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
-    if (lastAssistant && isAssistantCompletionReply(lastAssistant.content)) {
-      setIsReady(true);
-    }
   }, [messages]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('llm5_chat_is_ready', String(isReady));
-    } catch (_) {}
-  }, [isReady]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -125,10 +97,6 @@ export const ChatMode: React.FC<ChatModeProps> = ({
   }, [messages, isLoading, streamingText]);
 
   const userTurns = messages.filter(m => m.role === 'user').length;
-  // 対話セクションの進捗（0%〜100%：完了時に100%、対話中は最大8ターン基準で最大92%までスムーズに進行）
-  const progressPercent = isReady
-    ? 100
-    : Math.min(92, Math.round((userTurns / 7) * 88));
 
   const handleSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -228,38 +196,22 @@ export const ChatMode: React.FC<ChatModeProps> = ({
         let finalReply = sanitizeMessage(accumulatedText);
         if (!finalReply) {
           finalReply = 'お答えいただきありがとうございます！\n少し場面を変えて、例えば最近、友人や誰かと何かを一緒に決めたり話したりした時の出来事について伺えますか？その時、具体的にどんな状況でしたか？';
-        } else if (!readyFlagFromServer && !isAssistantCompletionReply(finalReply) && !finalReply.includes('？') && !finalReply.includes('?')) {
+        } else if (!finalReply.includes('？') && !finalReply.includes('?')) {
           finalReply += '\n\nちなみに、最近の学校や日常の生活の中で、誰かと一緒に何かをしたり話したりした場面は何かありましたか？';
         }
 
         setMessages([...newMessages, { role: 'assistant', content: finalReply }]);
         setStreamingText('');
-
-        // サーバー側の準備完了フラグ（readyFlagFromServer）または完了発話判定を最優先
-        if (
-          readyFlagFromServer ||
-          isAssistantCompletionReply(finalReply) ||
-          nextUserTurns >= 8
-        ) {
-          setIsReady(true);
-        }
       } else {
         const data: any = await res.json();
         let cleanReply = sanitizeMessage(data.response);
         if (!cleanReply) {
           cleanReply = 'お答えいただきありがとうございます！\n少し場面を変えて、例えば最近、友人や誰かと何かを一緒に決めたり話したりした時の出来事について伺えますか？その時、具体的にどんな状況でしたか？';
-        } else if (!data.is_ready_for_analysis && !isAssistantCompletionReply(cleanReply) && !cleanReply.includes('？') && !cleanReply.includes('?')) {
+        } else if (!cleanReply.includes('？') && !cleanReply.includes('?')) {
           cleanReply += '\n\nちなみに、最近の学校や日常の生活の中で、誰かと一緒に何かをしたり話したりした場面は何かありましたか？';
         }
 
         setMessages([...newMessages, { role: 'assistant', content: cleanReply }]);
-        if (
-          data.is_ready_for_analysis ||
-          isAssistantCompletionReply(cleanReply) ||
-          nextUserTurns >= 8
-        ) {
-          setIsReady(true);
-        }
       }
     } catch (err: any) {
       console.error(err);
@@ -334,7 +286,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
                 cursor: 'pointer'
               }}
             >
-              質問紙へスキップ
+              質問紙へ進む
             </button>
           )}
           {onSkipToResult && (
@@ -391,19 +343,6 @@ export const ChatMode: React.FC<ChatModeProps> = ({
       </div>
 
       <div className="chat-input-bar">
-        {isReady && (
-          <button
-            type="button"
-            onClick={handleProceedToSurvey}
-            className="btn-analyze-ready"
-          >
-            <span>対話セッションが完了しました。次の質問紙（BFI-2-S）へ進んでください</span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 700, whiteSpace: 'nowrap' }}>
-              次へ <ArrowRight size={17} />
-            </span>
-          </button>
-        )}
-
         <form onSubmit={handleSend} style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
           <textarea
             ref={inputRef}
@@ -425,6 +364,40 @@ export const ChatMode: React.FC<ChatModeProps> = ({
             <ArrowRight size={15} />
           </button>
         </form>
+
+        {userTurns >= 1 && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+            <button
+              type="button"
+              onClick={handleProceedToSurvey}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                backgroundColor: '#ffffff',
+                border: '1px solid #cbd5e1',
+                color: '#1b365d',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                padding: '6px 12px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#f1f5f9';
+                e.currentTarget.style.borderColor = '#94a3b8';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#ffffff';
+                e.currentTarget.style.borderColor = '#cbd5e1';
+              }}
+            >
+              <span>対話を終了して質問紙（BFI-2-S）へ進む</span>
+              <ArrowRight size={14} />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
