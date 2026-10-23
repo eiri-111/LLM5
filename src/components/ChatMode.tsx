@@ -25,6 +25,13 @@ function sanitizeMessage(text: string): string {
     .trim();
 }
 
+function isExplicitCompletionText(text: string): boolean {
+  const clean = sanitizeMessage(text);
+  if (!clean) return false;
+  // AIが明示的に面談完了と質問紙への進行を宣言した場合のみ検知（日常の相づちやお礼では反応させない）
+  return /(インタビューは.*終了となります|対話セッションは.*完了しました|画面下のボタンから次の質問紙.*へ進んでください)/.test(clean);
+}
+
 export const ChatMode: React.FC<ChatModeProps> = ({
   userProfile,
   onStartSurvey,
@@ -73,13 +80,21 @@ export const ChatMode: React.FC<ChatModeProps> = ({
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [streamingText, setStreamingText] = useState('');
-
-  // 旧キャッシュのクリーンアップ
-  useEffect(() => {
+  const [isReady, setIsReady] = useState<boolean>(() => {
     try {
-      localStorage.removeItem('llm5_chat_is_ready');
+      const savedMsgs = localStorage.getItem('llm5_chat_messages');
+      if (savedMsgs) {
+        const parsed = JSON.parse(savedMsgs);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const lastAssistant = [...parsed].reverse().find((m: ChatMessage) => m.role === 'assistant');
+          if (lastAssistant && isExplicitCompletionText(lastAssistant.content)) {
+            return true;
+          }
+        }
+      }
     } catch (_) {}
-  }, []);
+    return false;
+  });
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -88,6 +103,10 @@ export const ChatMode: React.FC<ChatModeProps> = ({
     try {
       localStorage.setItem('llm5_chat_messages', JSON.stringify(messages));
     } catch (_) {}
+    const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
+    if (lastAssistant && isExplicitCompletionText(lastAssistant.content)) {
+      setIsReady(true);
+    }
   }, [messages]);
 
   useEffect(() => {
@@ -202,6 +221,10 @@ export const ChatMode: React.FC<ChatModeProps> = ({
 
         setMessages([...newMessages, { role: 'assistant', content: finalReply }]);
         setStreamingText('');
+
+        if (readyFlagFromServer || isExplicitCompletionText(finalReply)) {
+          setIsReady(true);
+        }
       } else {
         const data: any = await res.json();
         let cleanReply = sanitizeMessage(data.response);
@@ -212,6 +235,9 @@ export const ChatMode: React.FC<ChatModeProps> = ({
         }
 
         setMessages([...newMessages, { role: 'assistant', content: cleanReply }]);
+        if (data.is_ready_for_analysis || isExplicitCompletionText(cleanReply)) {
+          setIsReady(true);
+        }
       }
     } catch (err: any) {
       console.error(err);
@@ -343,6 +369,19 @@ export const ChatMode: React.FC<ChatModeProps> = ({
       </div>
 
       <div className="chat-input-bar">
+        {isReady && (
+          <button
+            type="button"
+            onClick={handleProceedToSurvey}
+            className="btn-analyze-ready"
+          >
+            <span>対話セッションが完了しました。次の質問紙（BFI-2-S）へ進んでください</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 700, whiteSpace: 'nowrap' }}>
+              次へ <ArrowRight size={17} />
+            </span>
+          </button>
+        )}
+
         <form onSubmit={handleSend} style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
           <textarea
             ref={inputRef}
@@ -365,7 +404,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
           </button>
         </form>
 
-        {userTurns >= 1 && (
+        {!isReady && userTurns >= 1 && (
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
             <button
               type="button"

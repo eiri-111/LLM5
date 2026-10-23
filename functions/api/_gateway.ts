@@ -778,11 +778,37 @@ export function parseClefPatternCDecision(
   const isStuck = isStuckOrNegativeResponse(messages);
 
   // -------------------------------------------------------------
-  // ターン数制限・自動早期終了の無効化（ユーザー主導で質問紙へ進む運用）
+  // エビデンス充足判定（ターン数の最小・最大制限なし）
   // -------------------------------------------------------------
-  // 最小ターン数・最大ターン数および精度判定による自動打ち切りは行わず、
-  // ユーザーが自分の意思で質問紙に進むまでAIは対話を継続する。
-  const isReady = false;
+  // 最小ターン数や最大ターン数による機械的な縛りは設けず、
+  // 純粋にAIが「ビッグファイブ5因子の十分な行動エビデンスを収集できた」と判定した時点で完了とする。
+  const isPrecisionSatisfied =
+    uncoveredFactors.length === 0 || (overallReadyProb >= 0.85 && totalEvidencedFacets >= 14);
+
+  // 全シナリオ提示済みで、追加情報が得られない場合の手詰まりサチュレーション判定
+  const isSaturationSatisfied =
+    unpresentedAny.length === 0 &&
+    (isStuck || userSaidNoEpisode) &&
+    totalEvidencedFacets >= 8;
+
+  const isReady = isPrecisionSatisfied || isSaturationSatisfied;
+
+  if (isReady) {
+    const semSummary = allFactors.map(f => `${f}:SE${factorMetrics[f].sem}`).join(', ');
+    const stopReason = isPrecisionSatisfied
+      ? `Precision achieved (All factors evidenced: ${totalEvidencedFacets}/15 facets)`
+      : `Information saturation stop (evidenced: ${totalEvidencedFacets}/15)`;
+
+    return {
+      focus_dimension: '完了',
+      target_question_strategy:
+        'すべての測定が完了しました。新たな質問は一切行わず、直前の回答に温かく共感・感謝した上で、画面下のボタンから次の質問紙（BFI-2-S）へ進むよう案内してください。',
+      is_ready_for_final_analysis: true,
+      action_mode: 'complete',
+      evidenced_facets_count: totalEvidencedFacets,
+      notes: `Clef-flash CAT Pattern C Complete [${stopReason}] (${semSummary})`
+    };
+  }
 
   // 「断片的ヒント（0.50 <= prob < 0.70）」が出ているファセット（あと1問深掘りすれば0.70を超える有望ファセット）
   const partialFacets = FACET_DEFINITIONS.filter(
@@ -865,8 +891,19 @@ export function parseClefPatternCDecision(
   const targetNames = targetFacets.map(f => `${f.factor}［${f.name}］`).join('・');
 
   // もし5因子のSJTシナリオがすべて提示済み（unpresentedAny.length === 0）の場合:
-  // 同一シナリオの再提示は避け、ターゲット深掘りプローブまたは日常行動の深掘りを継続する
+  // 全因子充足なら完了、そうでなければ未観測ファセットのピンポイント深掘りを継続
   if (unpresentedAny.length === 0) {
+    if (uncoveredFactors.length === 0) {
+      return {
+        focus_dimension: '完了',
+        target_question_strategy:
+          'すべてのシナリオについての確認が完了しました。追加の質問は行わず、直前の回答に感謝を伝えた上で、画面下のボタンから次の質問紙へ進むよう案内してください。',
+        is_ready_for_final_analysis: true,
+        action_mode: 'complete',
+        evidenced_facets_count: totalEvidencedFacets,
+        notes: `Clef-flash Pattern C [All scenarios presented & precision satisfied]`
+      };
+    }
     const targetHints = targetFacets.length > 0
       ? targetFacets.map(f => `・${f.factor}（${f.name}）: ${f.probeHint}`).join('\n')
       : '・これまでの話題をさらに深掘りし、その時の気持ちや大切にしている考え方を尋ねてください。';
