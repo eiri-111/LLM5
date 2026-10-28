@@ -68,6 +68,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
               survey_extraversion: parsed.survey_result?.scores?.extraversion?.normalizedScore ?? null,
               survey_agreeableness: parsed.survey_result?.scores?.agreeableness?.normalizedScore ?? null,
               survey_neuroticism: parsed.survey_result?.scores?.neuroticism?.normalizedScore ?? null,
+              survey_self_monitoring: parsed.survey_result?.selfMonitoring?.normalizedScore ?? null,
+              survey_social_desirability: parsed.survey_result?.socialDesirability?.normalizedScore ?? null,
               survey_completed_at: parsed.survey_result?.completedAt || null,
               r2_saved: 1,
               r2_key: r2Obj.key,
@@ -194,6 +196,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         survey_extraversion,
         survey_agreeableness,
         survey_neuroticism,
+        survey_self_monitoring,
+        survey_social_desirability,
         survey_completed_at,
         COALESCE(r2_saved, 0) AS r2_saved,
         r2_key

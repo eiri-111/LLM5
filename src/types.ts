@@ -133,12 +133,21 @@ export interface SurveyScoreDetail {
   normalizedScore: number;// 0〜100に正規化したスコア
 }
 
+export interface SelfMonitoringScoreDetail extends SurveyScoreDetail {
+  subscores?: {
+    ability: number;     // 自己呈示変容能力 (0〜100)
+    sensitivity: number; // 他者表出感受性 (0〜100)
+  };
+}
+
 export interface SurveyResult {
   scaleType: ScaleType;
   scaleName: string;
   rawAnswers?: Record<string | number, number>; // { [questionId]: answerValue }
   scores: Record<DimensionKey, SurveyScoreDetail>;
   facetScores?: SurveyFacetScores;
+  selfMonitoring?: SelfMonitoringScoreDetail;
+  socialDesirability?: SurveyScoreDetail;
   completedAt: string;
 }
 
@@ -172,6 +181,8 @@ export interface AdminSessionRecord {
   survey_extraversion?: number | null;
   survey_agreeableness?: number | null;
   survey_neuroticism?: number | null;
+  survey_self_monitoring?: number | null;
+  survey_social_desirability?: number | null;
   survey_completed_at?: string | null;
   r2_saved?: boolean | number;
   r2_key?: string | null;

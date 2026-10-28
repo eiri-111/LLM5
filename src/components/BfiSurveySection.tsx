@@ -1,7 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowRight, ArrowLeft, RotateCcw } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { ArrowRight, ArrowLeft, RotateCcw, CheckCircle2 } from 'lucide-react';
 import { SurveyResult } from '../types';
 import { BFI_2_S_CONFIG, calculateBfiScores, calculateBfiFacetScores } from '../data/bfi2s';
+import {
+  SELF_MONITORING_CONFIG,
+  SOCIAL_DESIRABILITY_CONFIG,
+  calculateSelfMonitoringScore,
+  calculateSocialDesirabilityScore
+} from '../data/additionalScales';
 
 interface BfiSurveySectionProps {
   onCompleteSurvey: (result: SurveyResult) => void;
@@ -11,7 +17,21 @@ interface BfiSurveySectionProps {
   showToast: (msg: string) => void;
 }
 
-const QUESTIONS_PER_PAGE = 8;
+export interface UnifiedSurveyQuestion {
+  id: number;
+  text: string;
+  scaleType: 'bfi' | 'self_monitoring' | 'social_desirability';
+  concept?: string;
+  promptPrefix?: string;
+}
+
+const SCALE_LABELS = [
+  { value: 1, label: '全くあてはまらない' },
+  { value: 2, label: 'あまりあてはまらない' },
+  { value: 3, label: 'どちらともいえない' },
+  { value: 4, label: 'ややあてはまる' },
+  { value: 5, label: 'とてもよくあてはまる' }
+];
 
 export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
   onCompleteSurvey,
@@ -22,7 +42,7 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
 }) => {
   const [answers, setAnswers] = useState<Record<number, number>>(() => {
     try {
-      const saved = localStorage.getItem('llm5_bfi_answers');
+      const saved = localStorage.getItem('llm5_survey_answers') || localStorage.getItem('llm5_bfi_answers');
       if (saved) return JSON.parse(saved);
     } catch (_) {}
     return {};
@@ -31,21 +51,88 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
   const [currentPage, setCurrentPage] = useState<number>(0);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  const questions = BFI_2_S_CONFIG.questions;
-  const totalQuestions = questions.length;
-  const totalPages = Math.ceil(totalQuestions / QUESTIONS_PER_PAGE);
+  // 全50問の設問リストを構築
+  const allQuestions: UnifiedSurveyQuestion[] = useMemo(() => {
+    const list: UnifiedSurveyQuestion[] = [];
+    // 1. BFI-2-S (Q1〜Q30)
+    BFI_2_S_CONFIG.questions.forEach(q => {
+      list.push({
+        id: q.id,
+        text: q.text,
+        scaleType: 'bfi',
+        concept: q.facet,
+        promptPrefix: '私は普段、'
+      });
+    });
+    // 2. 自己モニタリング尺度 (Q31〜Q40)
+    SELF_MONITORING_CONFIG.questions.forEach(q => {
+      list.push({
+        id: q.id,
+        text: q.text,
+        scaleType: 'self_monitoring',
+        concept: q.conceptLabel
+      });
+    });
+    // 3. 社会的望ましさ尺度 (Q41〜Q50)
+    SOCIAL_DESIRABILITY_CONFIG.questions.forEach(q => {
+      list.push({
+        id: q.id,
+        text: q.text,
+        scaleType: 'social_desirability',
+        concept: q.conceptLabel
+      });
+    });
+    return list;
+  }, []);
+
+  const totalQuestions = allQuestions.length; // 50問
+
+  // ページごとの設問分割 (各10問 x 5ページ)
+  // ページ0: BFI Q1-10
+  // ページ1: BFI Q11-20
+  // ページ2: BFI Q21-30
+  // ページ3: 自己モニタリング Q31-40
+  // ページ4: 社会的望ましさ Q41-50
+  const totalPages = 5;
+
+  const currentQuestions = useMemo(() => {
+    const start = currentPage * 10;
+    return allQuestions.slice(start, start + 10);
+  }, [allQuestions, currentPage]);
 
   const answeredCount = Object.keys(answers).length;
-  // 全体進捗バー（後半50%〜100%として表現、または質問紙単体0〜100%）
   const surveyProgressPercent = Math.round((answeredCount / totalQuestions) * 100);
-
-  const startIndex = currentPage * QUESTIONS_PER_PAGE;
-  const currentQuestions = questions.slice(startIndex, startIndex + QUESTIONS_PER_PAGE);
 
   const isCurrentPageComplete = currentQuestions.every(q => typeof answers[q.id] === 'number');
   const isAllAnswered = answeredCount === totalQuestions;
 
-  // ページ切り替え時に確実に画面最上部へスクロール
+  // ページごとのヘッダー情報
+  const pageMeta = useMemo(() => {
+    if (currentPage <= 2) {
+      return {
+        blockNumber: `ブロック 2-A (${currentPage + 1}/3)`,
+        title: '性格特性に関する質問 (BFI-2-S 日本語短縮版)',
+        instruction: 'ここには、あなた自身に当てはまるかもしれない、あるいは当てはまらないかもしれない特徴が並んでいます。それぞれの項目について、「私は普段、〜だと思う」という文にどの程度同意するか、最も当てはまる選択肢を1つ選んでください。',
+        badge: 'ビッグファイブ 5因子・15ファセット測定'
+      };
+    } else if (currentPage === 3) {
+      return {
+        blockNumber: 'ブロック 2-B',
+        title: '対人行動・自己調整スタイルに関する質問 (改訂自己モニタリング尺度 RSMS)',
+        instruction: 'ここには、対人関係や日常のコミュニケーションにおける振る舞い方に関する項目が並んでいます。それぞれの文があなた自身の普段の行動や考え方にどの程度あてはまるか、最も当てはまる選択肢を1つ選んでください。',
+        badge: '他者感受性・自己呈示変容能力の測定'
+      };
+    } else {
+      return {
+        blockNumber: 'ブロック 2-C',
+        title: '日常の行動・態度に関する質問 (Marlowe-Crowne 社会的望ましさ尺度 MCSDS)',
+        instruction: 'ここには、日常生活での様々な出来事に対する態度や行動に関する項目が並んでいます。誰にでも起こりうることや感じることが含まれていますので、良く見せようとせず、普段の率直なご自身を振り返ってお答えください。',
+        badge: '自己報告バイアス・模範解答傾向の測定'
+      };
+    }
+  }, [currentPage]);
+
+  // ページ切り替え時に最上部へスクロール
   useEffect(() => {
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
@@ -55,13 +142,9 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
       document.documentElement.scrollTop = 0;
       document.body.scrollTop = 0;
       const appContainer = document.querySelector('.app-container');
-      if (appContainer) {
-        appContainer.scrollTop = 0;
-      }
+      if (appContainer) appContainer.scrollTop = 0;
       const mainContent = document.querySelector('.main-content');
-      if (mainContent) {
-        mainContent.scrollTop = 0;
-      }
+      if (mainContent) mainContent.scrollTop = 0;
     };
     scrollToTop();
     const rafId = requestAnimationFrame(scrollToTop);
@@ -76,6 +159,7 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
     setAnswers((prev) => {
       const updated = { ...prev, [questionId]: value };
       try {
+        localStorage.setItem('llm5_survey_answers', JSON.stringify(updated));
         localStorage.setItem('llm5_bfi_answers', JSON.stringify(updated));
       } catch (_) {}
       return updated;
@@ -94,6 +178,25 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
     }
   };
 
+  const buildSurveyResult = (ans: Record<number, number>): SurveyResult => {
+    const scores = calculateBfiScores(ans);
+    const facetScores = calculateBfiFacetScores(ans);
+    const selfMonitoring = calculateSelfMonitoringScore(ans);
+    const socialDesirability = calculateSocialDesirabilityScore(ans);
+    const completedAt = new Date().toISOString();
+
+    return {
+      scaleType: 'bfi-2-s_sms_sds',
+      scaleName: 'BFI-2-S / 自己モニタリング / 社会的望ましさ',
+      rawAnswers: ans,
+      scores,
+      facetScores,
+      selfMonitoring,
+      socialDesirability,
+      completedAt
+    };
+  };
+
   const handleSubmit = () => {
     if (!isAllAnswered) {
       showToast(`未回答の設問があります（残り ${totalQuestions - answeredCount}問）`);
@@ -104,26 +207,16 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
     showToast('回答データを送信し、分析結果を照合しています...');
 
     try {
-      const scores = calculateBfiScores(answers);
-      const facetScores = calculateBfiFacetScores(answers);
-      const completedAt = new Date().toISOString();
-
-      const surveyResult: SurveyResult = {
-        scaleType: 'bfi-2-s',
-        scaleName: BFI_2_S_CONFIG.name,
-        rawAnswers: answers,
-        scores,
-        facetScores,
-        completedAt
-      };
+      const surveyResult = buildSurveyResult(answers);
 
       try {
+        localStorage.removeItem('llm5_survey_answers');
         localStorage.removeItem('llm5_bfi_answers');
       } catch (_) {}
 
       onCompleteSurvey(surveyResult);
     } catch (err: any) {
-      console.error('BFI-2-S 集計エラー:', err);
+      console.error('質問紙集計エラー:', err);
       showToast('集計中にエラーが発生しました');
       setIsSubmitting(false);
     }
@@ -131,15 +224,16 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
 
   const handleAutoFillSample = () => {
     const sampleAnswers: Record<number, number> = {};
-    questions.forEach((q) => {
-      const val = Math.floor(Math.random() * 3) + 2;
+    allQuestions.forEach((q) => {
+      const val = Math.floor(Math.random() * 3) + 2; // 2〜4
       sampleAnswers[q.id] = val;
     });
     setAnswers(sampleAnswers);
     try {
+      localStorage.setItem('llm5_survey_answers', JSON.stringify(sampleAnswers));
       localStorage.setItem('llm5_bfi_answers', JSON.stringify(sampleAnswers));
     } catch (_) {}
-    showToast('すべての設問にテスト回答を入力しました');
+    showToast('全50問にテスト回答を入力しました');
   };
 
   const handleSkipDirectlyToResult = () => {
@@ -148,20 +242,11 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
       return;
     }
     const sampleAnswers: Record<number, number> = {};
-    questions.forEach((q) => {
+    allQuestions.forEach((q) => {
       sampleAnswers[q.id] = Math.floor(Math.random() * 3) + 2;
     });
     setAnswers(sampleAnswers);
-    const scores = calculateBfiScores(sampleAnswers);
-    const facetScores = calculateBfiFacetScores(sampleAnswers);
-    const surveyResult: SurveyResult = {
-      scaleType: 'bfi-2-s',
-      scaleName: BFI_2_S_CONFIG.name,
-      rawAnswers: sampleAnswers,
-      scores,
-      facetScores,
-      completedAt: new Date().toISOString()
-    };
+    const surveyResult = buildSurveyResult(sampleAnswers);
     onCompleteSurvey(surveyResult);
   };
 
@@ -190,13 +275,28 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
           borderBottom: '1px solid #d8dde6'
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '0.5rem' }}>
-            <h1 style={{
-              fontSize: '1.1rem',
-              fontWeight: 700,
-              color: '#1b2432'
-            }}>
-              設問ブロック 2: 自己認識に関する質問（BFI-2-S）
-            </h1>
+            <div>
+              <span style={{
+                display: 'inline-block',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                color: '#007ac0',
+                backgroundColor: '#e8f3fa',
+                padding: '2px 8px',
+                borderRadius: '12px',
+                marginBottom: '4px'
+              }}>
+                {pageMeta.badge}
+              </span>
+              <h1 style={{
+                fontSize: '1.05rem',
+                fontWeight: 700,
+                color: '#1b2432',
+                margin: 0
+              }}>
+                設問{pageMeta.blockNumber}: {pageMeta.title}
+              </h1>
+            </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
               {onReset && (
@@ -218,7 +318,7 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
                   }}
                 >
                   <RotateCcw size={11} />
-                  <span>最初からやり直す</span>
+                  <span>やり直す</span>
                 </button>
               )}
               <button
@@ -235,7 +335,7 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
                   fontWeight: 500
                 }}
               >
-                テスト自動入力
+                テスト全問入力
               </button>
               <button
                 type="button"
@@ -257,19 +357,20 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
           </div>
 
           <p style={{
-            fontSize: '0.88rem',
+            fontSize: '0.86rem',
             color: '#333e4f',
-            lineHeight: 1.65,
+            lineHeight: 1.6,
             backgroundColor: '#f7f9fa',
             padding: '0.75rem 1rem',
             borderLeft: '3px solid #007ac0',
-            borderRadius: '2px'
+            borderRadius: '2px',
+            margin: '0.5rem 0 0'
           }}>
-            ここには、あなた自身に当てはまるかもしれない、あるいは当てはまらないかもしれない特徴が並んでいます。それぞれの項目について、<strong>「私は普段、〜だと思う」</strong>という文にどの程度同意するか、最も当てはまる選択肢を1つ選んでください。
+            {pageMeta.instruction}
           </p>
         </div>
 
-        {/* Questions List (Qualtrics Matrix / Multiple Choice Block Style) */}
+        {/* Questions List */}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {currentQuestions.map((q) => {
             const selectedValue = answers[q.id];
@@ -278,31 +379,32 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
               <div
                 key={q.id}
                 style={{
-                  padding: '1.35rem 0',
+                  padding: '1.25rem 0',
                   borderBottom: '1px solid #e5e8ec'
                 }}
               >
                 {/* Question Prompt */}
                 <div style={{
-                  fontSize: '0.95rem',
+                  fontSize: '0.94rem',
                   fontWeight: 600,
                   color: '#1b2432',
                   lineHeight: 1.5,
-                  marginBottom: '0.9rem'
+                  marginBottom: '0.85rem'
                 }}>
                   <span style={{ color: '#007ac0', fontWeight: 700, marginRight: '6px' }}>
                     Q{q.id}.
                   </span>
-                  私は普段、<strong>{q.text}</strong> <span style={{ color: '#d93025' }}>*</span>
+                  {q.promptPrefix && <span>{q.promptPrefix}</span>}
+                  <strong>{q.text}</strong> <span style={{ color: '#d93025' }}>*</span>
                 </div>
 
-                {/* Qualtrics 5-Point Horizontal / Responsive Choice Grid */}
+                {/* Qualtrics 5-Point Choice Grid */}
                 <div style={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(5, 1fr)',
                   gap: '6px'
                 }}>
-                  {BFI_2_S_CONFIG.scaleLabels.map((opt) => {
+                  {SCALE_LABELS.map((opt) => {
                     const isSelected = selectedValue === opt.value;
                     return (
                       <button
@@ -324,7 +426,6 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
                           transition: 'background-color 0.12s ease, border-color 0.12s ease'
                         }}
                       >
-                        {/* Qualtrics Radio Circle */}
                         <span style={{
                           width: '18px',
                           height: '18px',
@@ -335,7 +436,7 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
                           flexShrink: 0
                         }} />
                         <span style={{
-                          fontSize: '0.73rem',
+                          fontSize: '0.72rem',
                           fontWeight: isSelected ? 700 : 400,
                           color: isSelected ? '#005e94' : '#333e4f',
                           textAlign: 'center',
@@ -389,7 +490,7 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
               disabled={!isCurrentPageComplete}
               className="qualtrics-nav-btn"
             >
-              <span>次へ</span>
+              <span>次へ ({currentPage + 1}/{totalPages})</span>
               <ArrowRight size={16} />
             </button>
           ) : (
@@ -399,7 +500,7 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
               disabled={!isAllAnswered || isSubmitting}
               className="qualtrics-nav-btn"
             >
-              <span>{isSubmitting ? '集計・照合中...' : '回答を送信して結果を見る'}</span>
+              <span>{isSubmitting ? '集計・照合中...' : '全50問回答完了・結果を見る'}</span>
               <ArrowRight size={16} />
             </button>
           )}
