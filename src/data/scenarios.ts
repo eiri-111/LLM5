@@ -237,7 +237,7 @@ export function buildInitialGreeting(userProfile?: UserProfile | null): string {
 
   return [
     '日常のさまざまな場面で「あなたならどうするか」を伺います。',
-    '正解や性格の良し悪しはありません。「自分なら実際に何と言うか・どう動くか」を、普段通りの言葉でお気軽にお話しください。',
+    '「自分なら実際に何と言うか・どう動くか」を、普段通りの言葉でお気軽にお話しください。',
     '',
     `【状況】\n${scenario.situationText}`,
     '',
