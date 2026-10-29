@@ -678,6 +678,7 @@ export const App: React.FC = () => {
               userProfile={userProfile}
               messages={chatMessages}
               sessionId={sessionId}
+              sessionToken={sessionToken}
               onRetake={handleConfirmRetake}
               onUpdateSurveyResult={handleUpdateSurveyResult}
               showToast={showToast}

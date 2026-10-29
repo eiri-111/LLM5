@@ -11,6 +11,7 @@ interface ResultReportProps {
   userProfile: UserProfile | null;
   messages: ChatMessage[];
   sessionId: string;
+  sessionToken?: string;
   onRetake: () => void;
   onUpdateSurveyResult?: (survey: SurveyResult) => void;
   showToast: (msg: string) => void;
@@ -22,6 +23,7 @@ export const ResultReport: React.FC<ResultReportProps> = ({
   userProfile,
   messages,
   sessionId,
+  sessionToken,
   onRetake,
   showToast
 }) => {
@@ -30,11 +32,16 @@ export const ResultReport: React.FC<ResultReportProps> = ({
 
   useEffect(() => {
     if (userProfile && sessionId && result) {
+      const token = sessionToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('llm5_current_session_token') || undefined : undefined);
       fetch('/api/save', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'x-session-token': token } : {})
+        },
         body: JSON.stringify({
           session_id: sessionId,
+          session_token: token,
           user_profile: userProfile,
           messages,
           ai_result: result,
@@ -42,7 +49,7 @@ export const ResultReport: React.FC<ResultReportProps> = ({
         })
       }).catch(err => console.warn('Auto-save result error:', err));
     }
-  }, [sessionId, userProfile, result, messages, surveyResult]);
+  }, [sessionId, sessionToken, userProfile, result, messages, surveyResult]);
 
   const shareText = encodeURIComponent(
     `【パーソナリティ評価調査レポート】\n評価タイプ: 「${result.personality_title}」 (${result.personality_type})`

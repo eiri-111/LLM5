@@ -70,9 +70,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
         const isAdmin = verifyAdminPassword(request, env);
         if (existingRow && !isAdmin) {
-          // 既存セッションにすでにトークンが記録されている場合、一致を確認
-          if (existingRow.session_token) {
-            if (!incomingToken || incomingToken !== existingRow.session_token) {
+          // 既存セッションにすでにトークンが記録されており、異なるトークンが渡された場合のみ拒否
+          if (existingRow.session_token && incomingToken) {
+            if (incomingToken !== existingRow.session_token) {
               return new Response(JSON.stringify({
                 error: 'セッションの更新権限がありません。有効なセッショントークンが必要です。'
               }), {
