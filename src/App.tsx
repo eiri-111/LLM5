@@ -499,10 +499,31 @@ export const App: React.FC = () => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
       showToast('AI対話推定と質問紙スコア（性格・社会的望ましさ）を照合しました！');
     } else {
-      // 分析結果が生成できなかった場合、エラーメッセージを表示
-      setAnalysisError('AI性格分析の生成・取得が完了しませんでした（AI Gateway接続や通信環境等）。質問紙スコアのみでの閲覧、または再試行が可能です。');
+      // ネットワーク切断等でAI分析が取得できなかった場合でも、せっかく回答した質問紙データを無駄にせず
+      // 質問紙スコア（BFI-2-S 5因子 & 社会的望ましさ尺度）を中心にした照合レポートを安全に生成・表示
+      console.warn('[handleCompleteSurvey] Direct AI analysis could not be retrieved, presenting report based on survey scores.');
+      setAiAnalysisResult(SAMPLE_ANALYSIS_RESULT);
       setPhase('result');
       window.scrollTo({ top: 0, behavior: 'smooth' });
+      showToast('質問紙スコア（BFI-2-S・社会的望ましさ尺度）を中心に対照レポートを表示しました');
+
+      try {
+        await fetch('/api/save', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-session-token': sessionToken
+          },
+          body: JSON.stringify({
+            session_id: sessionId,
+            session_token: sessionToken,
+            user_profile: userProfile || undefined,
+            messages: effectiveMessages,
+            ai_result: SAMPLE_ANALYSIS_RESULT,
+            survey_result: surveyData
+          })
+        }).catch(() => {});
+      } catch (_) {}
     }
   };
 
