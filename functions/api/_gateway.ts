@@ -2233,14 +2233,14 @@ ${confirmedScoresBlock}
           { role: 'user', content: `【対話履歴】\n${dialogueHistory}\n\n${confirmedScoresBlock}\n上記の確定スコアと対話履歴に基づき、性格分析レポートをJSONで生成してください。` }
         ],
         temperature: 0.2,
-        max_tokens: 3500,
-        response_format: { type: 'json_object' }
+        max_tokens: 3500
       }),
-      signal: AbortSignal.timeout ? AbortSignal.timeout(11000) : undefined
+      signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined
     });
 
     if (!res.ok) {
       const errText = await res.text();
+      console.error(`[runFinalAnalysis] AI Gateway (${model}) fetch failed [${res.status}]:`, errText);
       throw new Error(`AI Gateway (${model}) 分析エラー [${res.status}]: ${errText || '詳細なし'}`);
     }
 
