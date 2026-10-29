@@ -1398,6 +1398,185 @@ export async function runInterviewerStream(
 }
 
 /**
+ * 最初の対話メッセージ（挨拶＋オープンな問いかけ）をAIに動的生成させるストリーム
+ */
+export async function runInitialGreetingStream(
+  env: Env,
+  userProfile?: UserProfileDemographics,
+  modelName: string = 'dynamic/llm5'
+): Promise<ReadableStream<Uint8Array>> {
+  const endpoint = getGatewayCompatUrl(env);
+  const headers = getGatewayHeaders(env);
+  const targetModel = modelName || 'dynamic/llm5';
+
+  const ageStr = userProfile?.age ? `年代/年齢: ${userProfile.age}` : '';
+  const profileDesc = [
+    ageStr,
+    userProfile?.gender ? `性別: ${userProfile.gender}` : ''
+  ].filter(Boolean).join('、');
+
+  const instruction = `
+【対話タスク】
+対話セッションを開始するための最初のメッセージを作成してください。
+温かい挨拶と、相手がリラックスして自由に答えられる身近な最初の問いかけ（1問）を出力してください。
+
+${profileDesc ? `【ユーザー情報】\n${profileDesc}\n` : ''}
+【ルール】
+1. **オープンで答えやすいテーマを1つ選ぶ**:
+   - 相手の属性に配慮しつつ、日常の過ごし方、最近夢中になっていること、休日の過ごし方、最近印象に残った出来事など、誰でも気軽に話せる身近な話題を1つ選んで問いかけてください。
+2. **定型テンプレートの禁止**:
+   - 「【状況】〜〜」といった架空シナリオの固定文やマニュアル調の挨拶は禁止です。自然で親しみやすい日本語で話しかけてください。
+3. **1問に絞る**:
+   - 問いかけは必ず1つ（末尾は必ず『？』）にしてください。
+4. **検査用語の禁止**:
+   - 「性格診断」「アセスメント」「テスト」「測定」などの言葉は出さず、自然な会話の導入にしてください。
+5. **思考タグ等の排除**:
+   - 思考タグ（<think>等）は含めず、ユーザーへのメッセージのみを出力してください。
+`;
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: targetModel,
+      messages: [
+        { role: 'system', content: instruction },
+        { role: 'user', content: '対話セッションを始めてください。' }
+      ],
+      temperature: 0.8,
+      stream: true
+    })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error(`Initial Greeting Stream error (${res.status}):`, errText);
+    throw new Error(`AI Gateway (${targetModel}) エラー [${res.status}]: ${errText || '詳細なし'}`);
+  }
+
+  const upstreamBody = res.body;
+  if (!upstreamBody) {
+    throw new Error('AI Gateway からレスポンスボディを取得できませんでした');
+  }
+
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const metaData = JSON.stringify({
+        type: 'meta',
+        strategy_focus: '初回挨拶',
+        is_ready_for_analysis: false
+      });
+      controller.enqueue(encoder.encode(`data: ${metaData}\n\n`));
+
+      const reader = upstreamBody.getReader();
+      let buffer = '';
+      let isInsideThinking = false;
+      let tagBuffer = '';
+      let cleanAccumulatedText = '';
+
+      const processSseLine = (line: string) => {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith('data:')) return;
+        const dataStr = trimmed.slice(5).trim();
+        if (dataStr === '[DONE]') return;
+
+        try {
+          const parsed = JSON.parse(dataStr);
+          const content = parsed.choices?.[0]?.delta?.content;
+          if (content) {
+            for (let i = 0; i < content.length; i++) {
+              const char = content[i];
+              if (!isInsideThinking) {
+                if (char === '<') {
+                  if (tagBuffer.length > 0) {
+                    cleanAccumulatedText += tagBuffer;
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'chunk', text: tagBuffer })}\n\n`));
+                  }
+                  tagBuffer = '<';
+                } else if (tagBuffer.length > 0) {
+                  tagBuffer += char;
+                  const lowerTag = tagBuffer.toLowerCase();
+                  if (
+                    '<think>'.startsWith(lowerTag) ||
+                    '<thought>'.startsWith(lowerTag) ||
+                    '<|channel>thought'.startsWith(lowerTag)
+                  ) {
+                    if (
+                      lowerTag === '<think>' ||
+                      lowerTag === '<thought>' ||
+                      lowerTag === '<|channel>thought'
+                    ) {
+                      isInsideThinking = true;
+                      tagBuffer = '';
+                    }
+                  } else {
+                    cleanAccumulatedText += tagBuffer;
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'chunk', text: tagBuffer })}\n\n`));
+                    tagBuffer = '';
+                  }
+                } else {
+                  cleanAccumulatedText += char;
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'chunk', text: char })}\n\n`));
+                }
+              } else {
+                if (char === '<') {
+                  tagBuffer = '<';
+                } else if (tagBuffer.length > 0) {
+                  tagBuffer += char;
+                  const lowerTag = tagBuffer.toLowerCase();
+                  if (
+                    '</think>'.startsWith(lowerTag) ||
+                    '</thought>'.startsWith(lowerTag) ||
+                    '<channel|>'.startsWith(lowerTag)
+                  ) {
+                    if (
+                      lowerTag === '</think>' ||
+                      lowerTag === '</thought>' ||
+                      lowerTag === '<channel|>'
+                    ) {
+                      isInsideThinking = false;
+                      tagBuffer = '';
+                    }
+                  } else {
+                    tagBuffer = '';
+                  }
+                }
+              }
+            }
+          }
+        } catch (_) {}
+      };
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            processSseLine(line);
+          }
+        }
+      } catch (err: any) {
+        console.error('Initial Greeting Stream reading error:', err);
+      } finally {
+        if (!cleanAccumulatedText.trim()) {
+          const fallback = 'こんにちは！まずはリラックスしてお話しできればと思います。\n\n最近、時間を忘れて夢中になったことや休日の過ごし方など、何かお話しいただけることはありますか？\n普段通りの言葉でお気軽に教えてください！';
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'chunk', text: fallback })}\n\n`));
+        }
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'done', is_ready_for_analysis: false, strategy_focus: '初回挨拶' })}\n\n`));
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+        controller.close();
+      }
+    }
+  });
+}
+
+/**
  * ステップ2: 質問係AI (Route: dynamic/llm5) - 非ストリーミング（フォールバック用）
  * AI GatewayのRoute設定に委ね、自然で共感的な問いを生成
  */

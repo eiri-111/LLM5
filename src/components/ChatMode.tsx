@@ -40,44 +40,29 @@ export const ChatMode: React.FC<ChatModeProps> = ({
   onReset,
   showToast,
 }) => {
+  const [isInitializing, setIsInitializing] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    const greeting = buildInitialGreeting(userProfile);
     try {
       const saved = localStorage.getItem('llm5_chat_messages');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // 旧固定文または初期挨拶1件のみの場合は最新の年齢適応シナリオに置換
+          // 旧固定文のみの場合は破棄してAIに初回メッセージを生成させる
           const isSingleAssistant = parsed.length === 1 && parsed[0].role === 'assistant';
           const isLegacyBEIGreeting = parsed[0]?.content?.includes('自分らしさ（素）が出やすい場面') ||
                                      parsed[0]?.content?.includes('最近のちょっとした出来事') ||
                                      parsed[0]?.content?.includes('日常のさまざまな場面で') ||
-                                     parsed[0]?.content?.includes('【状況】');
-          if (isSingleAssistant || isLegacyBEIGreeting) {
-            return [{ role: 'assistant', content: greeting }];
+                                     parsed[0]?.content?.includes('【状況】') ||
+                                     parsed[0]?.content?.includes('最近、時間を忘れて夢中になったことや休日の過ごし方');
+          if (isSingleAssistant && isLegacyBEIGreeting) {
+            return [];
           }
           return parsed;
         }
       }
     } catch (_) {}
-    return [{ role: 'assistant', content: greeting }];
+    return [];
   });
-
-  // userProfile の年齢確定時に、まだユーザーが発言していなければ初期シナリオを即座に更新
-  useEffect(() => {
-    const freshGreeting = buildInitialGreeting(userProfile);
-    setMessages((prev) => {
-      if (prev.length === 1 && prev[0].role === 'assistant') {
-        if (prev[0].content !== freshGreeting) {
-          try {
-            localStorage.setItem('llm5_chat_messages', JSON.stringify([{ role: 'assistant', content: freshGreeting }]));
-          } catch (_) {}
-          return [{ role: 'assistant', content: freshGreeting }];
-        }
-      }
-      return prev;
-    });
-  }, [userProfile]);
 
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -100,6 +85,75 @@ export const ChatMode: React.FC<ChatModeProps> = ({
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const hasTriggeredInit = useRef(false);
+
+  // 初回メッセージのAI動的生成
+  useEffect(() => {
+    if (messages.length === 0 && !isInitializing && !hasTriggeredInit.current) {
+      hasTriggeredInit.current = true;
+      setIsInitializing(true);
+      setStreamingText('');
+
+      (async () => {
+        try {
+          const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              is_init: true,
+              user_profile: userProfile || undefined
+            })
+          });
+
+          if (!res.ok) {
+            throw new Error('初回メッセージの生成に失敗しました');
+          }
+
+          if (res.body) {
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let accumulated = '';
+            let buffer = '';
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || '';
+
+              for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || !trimmed.startsWith('data:')) continue;
+                const dataStr = trimmed.slice(5).trim();
+                if (dataStr === '[DONE]') continue;
+                try {
+                  const event = JSON.parse(dataStr);
+                  if (event.type === 'chunk' && event.text) {
+                    accumulated += event.text;
+                    setStreamingText(accumulated);
+                  }
+                } catch (_) {}
+              }
+            }
+
+            const cleanText = sanitizeMessage(accumulated).trim();
+            if (cleanText) {
+              setMessages([{ role: 'assistant', content: cleanText }]);
+            } else {
+              setMessages([{ role: 'assistant', content: buildInitialGreeting(userProfile) }]);
+            }
+          }
+        } catch (err) {
+          console.error('Initial greeting fetch failed:', err);
+          setMessages([{ role: 'assistant', content: buildInitialGreeting(userProfile) }]);
+        } finally {
+          setIsInitializing(false);
+          setStreamingText('');
+        }
+      })();
+    }
+  }, [messages.length, userProfile, isInitializing]);
 
   useEffect(() => {
     try {
@@ -280,7 +334,10 @@ export const ChatMode: React.FC<ChatModeProps> = ({
           {onReset && (
             <button
               type="button"
-              onClick={onReset}
+              onClick={() => {
+                hasTriggeredInit.current = false;
+                onReset();
+              }}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -363,9 +420,11 @@ export const ChatMode: React.FC<ChatModeProps> = ({
             </div>
           </div>
         )}
-        {isLoading && !streamingText && (
+        {(isLoading || isInitializing) && !streamingText && (
           <div className="chat-bubble assistant">
-            <span style={{ fontSize: '0.84rem', color: '#5c6878' }}>次の質問を準備しています...</span>
+            <span style={{ fontSize: '0.84rem', color: '#5c6878' }}>
+              {isInitializing ? '対話の準備をしています...' : '次の質問を準備しています...'}
+            </span>
           </div>
         )}
       </div>
@@ -392,13 +451,13 @@ export const ChatMode: React.FC<ChatModeProps> = ({
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="こちらに回答を入力してください..."
-            disabled={isLoading}
+            placeholder={isInitializing ? '対話の準備中です...' : 'こちらに回答を入力してください...'}
+            disabled={isLoading || isInitializing}
           />
           <button
             type="submit"
             className="chat-send-btn"
-            disabled={isLoading || !inputText.trim()}
+            disabled={isLoading || isInitializing || !inputText.trim()}
             aria-label="回答を送信"
           >
             <span>送信</span>
