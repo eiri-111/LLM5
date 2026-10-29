@@ -15,7 +15,6 @@ interface SaveRequestBody {
     scaleName: string;
     rawAnswers: Record<string | number, number>;
     scores: Record<string, { rawMean: number; normalizedScore: number }>;
-    selfMonitoring?: { rawMean: number; normalizedScore: number; subscores?: { ability: number; sensitivity: number } };
     socialDesirability?: { rawMean: number; normalizedScore: number };
     completedAt: string;
   };
@@ -102,10 +101,10 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             ai_full_result,
             survey_scale_type, survey_scale_name, survey_raw_answers,
             survey_openness, survey_conscientiousness, survey_extraversion, survey_agreeableness, survey_neuroticism,
-            survey_self_monitoring, survey_social_desirability,
+            survey_social_desirability,
             survey_completed_at,
             r2_saved, r2_key
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(id) DO UPDATE SET
             session_token = COALESCE(assessment_sessions.session_token, excluded.session_token),
             dialogue_turns = COALESCE(excluded.dialogue_turns, assessment_sessions.dialogue_turns),
@@ -127,7 +126,6 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             survey_extraversion = COALESCE(excluded.survey_extraversion, assessment_sessions.survey_extraversion),
             survey_agreeableness = COALESCE(excluded.survey_agreeableness, assessment_sessions.survey_agreeableness),
             survey_neuroticism = COALESCE(excluded.survey_neuroticism, assessment_sessions.survey_neuroticism),
-            survey_self_monitoring = COALESCE(excluded.survey_self_monitoring, assessment_sessions.survey_self_monitoring),
             survey_social_desirability = COALESCE(excluded.survey_social_desirability, assessment_sessions.survey_social_desirability),
             survey_completed_at = COALESCE(excluded.survey_completed_at, assessment_sessions.survey_completed_at),
             r2_saved = CASE WHEN excluded.r2_saved = 1 THEN 1 ELSE assessment_sessions.r2_saved END,
@@ -158,7 +156,6 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
           survey_result?.scores?.extraversion?.normalizedScore ?? null,
           survey_result?.scores?.agreeableness?.normalizedScore ?? null,
           survey_result?.scores?.neuroticism?.normalizedScore ?? null,
-          survey_result?.selfMonitoring?.normalizedScore ?? null,
           survey_result?.socialDesirability?.normalizedScore ?? null,
           survey_result?.completedAt || null,
           0,

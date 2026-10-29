@@ -4,11 +4,8 @@ import { Env, verifyAdminPassword } from '../_gateway';
 // 逆転項目: 1, 3, 5, 7, 8, 10, 14, 17, 19, 22, 23, 26, 27, 30
 const REVERSE_ITEMS = new Set([1, 3, 5, 7, 8, 10, 14, 17, 19, 22, 23, 26, 27, 30]);
 
-// 自己モニタリング尺度 (SMS) 10設問の逆転項目 (Q31〜Q40): Q33, Q39
-const SMS_REVERSE_ITEMS = new Set([33, 39]);
-
-// 社会的望ましさ尺度 (SDS) 10設問の逆転項目 (Q41〜Q50): Q42, Q45, Q47, Q49
-const SDS_REVERSE_ITEMS = new Set([42, 45, 47, 49]);
+// 社会的望ましさ尺度 (SDS) 10設問の逆転項目 (Q31〜Q40): Q32, Q35, Q37, Q39
+const SDS_REVERSE_ITEMS = new Set([32, 35, 37, 39]);
 
 const QUESTION_LABELS: Record<number, string> = {
   1: 'Q01_無口な方だ(E_逆)',
@@ -43,30 +40,17 @@ const QUESTION_LABELS: Record<number, string> = {
   30: 'Q30_創造性がほとんどない(O_逆)'
 };
 
-const SMS_LABELS: Record<number, string> = {
-  31: 'SMS_Q01_他者感情の察知(感受性)',
-  32: 'SMS_Q02_状況への柔軟な適応(変容)',
-  33: 'SMS_Q03_素のままの行動貫徹(変容_逆)',
-  34: 'SMS_Q04_相手からの印象への関心(感受性)',
-  35: 'SMS_Q05_態度自己呈示の演じ分け(変容)',
-  36: 'SMS_Q06_他者の本音への敏感さ(感受性)',
-  37: 'SMS_Q07_求められる役割の遂行(変容)',
-  38: 'SMS_Q08_声のトーン等の察知(感受性)',
-  39: 'SMS_Q09_同調回避自律性(変容_逆)',
-  40: 'SMS_Q10_周囲の動向観察(感受性)'
-};
-
 const SDS_LABELS: Record<number, string> = {
-  41: 'SDS_Q01_他者欠点への不怒',
-  42: 'SDS_Q02_思い通りにならない時の不機嫌(逆)',
-  43: 'SDS_Q03_過ちの即座受容',
-  44: 'SDS_Q04_噂話悪口の完全拒絶',
-  45: 'SDS_Q05_断りの口実模索(逆)',
-  46: 'SDS_Q06_普遍的公平親切',
-  47: 'SDS_Q07_知ったかぶりの経験(逆)',
-  48: 'SDS_Q08_時間締切の完全厳守',
-  49: 'SDS_Q09_お礼の失念(逆)',
-  50: 'SDS_Q10_感情的言動の完全皆無'
+  31: 'SDS_Q01_他者欠点への不怒',
+  32: 'SDS_Q02_思い通りにならない時の不機嫌(逆)',
+  33: 'SDS_Q03_過ちの即座受容',
+  34: 'SDS_Q04_噂話悪口の完全拒絶',
+  35: 'SDS_Q05_断りの口実模索(逆)',
+  36: 'SDS_Q06_普遍的公平親切',
+  37: 'SDS_Q07_知ったかぶりの経験(逆)',
+  38: 'SDS_Q08_時間締切の完全厳守',
+  39: 'SDS_Q09_お礼の失念(逆)',
+  40: 'SDS_Q10_感情的言動の完全皆無'
 };
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
@@ -105,7 +89,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
           ai_openness, ai_conscientiousness, ai_extraversion, ai_agreeableness, ai_neuroticism,
           survey_scale_type, survey_scale_name,
           survey_openness, survey_conscientiousness, survey_extraversion, survey_agreeableness, survey_neuroticism,
-          survey_self_monitoring, survey_social_desirability,
+          survey_social_desirability,
           survey_completed_at,
           COALESCE(r2_saved, 0) AS r2_saved, r2_key,
           chat_messages, ai_full_result, survey_raw_answers
@@ -118,7 +102,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
           ai_openness, ai_conscientiousness, ai_extraversion, ai_agreeableness, ai_neuroticism,
           survey_scale_type, survey_scale_name,
           survey_openness, survey_conscientiousness, survey_extraversion, survey_agreeableness, survey_neuroticism,
-          survey_self_monitoring, survey_social_desirability,
+          survey_social_desirability,
           survey_completed_at,
           COALESCE(r2_saved, 0) AS r2_saved, r2_key,
           ai_full_result, survey_raw_answers
@@ -163,8 +147,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       'Survey_Agreeableness',
       'Survey_EmotionalStability',
       'Survey_Neuroticism',
-      // 質問紙 追加尺度 (自己モニタリング & 社会的望ましさ 0-100正規化)
-      'Survey_SelfMonitoring',
+      // 質問紙 追加尺度 (社会的望ましさ 0-100正規化)
       'Survey_SocialDesirability',
       // AI妥当性指標 (建前・社会的望ましさ度) & 差分
       'AI_Val_SocialDesirability',
@@ -222,10 +205,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       ...Array.from({ length: 30 }, (_, i) => `BFI_Q${String(i + 1).padStart(2, '0')}`),
       // BFI-2-S 30設問 反転後得点 (1-5)
       ...Array.from({ length: 30 }, (_, i) => `BFI_Q${String(i + 1).padStart(2, '0')}_Scored`),
-      // 自己モニタリング尺度 (SMS) 10設問 生回答 & 反転後得点 (Q31-Q40)
-      ...Array.from({ length: 10 }, (_, i) => `SMS_Q${String(i + 1).padStart(2, '0')}`),
-      ...Array.from({ length: 10 }, (_, i) => `SMS_Q${String(i + 1).padStart(2, '0')}_Scored`),
-      // 社会的望ましさ尺度 (SDS) 10設問 生回答 & 反転後得点 (Q41-Q50)
+      // 社会的望ましさ尺度 (SDS) 10設問 生回答 & 反転後得点 (Q31-Q40)
       ...Array.from({ length: 10 }, (_, i) => `SDS_Q${String(i + 1).padStart(2, '0')}`),
       ...Array.from({ length: 10 }, (_, i) => `SDS_Q${String(i + 1).padStart(2, '0')}_Scored`),
       'R2_Saved',
@@ -261,7 +241,6 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       Survey_Agreeableness: '質問紙協調性スコア (0-100)',
       Survey_EmotionalStability: '質問紙情緒安定性スコア (0-100, 高=安定)',
       Survey_Neuroticism: '質問紙神経症傾向スコア (0-100, 高=敏感/不安)',
-      Survey_SelfMonitoring: '質問紙自己モニタリングスコア (0-100, 高=他者感受・自己呈示変容高)',
       Survey_SocialDesirability: '質問紙社会的望ましさスコア (0-100, 高=模範解答・建前バイアス高)',
       AI_Val_SocialDesirability: 'AI推定社会的望ましさ偏重度 (0-100, 対話妥当性チェック)',
       Diff_SocialDesirability: '社会的望ましさ差分 (AI - 質問紙)',
@@ -322,13 +301,6 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
     for (let i = 1; i <= 10; i++) {
       const globalId = 30 + i;
-      const qKey = `SMS_Q${String(i).padStart(2, '0')}`;
-      varLabels[qKey] = SMS_LABELS[globalId] || `自己モニタリング設問${i}`;
-      varLabels[`${qKey}_Scored`] = `自己モニタリング設問${i}_反転後得点(1-5)`;
-    }
-
-    for (let i = 1; i <= 10; i++) {
-      const globalId = 40 + i;
       const qKey = `SDS_Q${String(i).padStart(2, '0')}`;
       varLabels[qKey] = SDS_LABELS[globalId] || `社会的望ましさ設問${i}`;
       varLabels[`${qKey}_Scored`] = `社会的望ましさ設問${i}_反転後得点(1-5)`;
@@ -387,13 +359,13 @@ VALUE LABELS
   /R2_Saved
     0 '未保存'
     1 '保存済'
-  /${Array.from({ length: 30 }, (_, i) => `BFI_Q${String(i + 1).padStart(2, '0')}`).join(' ')} ${Array.from({ length: 10 }, (_, i) => `SMS_Q${String(i + 1).padStart(2, '0')}`).join(' ')} ${Array.from({ length: 10 }, (_, i) => `SDS_Q${String(i + 1).padStart(2, '0')}`).join(' ')}
+  /${Array.from({ length: 30 }, (_, i) => `BFI_Q${String(i + 1).padStart(2, '0')}`).join(' ')} ${Array.from({ length: 10 }, (_, i) => `SDS_Q${String(i + 1).padStart(2, '0')}`).join(' ')}
     1 '全くあてはまらない'
     2 'あまりあてはまらない'
     3 'どちらともいえない'
     4 'ややあてはまる'
     5 'とてもよくあてはまる'
-  /${Array.from({ length: 30 }, (_, i) => `BFI_Q${String(i + 1).padStart(2, '0')}_Scored`).join(' ')} ${Array.from({ length: 10 }, (_, i) => `SMS_Q${String(i + 1).padStart(2, '0')}_Scored`).join(' ')} ${Array.from({ length: 10 }, (_, i) => `SDS_Q${String(i + 1).padStart(2, '0')}_Scored`).join(' ')}
+  /${Array.from({ length: 30 }, (_, i) => `BFI_Q${String(i + 1).padStart(2, '0')}_Scored`).join(' ')} ${Array.from({ length: 10 }, (_, i) => `SDS_Q${String(i + 1).padStart(2, '0')}_Scored`).join(' ')}
     1 '低特性'
     2 'やや低'
     3 '中程度'
@@ -516,8 +488,7 @@ EXECUTE.
         Survey_EmotionalStability: surveyES,
         Survey_Neuroticism: surveyN,
 
-        // 質問紙 追加尺度 (自己モニタリング & 社会的望ましさ)
-        Survey_SelfMonitoring: row.survey_self_monitoring != null ? Math.round(row.survey_self_monitoring) : '',
+        // 質問紙 追加尺度 (社会的望ましさ)
         Survey_SocialDesirability: row.survey_social_desirability != null ? Math.round(row.survey_social_desirability) : '',
 
         // AI妥当性指標 (建前・社会的望ましさ度) & 差分
@@ -600,23 +571,9 @@ EXECUTE.
         }
       }
 
-      // 自己モニタリング尺度 (SMS) 10問 (Q31-Q40)
+      // 社会的望ましさ尺度 (SDS) 10問 (Q31-Q40)
       for (let i = 1; i <= 10; i++) {
         const globalId = 30 + i;
-        const raw = parsedAnswers[globalId];
-        const qKey = `SMS_Q${String(i).padStart(2, '0')}`;
-        if (raw != null && raw >= 1 && raw <= 5) {
-          record[qKey] = raw;
-          record[`${qKey}_Scored`] = SMS_REVERSE_ITEMS.has(globalId) ? 6 - raw : raw;
-        } else {
-          record[qKey] = '';
-          record[`${qKey}_Scored`] = '';
-        }
-      }
-
-      // 社会的望ましさ尺度 (SDS) 10問 (Q41-Q50)
-      for (let i = 1; i <= 10; i++) {
-        const globalId = 40 + i;
         const raw = parsedAnswers[globalId];
         const qKey = `SDS_Q${String(i).padStart(2, '0')}`;
         if (raw != null && raw >= 1 && raw <= 5) {

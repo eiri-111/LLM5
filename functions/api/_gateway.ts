@@ -2388,7 +2388,6 @@ export async function ensureDbSchema(db: D1Database): Promise<void> {
         survey_extraversion REAL,
         survey_agreeableness REAL,
         survey_neuroticism REAL,
-        survey_self_monitoring REAL,
         survey_social_desirability REAL,
         survey_completed_at TEXT,
         r2_saved INTEGER DEFAULT 0,
@@ -2397,7 +2396,6 @@ export async function ensureDbSchema(db: D1Database): Promise<void> {
     `).run();
 
     try { await db.prepare(`ALTER TABLE assessment_sessions ADD COLUMN session_token TEXT`).run(); } catch (_) {}
-    try { await db.prepare(`ALTER TABLE assessment_sessions ADD COLUMN survey_self_monitoring REAL`).run(); } catch (_) {}
     try { await db.prepare(`ALTER TABLE assessment_sessions ADD COLUMN survey_social_desirability REAL`).run(); } catch (_) {}
     try { await db.prepare(`ALTER TABLE assessment_sessions ADD COLUMN r2_saved INTEGER DEFAULT 0`).run(); } catch (_) {}
     try { await db.prepare(`ALTER TABLE assessment_sessions ADD COLUMN r2_key TEXT`).run(); } catch (_) {}

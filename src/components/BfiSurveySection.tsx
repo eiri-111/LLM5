@@ -1,11 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ArrowRight, ArrowLeft, RotateCcw, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, ArrowLeft, RotateCcw } from 'lucide-react';
 import { SurveyResult } from '../types';
 import { BFI_2_S_CONFIG, calculateBfiScores, calculateBfiFacetScores } from '../data/bfi2s';
 import {
-  SELF_MONITORING_CONFIG,
   SOCIAL_DESIRABILITY_CONFIG,
-  calculateSelfMonitoringScore,
   calculateSocialDesirabilityScore
 } from '../data/additionalScales';
 
@@ -20,7 +18,7 @@ interface BfiSurveySectionProps {
 export interface UnifiedSurveyQuestion {
   id: number;
   text: string;
-  scaleType: 'bfi' | 'self_monitoring' | 'social_desirability';
+  scaleType: 'bfi' | 'social_desirability';
   concept?: string;
   promptPrefix?: string;
 }
@@ -51,7 +49,7 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
   const [currentPage, setCurrentPage] = useState<number>(0);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // 全50問の設問リストを構築
+  // 全40問の設問リストを構築
   const allQuestions: UnifiedSurveyQuestion[] = useMemo(() => {
     const list: UnifiedSurveyQuestion[] = [];
     // 1. BFI-2-S (Q1〜Q30)
@@ -64,16 +62,7 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
         promptPrefix: '私は普段、'
       });
     });
-    // 2. 自己モニタリング尺度 (Q31〜Q40)
-    SELF_MONITORING_CONFIG.questions.forEach(q => {
-      list.push({
-        id: q.id,
-        text: q.text,
-        scaleType: 'self_monitoring',
-        concept: q.conceptLabel
-      });
-    });
-    // 3. 社会的望ましさ尺度 (Q41〜Q50)
+    // 2. 社会的望ましさ尺度 (Q31〜Q40)
     SOCIAL_DESIRABILITY_CONFIG.questions.forEach(q => {
       list.push({
         id: q.id,
@@ -85,15 +74,14 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
     return list;
   }, []);
 
-  const totalQuestions = allQuestions.length; // 50問
+  const totalQuestions = allQuestions.length; // 40問
 
-  // ページごとの設問分割 (各10問 x 5ページ)
+  // ページごとの設問分割 (各10問 x 4ページ)
   // ページ0: BFI Q1-10
   // ページ1: BFI Q11-20
   // ページ2: BFI Q21-30
-  // ページ3: 自己モニタリング Q31-40
-  // ページ4: 社会的望ましさ Q41-50
-  const totalPages = 5;
+  // ページ3: 社会的望ましさ Q31-40
+  const totalPages = 4;
 
   const currentQuestions = useMemo(() => {
     const start = currentPage * 10;
@@ -115,19 +103,12 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
         instruction: 'ここには、あなた自身に当てはまるかもしれない、あるいは当てはまらないかもしれない特徴が並んでいます。それぞれの項目について、「私は普段、〜だと思う」という文にどの程度同意するか、最も当てはまる選択肢を1つ選んでください。',
         badge: 'ビッグファイブ 5因子・15ファセット測定'
       };
-    } else if (currentPage === 3) {
-      return {
-        blockNumber: 'ブロック 2-B',
-        title: '対人行動・自己調整スタイルに関する質問 (改訂自己モニタリング尺度 RSMS)',
-        instruction: 'ここには、対人関係や日常のコミュニケーションにおける振る舞い方に関する項目が並んでいます。それぞれの文があなた自身の普段の行動や考え方にどの程度あてはまるか、最も当てはまる選択肢を1つ選んでください。',
-        badge: '他者感受性・自己呈示変容能力の測定'
-      };
     } else {
       return {
-        blockNumber: 'ブロック 2-C',
+        blockNumber: 'ブロック 2-B',
         title: '日常の行動・態度に関する質問 (Marlowe-Crowne 社会的望ましさ尺度 MCSDS)',
         instruction: 'ここには、日常生活での様々な出来事に対する態度や行動に関する項目が並んでいます。誰にでも起こりうることや感じることが含まれていますので、良く見せようとせず、普段の率直なご自身を振り返ってお答えください。',
-        badge: '自己報告バイアス・模範解答傾向の測定'
+        badge: '自己報告バイアス・模範解答傾向の客観測定'
       };
     }
   }, [currentPage]);
@@ -181,17 +162,15 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
   const buildSurveyResult = (ans: Record<number, number>): SurveyResult => {
     const scores = calculateBfiScores(ans);
     const facetScores = calculateBfiFacetScores(ans);
-    const selfMonitoring = calculateSelfMonitoringScore(ans);
     const socialDesirability = calculateSocialDesirabilityScore(ans);
     const completedAt = new Date().toISOString();
 
     return {
-      scaleType: 'bfi-2-s_sms_sds',
-      scaleName: 'BFI-2-S / 自己モニタリング / 社会的望ましさ',
+      scaleType: 'bfi-2-s_sds',
+      scaleName: 'BFI-2-S / 社会的望ましさ (MCSDS)',
       rawAnswers: ans,
       scores,
       facetScores,
-      selfMonitoring,
       socialDesirability,
       completedAt
     };
@@ -233,7 +212,7 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
       localStorage.setItem('llm5_survey_answers', JSON.stringify(sampleAnswers));
       localStorage.setItem('llm5_bfi_answers', JSON.stringify(sampleAnswers));
     } catch (_) {}
-    showToast('全50問にテスト回答を入力しました');
+    showToast('全40問にテスト回答を入力しました');
   };
 
   const handleSkipDirectlyToResult = () => {
@@ -500,7 +479,7 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
               disabled={!isAllAnswered || isSubmitting}
               className="qualtrics-nav-btn"
             >
-              <span>{isSubmitting ? '集計・照合中...' : '全50問回答完了・結果を見る'}</span>
+              <span>{isSubmitting ? '集計・照合中...' : '全40問回答完了・結果を見る'}</span>
               <ArrowRight size={16} />
             </button>
           )}

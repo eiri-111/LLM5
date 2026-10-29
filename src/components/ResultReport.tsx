@@ -383,146 +383,81 @@ export const ResultReport: React.FC<ResultReportProps> = ({
         </p>
       </div>
 
-      {/* 質問紙測定尺度 (自己モニタリング & 社会的望ましさ) とAI対話の照合セクション */}
-      {surveyResult && (surveyResult.selfMonitoring || surveyResult.socialDesirability) && (
-        <div className="insight-block" style={{ borderLeft: '4px solid #6366f1', backgroundColor: '#fcfdff' }}>
+      {/* 質問紙測定尺度 (社会的望ましさ尺度) とAI対話の照合セクション */}
+      {surveyResult && surveyResult.socialDesirability && (
+        <div className="insight-block" style={{ borderLeft: '4px solid #ea580c', backgroundColor: '#fcfdff' }}>
           <h3 className="card-section-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
-            <span>9. 心理測定質問紙（自己モニタリング & 社会的望ましさ）照合分析</span>
-            <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#4338ca', backgroundColor: '#eef2ff', padding: '2px 8px', borderRadius: 12 }}>
-              RSMS-10 & MCSDS-10
+            <span>9. 心理測定質問紙（社会的望ましさ尺度 MCSDS）照合分析</span>
+            <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#c2410c', backgroundColor: '#ffedd5', padding: '2px 8px', borderRadius: 12 }}>
+              MCSDS-10
             </span>
           </h3>
           <p style={{ fontSize: '0.82rem', color: '#4b5563', marginBottom: '1rem', lineHeight: 1.6 }}>
-            対話AIによる発話傾向推定だけでなく、標準化された心理測定質問紙によって「対人適応スタイル（自己モニタリング）」および「模範解答・建前傾向（社会的望ましさ）」を客観測定し、AIプロファイリングと照合した結果です。
+            対話AIによる発話傾向推定だけでなく、標準化された心理測定質問紙（Marlowe-Crowne SDS）によって「模範解答・建前バイアス」を客観測定し、AIプロファイリングと照合した結果です。
           </p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', marginBottom: '0.75rem' }}>
-            {/* 自己モニタリング尺度カード */}
-            {surveyResult.selfMonitoring && (
-              <div style={{ backgroundColor: '#ffffff', border: '1px solid #e0e7ff', borderRadius: '8px', padding: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.5rem' }}>
-                  <span style={{ fontSize: '0.86rem', fontWeight: 700, color: '#1e1b4b' }}>
-                    自己モニタリング尺度 (RSMS)
-                  </span>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#4f46e5' }}>
-                      {surveyResult.selfMonitoring.normalizedScore}
-                    </span>
-                    <span style={{ fontSize: '0.75rem', color: '#6b7280', marginLeft: '2px' }}>/100点</span>
-                    <span style={{ fontSize: '0.72rem', color: '#9ca3af', marginLeft: '6px' }}>
-                      (平均 {surveyResult.selfMonitoring.rawMean}点)
-                    </span>
-                  </div>
-                </div>
-
-                <div className="progress-rail" style={{ height: '6px', backgroundColor: '#e5e7eb', marginBottom: '0.75rem' }}>
-                  <div
-                    className="progress-fill"
-                    style={{ width: `${surveyResult.selfMonitoring.normalizedScore}%`, backgroundColor: '#4f46e5', height: '100%' }}
-                  />
-                </div>
-
-                {surveyResult.selfMonitoring.subscores && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.65rem' }}>
-                    <div style={{ backgroundColor: '#f5f3ff', padding: '0.4rem 0.6rem', borderRadius: '4px' }}>
-                      <div style={{ fontSize: '0.7rem', color: '#6d28d9' }}>他者感情への感受性</div>
-                      <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#5b21b6' }}>
-                        {surveyResult.selfMonitoring.subscores.sensitivity}点
-                      </div>
-                    </div>
-                    <div style={{ backgroundColor: '#f5f3ff', padding: '0.4rem 0.6rem', borderRadius: '4px' }}>
-                      <div style={{ fontSize: '0.7rem', color: '#6d28d9' }}>自己呈示の変容能力</div>
-                      <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#5b21b6' }}>
-                        {surveyResult.selfMonitoring.subscores.ability}点
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div style={{ fontSize: '0.78rem', color: '#374151', lineHeight: 1.55 }}>
-                  {surveyResult.selfMonitoring.normalizedScore >= 60 ? (
-                    <>
-                      <strong>【高自己モニタリング傾向】</strong>
-                      周囲の空気や相手の期待を鋭敏に察知し、場にふさわしい振る舞いへ柔軟に適応できる対人スキルの高さを持っています。架空場面（SJT）では模範的な対応をとる一方、過去の実体験（STAR）では素直な葛藤が現れるなど、状況に応じた使い分けが明確なタイプです。
-                    </>
-                  ) : surveyResult.selfMonitoring.normalizedScore <= 40 ? (
-                    <>
-                      <strong>【低自己モニタリング傾向】</strong>
-                      他者の目や周囲の同調圧力に左右されず、自分自身の信念や素の感情に忠実で一貫した行動をとる実直なタイプです。架空状況での判断（SJT）と過去の実践行動（STAR）の乖離が極めて小さく、表裏のない言行一致の姿勢が特徴です。
-                    </>
-                  ) : (
-                    <>
-                      <strong>【バランス型自己モニタリング】</strong>
-                      自分本来のスタンスを保ちつつも、必要な場面では相手に配慮した行動をとることができる適度な柔軟性と自己一貫性を兼ね備えています。
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-
+          <div style={{ maxWidth: '640px', margin: '0 auto', marginBottom: '0.75rem' }}>
             {/* 社会的望ましさ尺度カード */}
-            {surveyResult.socialDesirability && (
-              <div style={{ backgroundColor: '#ffffff', border: '1px solid #fed7aa', borderRadius: '8px', padding: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.5rem' }}>
-                  <span style={{ fontSize: '0.86rem', fontWeight: 700, color: '#7c2d12' }}>
-                    社会的望ましさ尺度 (MCSDS)
+            <div style={{ backgroundColor: '#ffffff', border: '1px solid #fed7aa', borderRadius: '8px', padding: '1.15rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.5rem' }}>
+                <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#7c2d12' }}>
+                  社会的望ましさ尺度 (MCSDS)
+                </span>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontSize: '1.35rem', fontWeight: 800, color: '#ea580c' }}>
+                    {surveyResult.socialDesirability.normalizedScore}
                   </span>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#ea580c' }}>
-                      {surveyResult.socialDesirability.normalizedScore}
-                    </span>
-                    <span style={{ fontSize: '0.75rem', color: '#6b7280', marginLeft: '2px' }}>/100点</span>
-                    <span style={{ fontSize: '0.72rem', color: '#9ca3af', marginLeft: '6px' }}>
-                      (平均 {surveyResult.socialDesirability.rawMean}点)
-                    </span>
-                  </div>
-                </div>
-
-                <div className="progress-rail" style={{ height: '6px', backgroundColor: '#e5e7eb', marginBottom: '0.75rem' }}>
-                  <div
-                    className="progress-fill"
-                    style={{ width: `${surveyResult.socialDesirability.normalizedScore}%`, backgroundColor: '#ea580c', height: '100%' }}
-                  />
-                </div>
-
-                {/* AI対話推定建前度との照合 */}
-                {result.clef_scoring_data?.multidirectional?.validity_checks && (
-                  <div style={{ backgroundColor: '#fff7ed', border: '1px solid #ffedd5', padding: '0.5rem 0.65rem', borderRadius: '6px', marginBottom: '0.65rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.72rem', color: '#9a3412', fontWeight: 600 }}>
-                        AI対話推定 建前偏重度
-                      </span>
-                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c2410c' }}>
-                        {Math.round(result.clef_scoring_data.multidirectional.validity_checks.social_desirability * 100)}%
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '0.7rem', color: '#7c2d12', marginTop: '2px' }}>
-                      質問紙測定値との乖離差: {Math.abs(Math.round(result.clef_scoring_data.multidirectional.validity_checks.social_desirability * 100) - surveyResult.socialDesirability.normalizedScore)}点
-                      {Math.abs(Math.round(result.clef_scoring_data.multidirectional.validity_checks.social_desirability * 100) - surveyResult.socialDesirability.normalizedScore) <= 15 ? '（高度に一致）' : '（対話と質問紙で差異あり）'}
-                    </div>
-                  </div>
-                )}
-
-                <div style={{ fontSize: '0.78rem', color: '#374151', lineHeight: 1.55 }}>
-                  {surveyResult.socialDesirability.normalizedScore >= 65 ? (
-                    <>
-                      <strong>【社会的承認欲求・規範志向】</strong>
-                      「常に立派でありたい」「他人に迷惑をかけたくない」という社会的規範意識が高く、アンケートや面接で模範的な回答を選びやすい傾向があります。AI対話分析ではこのバイアスを数理的に縮小補正して客観スコアを算出しています。
-                    </>
-                  ) : surveyResult.socialDesirability.normalizedScore <= 35 ? (
-                    <>
-                      <strong>【高い率直性・自己受容】</strong>
-                      自分の弱点や不完全さ、人間らしいネガティブな感情を隠さず素直に認めることができる高いオープンさを持っています。自己報告バイアスが極めて低く、データの信頼性が非常に高い状態です。
-                    </>
-                  ) : (
-                    <>
-                      <strong>【自然体・適度な客観性】</strong>
-                      過度な取り繕いもなく、極端な自己卑下もない、極めて自然体で率直な回答姿勢です。
-                    </>
-                  )}
+                  <span style={{ fontSize: '0.75rem', color: '#6b7280', marginLeft: '2px' }}>/100点</span>
+                  <span style={{ fontSize: '0.72rem', color: '#9ca3af', marginLeft: '6px' }}>
+                    (平均 {surveyResult.socialDesirability.rawMean}点)
+                  </span>
                 </div>
               </div>
-            )}
+
+              <div className="progress-rail" style={{ height: '6px', backgroundColor: '#e5e7eb', marginBottom: '0.85rem' }}>
+                <div
+                  className="progress-fill"
+                  style={{ width: `${surveyResult.socialDesirability.normalizedScore}%`, backgroundColor: '#ea580c', height: '100%' }}
+                />
+              </div>
+
+              {/* AI対話推定建前度との照合 */}
+              {result.clef_scoring_data?.multidirectional?.validity_checks && (
+                <div style={{ backgroundColor: '#fff7ed', border: '1px solid #ffedd5', padding: '0.6rem 0.75rem', borderRadius: '6px', marginBottom: '0.75rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.75rem', color: '#9a3412', fontWeight: 600 }}>
+                      AI対話推定 建前偏重度
+                    </span>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#c2410c' }}>
+                      {Math.round(result.clef_scoring_data.multidirectional.validity_checks.social_desirability * 100)}%
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#7c2d12', marginTop: '3px' }}>
+                    質問紙測定値との乖離差: {Math.abs(Math.round(result.clef_scoring_data.multidirectional.validity_checks.social_desirability * 100) - surveyResult.socialDesirability.normalizedScore)}点
+                    {Math.abs(Math.round(result.clef_scoring_data.multidirectional.validity_checks.social_desirability * 100) - surveyResult.socialDesirability.normalizedScore) <= 15 ? '（高度に一致）' : '（対話と質問紙で差異あり）'}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ fontSize: '0.8rem', color: '#374151', lineHeight: 1.6 }}>
+                {surveyResult.socialDesirability.normalizedScore >= 65 ? (
+                  <>
+                    <strong>【社会的承認欲求・規範志向】</strong>
+                    「常に立派でありたい」「他人に迷惑をかけたくない」という社会的規範意識が高く、アンケートや面接で模範的な回答を選びやすい傾向があります。AI対話分析ではこのバイアスを数理的に縮小補正して客観スコアを算出しています。
+                  </>
+                ) : surveyResult.socialDesirability.normalizedScore <= 35 ? (
+                  <>
+                    <strong>【高い率直性・自己受容】</strong>
+                    自分の弱点や不完全さ、人間らしいネガティブな感情を隠さず素直に認めることができる高いオープンさを持っています。自己報告バイアスが極めて低く、データの信頼性が非常に高い状態です。
+                  </>
+                ) : (
+                  <>
+                    <strong>【自然体・適度な客観性】</strong>
+                    過度な取り繕いもなく、極端な自己卑下もない、極めて自然体で率直な回答姿勢です。
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

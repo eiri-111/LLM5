@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS assessment_sessions (
   ai_full_result TEXT,                        -- JSON: AI分析結果フルデータ
 
   -- 心理測定尺度（質問紙アンケート）
-  survey_scale_type TEXT,                     -- 'bfi-2-s' | 'bfi-2-s_sms_sds'
+  survey_scale_type TEXT,                     -- 'bfi-2-s' | 'bfi-2-s_sds'
   survey_scale_name TEXT,                     -- 尺度名称
   survey_raw_answers TEXT,                    -- JSON: 設問ごとの回答 { "1": 5, "2": 3, ... }
   survey_openness REAL,                       -- 尺度スコア 開放性 (0〜100正規化)
@@ -33,7 +33,6 @@ CREATE TABLE IF NOT EXISTS assessment_sessions (
   survey_extraversion REAL,                   -- 尺度スコア 外向性 (0〜100正規化)
   survey_agreeableness REAL,                  -- 尺度スコア 協調性 (0〜100正規化)
   survey_neuroticism REAL,                    -- 尺度スコア 情緒不安定性/神経症傾向 (0〜100正規化)
-  survey_self_monitoring REAL,                -- 尺度スコア 自己モニタリング (0〜100正規化)
   survey_social_desirability REAL,            -- 尺度スコア 社会的望ましさ (0〜100正規化)
   survey_completed_at TEXT,                   -- 質問紙完了日時 (ISO8601)
 

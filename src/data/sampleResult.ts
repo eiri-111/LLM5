@@ -25,8 +25,8 @@ export const SAMPLE_CHAT_MESSAGES: ChatMessage[] = [
 ];
 
 export const SAMPLE_SURVEY_RESULT: SurveyResult = {
-  scaleType: 'bfi-2-s_sms_sds',
-  scaleName: 'BFI-2-S / 自己モニタリング / 社会的望ましさ',
+  scaleType: 'bfi-2-s_sds',
+  scaleName: 'BFI-2-S / 社会的望ましさ (MCSDS)',
   rawAnswers: {
     1: 2, 2: 5, 3: 2, 4: 2, 5: 1,
     6: 4, 7: 2, 8: 2, 9: 2, 10: 1,
@@ -34,12 +34,9 @@ export const SAMPLE_SURVEY_RESULT: SurveyResult = {
     16: 4, 17: 1, 18: 4, 19: 4, 20: 5,
     21: 3, 22: 1, 23: 2, 24: 2, 25: 4,
     26: 2, 27: 1, 28: 4, 29: 2, 30: 1,
-    // 自己モニタリング (Q31〜Q40)
-    31: 4, 32: 4, 33: 2, 34: 3, 35: 4,
-    36: 4, 37: 3, 38: 4, 39: 2, 40: 4,
-    // 社会的望ましさ (Q41〜Q50)
-    41: 2, 42: 3, 43: 4, 44: 2, 45: 3,
-    46: 4, 47: 2, 48: 3, 49: 2, 50: 2
+    // 社会的望ましさ (Q31〜Q40)
+    31: 2, 32: 3, 33: 4, 34: 2, 35: 3,
+    36: 4, 37: 2, 38: 3, 39: 2, 40: 2
   },
   scores: {
     openness: { rawMean: 4.5, normalizedScore: 88 },
@@ -47,14 +44,6 @@ export const SAMPLE_SURVEY_RESULT: SurveyResult = {
     extraversion: { rawMean: 3.5, normalizedScore: 63 },
     agreeableness: { rawMean: 4.5, normalizedScore: 88 },
     neuroticism: { rawMean: 2.0, normalizedScore: 75 } // 情緒安定性
-  },
-  selfMonitoring: {
-    rawMean: 3.8,
-    normalizedScore: 70,
-    subscores: {
-      ability: 68,
-      sensitivity: 72
-    }
   },
   socialDesirability: {
     rawMean: 2.8,

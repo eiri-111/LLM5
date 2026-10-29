@@ -242,7 +242,7 @@ export const App: React.FC = () => {
    */
   const handleStartSurvey = async (messages: ChatMessage[]) => {
     setChatMessages(messages);
-    showToast('心理測定アンケート（BFI-2-S・自己モニタリング・社会的望ましさ）へ進みます');
+    showToast('心理測定アンケート（BFI-2-S・社会的望ましさ）へ進みます');
 
     // 1. localStorage にセッション情報を退避
     try {
@@ -381,7 +381,7 @@ export const App: React.FC = () => {
 
       setPhase('result');
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      showToast('AI対話推定と質問紙スコア（性格・自己モニタリング・社会的望ましさ）を照合しました！');
+      showToast('AI対話推定と質問紙スコア（性格・社会的望ましさ）を照合しました！');
     } else {
       // 分析結果が生成できなかった場合は、ダミーにすり替えず明示的にエラーを表示
       setAnalysisError('AI性格分析の生成・取得ができませんでした。AI Gatewayの接続状態をご確認のうえ、もう一度お試しください。');

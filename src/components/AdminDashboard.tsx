@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { AdminSessionRecord, ChatMessage, AnalysisResult } from '../types';
 import { BFI_2_S_CONFIG } from '../data/bfi2s';
-import { SELF_MONITORING_CONFIG, SOCIAL_DESIRABILITY_CONFIG } from '../data/additionalScales';
+import { SOCIAL_DESIRABILITY_CONFIG } from '../data/additionalScales';
 import {
   Download,
   RefreshCw,
@@ -59,7 +59,6 @@ type SortField =
   | 'survey_extraversion'
   | 'survey_agreeableness'
   | 'survey_neuroticism'
-  | 'survey_self_monitoring'
   | 'survey_social_desirability';
 
 type SortDirection = 'asc' | 'desc';
@@ -843,7 +842,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToApp }) =
                         </>
                       )}
 
-                      {/* 主要変数ビュー / 全変数ビュー: 質問紙 5因子 + 追加尺度 */}
+                      {/* 主要変数ビュー / 全変数ビュー: 質問紙 5因子 + 社会的望ましさ */}
                       {(tableViewMode === 'standard' || tableViewMode === 'all') && (
                         <>
                           <th onClick={() => handleSort('survey_openness')} className="py-2.5 px-2.5 border-r border-slate-200 text-right text-slate-800 bg-slate-100 cursor-pointer whitespace-nowrap">Surv_O</th>
@@ -851,7 +850,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToApp }) =
                           <th onClick={() => handleSort('survey_extraversion')} className="py-2.5 px-2.5 border-r border-slate-200 text-right text-slate-800 bg-slate-100 cursor-pointer whitespace-nowrap">Surv_E</th>
                           <th onClick={() => handleSort('survey_agreeableness')} className="py-2.5 px-2.5 border-r border-slate-200 text-right text-slate-800 bg-slate-100 cursor-pointer whitespace-nowrap">Surv_A</th>
                           <th onClick={() => handleSort('survey_neuroticism')} className="py-2.5 px-2.5 border-r border-slate-200 text-right text-slate-800 bg-slate-100 cursor-pointer whitespace-nowrap">Surv_N</th>
-                          <th onClick={() => handleSort('survey_self_monitoring')} className="py-2.5 px-2.5 border-r border-slate-200 text-right text-indigo-800 bg-indigo-50/60 cursor-pointer whitespace-nowrap" title="自己モニタリング尺度 (0-100)">Surv_SM</th>
                           <th onClick={() => handleSort('survey_social_desirability')} className="py-2.5 px-2.5 border-r border-slate-200 text-right text-amber-900 bg-amber-50/60 cursor-pointer whitespace-nowrap" title="社会的望ましさ尺度 (0-100)">Surv_SD</th>
                         </>
                       )}
@@ -867,23 +865,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToApp }) =
                         </>
                       )}
 
-                      {/* 質問紙設問ビュー / 全変数ビュー: Q01〜Q50 */}
+                      {/* 質問紙設問ビュー / 全変数ビュー: Q01〜Q40 */}
                       {(tableViewMode === 'survey_items' || tableViewMode === 'all') && (
-                        Array.from({ length: 50 }, (_, i) => {
+                        Array.from({ length: 40 }, (_, i) => {
                           const qNum = i + 1;
                           let qTitle = '';
                           if (qNum <= 30) {
                             qTitle = `BFI Q${qNum}: ${BFI_2_S_CONFIG.questions[i]?.text || ''}`;
-                          } else if (qNum <= 40) {
-                            qTitle = `SMS Q${qNum - 30}: ${SELF_MONITORING_CONFIG.questions[qNum - 31]?.text || ''}`;
                           } else {
-                            qTitle = `SDS Q${qNum - 40}: ${SOCIAL_DESIRABILITY_CONFIG.questions[qNum - 41]?.text || ''}`;
+                            qTitle = `SDS Q${qNum - 30}: ${SOCIAL_DESIRABILITY_CONFIG.questions[qNum - 31]?.text || ''}`;
                           }
                           return (
                             <th
                               key={i}
                               className={`py-2 px-2 border-r border-slate-200 text-center font-mono text-[10px] w-9 whitespace-nowrap ${
-                                qNum <= 30 ? 'bg-slate-50' : (qNum <= 40 ? 'bg-indigo-50/50 text-indigo-900' : 'bg-amber-50/50 text-amber-900')
+                                qNum <= 30 ? 'bg-slate-50' : 'bg-amber-50/50 text-amber-900'
                               }`}
                               title={qTitle}
                             >
@@ -1055,9 +1051,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToApp }) =
                                 <td className="py-2 px-2.5 border-r border-slate-200 text-right font-mono text-slate-800 bg-slate-50/50">
                                   {session.survey_neuroticism != null ? Math.round(session.survey_neuroticism) : '-'}
                                 </td>
-                                <td className="py-2 px-2.5 border-r border-slate-200 text-right font-mono font-semibold text-indigo-700 bg-indigo-50/30">
-                                  {session.survey_self_monitoring != null ? Math.round(session.survey_self_monitoring) : '-'}
-                                </td>
                                 <td className="py-2 px-2.5 border-r border-slate-200 text-right font-mono font-semibold text-amber-800 bg-amber-50/30">
                                   {session.survey_social_desirability != null ? Math.round(session.survey_social_desirability) : '-'}
                                 </td>
@@ -1085,15 +1078,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToApp }) =
                               </>
                             )}
 
-                            {/* 質問紙設問 Q01〜Q50 */}
+                            {/* 質問紙設問 Q01〜Q40 */}
                             {(tableViewMode === 'survey_items' || tableViewMode === 'all') && (
-                              Array.from({ length: 50 }, (_, i) => {
+                              Array.from({ length: 40 }, (_, i) => {
                                 const val = answers[i + 1];
                                 return (
                                   <td
                                     key={i}
                                     className={`py-1 px-1 border-r border-slate-200 text-center font-mono text-[11px] ${
-                                      i < 30 ? 'text-slate-700' : (i < 40 ? 'text-indigo-800 bg-indigo-50/20' : 'text-amber-900 bg-amber-50/20')
+                                      i < 30 ? 'text-slate-700' : 'text-amber-900 bg-amber-50/20'
                                     }`}
                                   >
                                     {val != null ? val : '-'}
@@ -1587,33 +1580,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToApp }) =
                     </table>
                   </div>
 
-                  {/* 質問紙 追加尺度スコア (自己モニタリング & 社会的望ましさ) */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="bg-indigo-50/40 border border-indigo-200 rounded p-3">
-                      <div className="flex justify-between items-baseline">
-                        <span className="text-[11px] font-bold text-indigo-900">自己モニタリング尺度 (RSMS)</span>
-                        <span className="font-mono text-sm font-bold text-indigo-700">
-                          {selectedSession.survey_self_monitoring != null ? Math.round(selectedSession.survey_self_monitoring) : '-'}
-                          <span className="text-[10px] text-slate-500 font-normal"> / 100</span>
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-slate-600 mt-1">
-                        他者の表情・感情への感受性と、状況に合わせた自己呈示の変容能力（10項目）。
-                      </p>
+                  {/* 質問紙 追加尺度スコア (社会的望ましさ) */}
+                  <div className="bg-amber-50/40 border border-amber-200 rounded p-3">
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-[11px] font-bold text-amber-900">社会的望ましさ尺度 (MCSDS)</span>
+                      <span className="font-mono text-sm font-bold text-amber-800">
+                        {selectedSession.survey_social_desirability != null ? Math.round(selectedSession.survey_social_desirability) : '-'}
+                        <span className="text-[10px] text-slate-500 font-normal"> / 100</span>
+                      </span>
                     </div>
-
-                    <div className="bg-amber-50/40 border border-amber-200 rounded p-3">
-                      <div className="flex justify-between items-baseline">
-                        <span className="text-[11px] font-bold text-amber-900">社会的望ましさ尺度 (MCSDS)</span>
-                        <span className="font-mono text-sm font-bold text-amber-800">
-                          {selectedSession.survey_social_desirability != null ? Math.round(selectedSession.survey_social_desirability) : '-'}
-                          <span className="text-[10px] text-slate-500 font-normal"> / 100</span>
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-slate-600 mt-1">
-                        社会的に望ましいとされる模範解答・建前への同調バイアス傾向（10項目）。
-                      </p>
-                    </div>
+                    <p className="text-[10px] text-slate-600 mt-1">
+                      社会的に望ましいとされる模範解答・建前への同調バイアス傾向を測定（10項目）。
+                    </p>
                   </div>
 
                   {/* AI分析サマリーカード */}
@@ -1717,56 +1695,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToApp }) =
                           </tbody>
                         </table>
 
-                        {/* 自己モニタリング尺度 (10問) */}
-                        <div className="bg-indigo-50/70 px-3 py-1.5 border-t border-b border-indigo-200 text-indigo-900 font-bold text-[11px] flex justify-between">
-                          <span>改訂自己モニタリング尺度 (RSMS-10: Q31〜Q40)</span>
-                          <span>測定スコア: {selectedSession.survey_self_monitoring != null ? Math.round(selectedSession.survey_self_monitoring) : '-'} / 100</span>
-                        </div>
-                        <table className="w-full text-left text-xs border-collapse">
-                          <thead className="bg-[#f8f9fa] text-slate-700 font-bold border-b border-slate-300 text-[11px]">
-                            <tr>
-                              <th className="py-2 px-3 border-r border-slate-200 text-center w-10">No.</th>
-                              <th className="py-2 px-3 border-r border-slate-200">設問文</th>
-                              <th className="py-2 px-3 border-r border-slate-200 w-28">下位概念</th>
-                              <th className="py-2 px-3 border-r border-slate-200 text-center w-36">回答 (1-5)</th>
-                              <th className="py-2 px-3 text-center w-20">得点(反転後)</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-200">
-                            {SELF_MONITORING_CONFIG.questions.map(q => {
-                              const raw = answers[q.id];
-                              const scored = raw != null ? (q.is_reverse ? 6 - raw : raw) : null;
-                              return (
-                                <tr key={q.id} className="hover:bg-slate-50">
-                                  <td className="py-1.5 px-3 border-r border-slate-200 text-center font-mono font-bold text-indigo-600">
-                                    Q{q.id}
-                                  </td>
-                                  <td className="py-1.5 px-3 border-r border-slate-200 text-slate-800">
-                                    <span>{q.text}</span>
-                                    {q.is_reverse && <span className="ml-1 text-[10px] text-amber-700 font-bold">[反転]</span>}
-                                  </td>
-                                  <td className="py-1.5 px-3 border-r border-slate-200 text-slate-600">
-                                    {q.conceptLabel}
-                                  </td>
-                                  <td className="py-1.5 px-3 border-r border-slate-200 text-center whitespace-nowrap">
-                                    {raw != null ? (
-                                      <span className="font-mono font-bold text-slate-800">
-                                        {raw} <span className="font-normal text-slate-500">({labels[raw]})</span>
-                                      </span>
-                                    ) : <span className="text-slate-400">-</span>}
-                                  </td>
-                                  <td className="py-1.5 px-3 text-center font-mono font-bold text-indigo-700">
-                                    {scored != null ? scored : '-'}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-
                         {/* 社会的望ましさ尺度 (10問) */}
                         <div className="bg-amber-50/70 px-3 py-1.5 border-t border-b border-amber-200 text-amber-900 font-bold text-[11px] flex justify-between">
-                          <span>Marlowe-Crowne 社会的望ましさ尺度 (MCSDS-10: Q41〜Q50)</span>
+                          <span>Marlowe-Crowne 社会的望ましさ尺度 (MCSDS-10: Q31〜Q40)</span>
                           <span>測定スコア: {selectedSession.survey_social_desirability != null ? Math.round(selectedSession.survey_social_desirability) : '-'} / 100</span>
                         </div>
                         <table className="w-full text-left text-xs border-collapse">
