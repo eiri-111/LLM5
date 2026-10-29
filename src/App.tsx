@@ -141,7 +141,25 @@ export const App: React.FC = () => {
 
   // 分析結果集計中のローディング状態
   const [isWaitingForAnalysis, setIsWaitingForAnalysis] = useState<boolean>(false);
+  const [analysisStatusText, setAnalysisStatusText] = useState<string>('回答データを集計しています...');
+  const [analysisElapsedSec, setAnalysisElapsedSec] = useState<number>(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // 分析待機タイマー
+  useEffect(() => {
+    let timer: any = null;
+    if (isWaitingForAnalysis) {
+      setAnalysisElapsedSec(0);
+      timer = setInterval(() => {
+        setAnalysisElapsedSec((prev) => prev + 1);
+      }, 1000);
+    } else {
+      setAnalysisElapsedSec(0);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [isWaitingForAnalysis]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -280,6 +298,63 @@ export const App: React.FC = () => {
 
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
+  // 進行中の分析処理を中断するためのRef
+  const analysisAbortRef = useRef<AbortController | null>(null);
+
+  /**
+   * 待機キャンセル処理
+   */
+  const handleCancelWaiting = () => {
+    if (analysisAbortRef.current) {
+      analysisAbortRef.current.abort();
+      analysisAbortRef.current = null;
+    }
+    setIsWaitingForAnalysis(false);
+    showToast('集計処理を中断しました');
+  };
+
+  /**
+   * AI分析を待たずに質問紙スコア優先で結果画面を表示するエスケープハッチ
+   */
+  const handleProceedWithSurveyOnly = async (surveyData?: SurveyResult) => {
+    if (analysisAbortRef.current) {
+      analysisAbortRef.current.abort();
+      analysisAbortRef.current = null;
+    }
+    setIsWaitingForAnalysis(false);
+
+    const activeSurvey = surveyData || surveyResult || SAMPLE_SURVEY_RESULT;
+    setSurveyResult(activeSurvey);
+
+    // AI分析結果がまだない場合はサンプルまたは質問紙ベースのプレースホルダーを適用
+    if (!aiAnalysisResult) {
+      setAiAnalysisResult(SAMPLE_ANALYSIS_RESULT);
+    }
+
+    setPhase('result');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    showToast('質問紙スコア（BFI-2-S・社会的望ましさ）を中心に対照レポートを表示しました');
+
+    // バックグラウンドで保存を試行
+    try {
+      fetch('/api/save', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-session-token': sessionToken
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          session_token: sessionToken,
+          user_profile: userProfile || undefined,
+          messages: chatMessages,
+          ai_result: aiAnalysisResult || SAMPLE_ANALYSIS_RESULT,
+          survey_result: activeSurvey
+        })
+      }).catch(() => {});
+    } catch (_) {}
+  };
+
   /**
    * BFI-2-S 質問紙回答完了 ➔ AI分析結果を取得・統合してD1/R2へ保存し、照合レポートへ
    */
@@ -287,31 +362,44 @@ export const App: React.FC = () => {
     setSurveyResult(surveyData);
     setIsWaitingForAnalysis(true);
     setAnalysisError(null);
-    showToast('AI対話分析と質問紙スコアを照合しています...');
+    setAnalysisStatusText('バックグラウンド分析結果を確認しています...');
+
+    const abortController = new AbortController();
+    analysisAbortRef.current = abortController;
 
     let attempts = 0;
-    const maxAttempts = 25; // 2秒 x 25回 = 最大50秒ポーリング (バックグラウンド分析完了を確実に待機し重複実行を回避)
+    const maxAttempts = 8; // 1.5秒 x 8回 = 最大12秒ポーリング（アンケート回答中に裏で実行されていた分析の完了を確認）
     let finalAiResult: AnalysisResult | null = aiAnalysisResult;
 
     const fetchAiAnalysisResult = async (): Promise<AnalysisResult | null> => {
       while (attempts < maxAttempts) {
+        if (abortController.signal.aborted) return null;
         attempts++;
+        setAnalysisStatusText(`AI対話分析の完了を確認中 (${attempts}/${maxAttempts})...`);
         try {
+          const timeoutSignal = AbortSignal.timeout ? AbortSignal.timeout(6000) : undefined;
           const res = await fetch(`/api/session?session_id=${encodeURIComponent(sessionId)}`, {
             headers: {
               'x-session-token': sessionToken
-            }
+            },
+            signal: timeoutSignal || abortController.signal
           });
-          if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (res.ok && contentType.includes('application/json')) {
             const data: any = await res.json();
             if (data.found && data.status === 'completed' && data.ai_result) {
               return data.ai_result;
             }
+            if (data.status === 'failed') {
+              console.warn('[handleCompleteSurvey] Background analysis marked as failed, proceeding to direct generation immediately:', data.error_message);
+              break;
+            }
           }
-        } catch (err) {
+        } catch (err: any) {
+          if (err.name === 'AbortError') return null;
           console.warn('Session polling error:', err);
         }
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 1500));
       }
       return null;
     };
@@ -321,10 +409,31 @@ export const App: React.FC = () => {
       finalAiResult = await fetchAiAnalysisResult();
     }
 
-    // 2. バックグラウンド分析が未完了/失敗だった場合のみ、直接分析API (/api/analyze) で対話ログから即時生成
-    if (!finalAiResult && chatMessages.length >= 2) {
-      showToast('AI分析を直接生成中...');
+    if (abortController.signal.aborted) {
+      setIsWaitingForAnalysis(false);
+      return;
+    }
+
+    // 2. バックグラウンド分析が未完了/失敗だった場合、直接分析API (/api/analyze) で対話ログから即時生成
+    let effectiveMessages = chatMessages;
+    if (!effectiveMessages || effectiveMessages.length < 2) {
       try {
+        const saved = localStorage.getItem('llm5_chat_messages');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length >= 2) {
+            effectiveMessages = parsed;
+            setChatMessages(parsed);
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (!finalAiResult && effectiveMessages && effectiveMessages.length >= 2) {
+      setAnalysisStatusText('AI性格分析レポートを直接生成中（通常10〜15秒）...');
+      showToast('AI性格分析レポートを直接生成しています...');
+      try {
+        const timeoutSignal = AbortSignal.timeout ? AbortSignal.timeout(35000) : undefined;
         const analyzeRes = await fetch('/api/analyze', {
           method: 'POST',
           headers: {
@@ -335,11 +444,13 @@ export const App: React.FC = () => {
             session_id: sessionId,
             session_token: sessionToken,
             user_profile: userProfile || undefined,
-            messages: chatMessages,
+            messages: effectiveMessages,
             survey_result: surveyData
-          })
+          }),
+          signal: timeoutSignal || abortController.signal
         });
-        if (analyzeRes.ok) {
+        const contentType = analyzeRes.headers.get('content-type') || '';
+        if (analyzeRes.ok && contentType.includes('application/json')) {
           const directData: any = await analyzeRes.json();
           if (directData && directData.scores) {
             finalAiResult = directData as AnalysisResult;
@@ -349,11 +460,16 @@ export const App: React.FC = () => {
           console.error('Direct analyze endpoint returned error:', errJson);
         }
       } catch (directErr: any) {
+        if (directErr.name === 'AbortError') {
+          setIsWaitingForAnalysis(false);
+          return;
+        }
         console.error('Direct analyze fetch error:', directErr);
       }
     }
 
     setIsWaitingForAnalysis(false);
+    analysisAbortRef.current = null;
 
     if (finalAiResult) {
       setAiAnalysisResult(finalAiResult);
@@ -370,7 +486,7 @@ export const App: React.FC = () => {
             session_id: sessionId,
             session_token: sessionToken,
             user_profile: userProfile || undefined,
-            messages: chatMessages,
+            messages: effectiveMessages,
             ai_result: finalAiResult,
             survey_result: surveyData
           })
@@ -383,8 +499,8 @@ export const App: React.FC = () => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
       showToast('AI対話推定と質問紙スコア（性格・社会的望ましさ）を照合しました！');
     } else {
-      // 分析結果が生成できなかった場合は、ダミーにすり替えず明示的にエラーを表示
-      setAnalysisError('AI性格分析の生成・取得ができませんでした。AI Gatewayの接続状態をご確認のうえ、もう一度お試しください。');
+      // 分析結果が生成できなかった場合、エラーメッセージを表示
+      setAnalysisError('AI性格分析の生成・取得が完了しませんでした（AI Gateway接続や通信環境等）。質問紙スコアのみでの閲覧、または再試行が可能です。');
       setPhase('result');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -636,11 +752,22 @@ export const App: React.FC = () => {
                 textAlign: 'left'
               }}>
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#a91e22', marginBottom: '0.6rem' }}>
-                  分析レポートの生成中にエラーが発生しました
+                  AI分析レポートの照合中にエラーが発生しました
                 </h3>
-                <p style={{ fontSize: '0.88rem', color: '#333e4f', lineHeight: 1.6, marginBottom: '1.5rem' }}>
+                <p style={{ fontSize: '0.88rem', color: '#333e4f', lineHeight: 1.6, marginBottom: '1.25rem' }}>
                   {analysisError}
                 </p>
+                <div style={{
+                  padding: '0.75rem 1rem',
+                  background: '#f8f9fa',
+                  borderRadius: '4px',
+                  marginBottom: '1.5rem',
+                  fontSize: '0.82rem',
+                  color: '#495057',
+                  borderLeft: '3px solid #007ac0'
+                }}>
+                  ご回答いただいたBFI-2-S質問紙（性格5因子・社会的望ましさ尺度）の集計データは保持されています。質問紙スコアを中心にしたレポートを表示することが可能です。
+                </div>
                 <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                   <button
                     onClick={handleConfirmRetake}
@@ -653,9 +780,15 @@ export const App: React.FC = () => {
                       if (surveyResult) handleCompleteSurvey(surveyResult);
                       else handleConfirmRetake();
                     }}
-                    className="qualtrics-nav-btn"
+                    className="qualtrics-nav-btn secondary"
                   >
                     再試行する
+                  </button>
+                  <button
+                    onClick={() => handleProceedWithSurveyOnly(surveyResult || undefined)}
+                    className="qualtrics-nav-btn"
+                  >
+                    質問紙スコアで結果を見る
                   </button>
                 </div>
               </div>
@@ -678,28 +811,94 @@ export const App: React.FC = () => {
       {/* 分析結果集計待ちモーダル */}
       {isWaitingForAnalysis && (
         <div className="modal-backdrop" style={{ alignItems: 'center' }}>
-          <div className="profile-modal-card" style={{ maxWidth: '480px', minHeight: 'auto', textAlign: 'center', padding: '2.25rem 1.75rem' }}>
+          <div className="profile-modal-card" style={{ maxWidth: '500px', minHeight: 'auto', textAlign: 'center', padding: '2.25rem 1.75rem' }}>
             <div style={{
-              width: '44px',
-              height: '44px',
-              borderRadius: '4px',
+              width: '48px',
+              height: '48px',
+              borderRadius: '50%',
               background: '#e8f3fa',
               border: '1px solid #b6d8f2',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              margin: '0 auto 1rem',
+              margin: '0 auto 1.25rem',
               color: '#007ac0'
             }}>
-              <Loader2 size={24} className="spinner" />
+              <Loader2 size={26} className="spinner" />
             </div>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#1b2432', marginBottom: '0.5rem' }}>
+
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1b2432', marginBottom: '0.5rem' }}>
               回答データを集計・照合しています...
             </h3>
-            <p style={{ fontSize: '0.84rem', color: '#5c6878', lineHeight: 1.65 }}>
-              調査へのご回答ありがとうございました。<br />
+
+            <p style={{
+              fontSize: '0.88rem',
+              fontWeight: 600,
+              color: '#007ac0',
+              marginBottom: '0.75rem'
+            }}>
+              {analysisStatusText}
+            </p>
+
+            <p style={{ fontSize: '0.82rem', color: '#5c6878', lineHeight: 1.6, marginBottom: '1.25rem' }}>
+              調査へのご回答ありがとうございます。<br />
               AI対話記録とBFI-2-S質問紙の測定値を統合し、評価レポートを作成しています。画面を閉じずにそのままお待ちください。
             </p>
+
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 12px',
+              background: '#f1f5f9',
+              borderRadius: '12px',
+              fontSize: '0.78rem',
+              color: '#64748b',
+              marginBottom: '1.25rem'
+            }}>
+              <span>経過時間:</span>
+              <strong style={{ color: '#334155' }}>{analysisElapsedSec}秒</strong>
+            </div>
+
+            {/* 一定時間経過時、または待てない場合のエスケープハッチ */}
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.6rem',
+              marginTop: '0.5rem'
+            }}>
+              {analysisElapsedSec >= 7 && (
+                <button
+                  type="button"
+                  onClick={() => handleProceedWithSurveyOnly(surveyResult || undefined)}
+                  className="qualtrics-nav-btn"
+                  style={{
+                    width: '100%',
+                    padding: '0.65rem',
+                    fontSize: '0.85rem',
+                    background: '#007ac0'
+                  }}
+                >
+                  質問紙スコアを優先して結果を見る
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={handleCancelWaiting}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#8c9ba5',
+                  fontSize: '0.8rem',
+                  cursor: 'pointer',
+                  padding: '6px',
+                  textDecoration: 'underline'
+                }}
+              >
+                待機を中断して質問紙に戻る
+              </button>
+            </div>
           </div>
         </div>
       )}

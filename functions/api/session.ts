@@ -81,6 +81,9 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
       }
     }
 
+    // バックグラウンド分析がエラーで終了している場合の即時検知
+    const isFailed = !aiResult && typeof row.ai_summary === 'string' && row.ai_summary.startsWith('ERROR:');
+
     let messages: ChatMessage[] = [];
     if (row.chat_messages) {
       try {
@@ -132,10 +135,12 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     }
 
     const isCompleted = aiResult !== null;
+    const finalStatus = isCompleted ? 'completed' : (isFailed ? 'failed' : 'processing');
 
     return new Response(JSON.stringify({
       found: true,
-      status: isCompleted ? 'completed' : 'processing',
+      status: finalStatus,
+      error_message: isFailed ? row.ai_summary : undefined,
       session_id: row.id,
       user_profile: {
         student_id: row.student_id,

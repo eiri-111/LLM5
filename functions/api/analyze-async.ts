@@ -177,8 +177,17 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
           }
           console.log(`[analyze-async] Saved payload to R2 for session: ${session_id}`);
         }
-      } catch (bgErr) {
+      } catch (bgErr: any) {
         console.error(`[analyze-async] Error in background analysis for session: ${session_id}:`, bgErr);
+        if (env.DB) {
+          try {
+            await env.DB.prepare(`
+              UPDATE assessment_sessions SET
+                ai_summary = ?
+              WHERE id = ?
+            `).bind(`ERROR: ${bgErr?.message || 'AI分析処理エラー'}`, session_id).run();
+          } catch (_) {}
+        }
       }
     })());
 
