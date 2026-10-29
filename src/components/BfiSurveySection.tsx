@@ -94,20 +94,6 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
   const isCurrentPageComplete = currentQuestions.every(q => typeof answers[q.id] === 'number');
   const isAllAnswered = answeredCount === totalQuestions;
 
-  // ページごとのヘッダー情報（尺度名や測定意図を見せない中立的な表記）
-  const pageMeta = useMemo(() => {
-    if (currentPage <= 2) {
-      return {
-        title: 'ご自身に関する質問 (パート 1)',
-        instruction: 'ここには、あなた自身に当てはまるかもしれない、あるいは当てはまらないかもしれない特徴が並んでいます。それぞれの項目について、「私は普段、〜だと思う」という文にどの程度同意するか、最も当てはまる選択肢を1つ選んでください。'
-      };
-    } else {
-      return {
-        title: '日常の行動や考え方に関する質問 (パート 2)',
-        instruction: 'ここには、日常生活での様々な出来事に対する態度や行動に関する項目が並んでいます。誰にでも起こりうることや感じることが含まれていますので、良く見せようとせず、普段の率直なご自身を振り返ってお答えください。'
-      };
-    }
-  }, [currentPage]);
 
   // ページ切り替え時に最上部へスクロール
   useEffect(() => {
@@ -243,94 +229,82 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
 
       {/* Survey Body */}
       <div style={{ padding: '1.5rem 1.5rem 2rem' }}>
-        {/* Instruction Block */}
+        {/* Simple Top Bar (対話画面同様のすっきりした案内と補助ボタン) */}
         <div style={{
-          paddingBottom: '1.25rem',
-          marginBottom: '1.25rem',
-          borderBottom: '1px solid #d8dde6'
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '8px',
+          paddingBottom: '0.85rem',
+          marginBottom: '0.85rem',
+          borderBottom: '1px solid #eef2f6'
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '0.5rem' }}>
-            <div>
-              <h1 style={{
-                fontSize: '1.05rem',
-                fontWeight: 700,
-                color: '#1b2432',
-                margin: 0
-              }}>
-                {pageMeta.title}
-              </h1>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-              {onReset && (
-                <button
-                  type="button"
-                  onClick={onReset}
-                  style={{
-                    backgroundColor: '#ffffff',
-                    border: '1px solid #b8c2cc',
-                    borderRadius: '3px',
-                    color: '#5c6878',
-                    cursor: 'pointer',
-                    padding: '3px 8px',
-                    fontSize: '0.72rem',
-                    fontWeight: 500,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  <RotateCcw size={11} />
-                  <span>やり直す</span>
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={handleAutoFillSample}
-                style={{
-                  backgroundColor: '#ffffff',
-                  border: '1px solid #b8c2cc',
-                  borderRadius: '3px',
-                  color: '#333e4f',
-                  cursor: 'pointer',
-                  padding: '3px 8px',
-                  fontSize: '0.72rem',
-                  fontWeight: 500
-                }}
-              >
-                テスト全問入力
-              </button>
-              <button
-                type="button"
-                onClick={handleSkipDirectlyToResult}
-                style={{
-                  backgroundColor: '#ffffff',
-                  border: '1px solid #b8c2cc',
-                  borderRadius: '3px',
-                  color: '#333e4f',
-                  cursor: 'pointer',
-                  padding: '3px 8px',
-                  fontSize: '0.72rem',
-                  fontWeight: 500
-                }}
-              >
-                結果へスキップ
-              </button>
-            </div>
-          </div>
-
           <p style={{
-            fontSize: '0.86rem',
-            color: '#333e4f',
-            lineHeight: 1.6,
-            backgroundColor: '#f7f9fa',
-            padding: '0.75rem 1rem',
-            borderLeft: '3px solid #007ac0',
-            borderRadius: '2px',
-            margin: '0.5rem 0 0'
+            fontSize: '0.82rem',
+            color: '#5c6878',
+            margin: 0,
+            lineHeight: 1.4
           }}>
-            {pageMeta.instruction}
+            各設問について、直感で当てはまる選択肢をお選びください。
           </p>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            {onReset && (
+              <button
+                type="button"
+                onClick={onReset}
+                style={{
+                  backgroundColor: '#ffffff',
+                  border: '1px solid #b8c2cc',
+                  borderRadius: '3px',
+                  color: '#5c6878',
+                  cursor: 'pointer',
+                  padding: '3px 8px',
+                  fontSize: '0.72rem',
+                  fontWeight: 500,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                <RotateCcw size={11} />
+                <span>やり直す</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleAutoFillSample}
+              style={{
+                backgroundColor: '#ffffff',
+                border: '1px solid #b8c2cc',
+                borderRadius: '3px',
+                color: '#333e4f',
+                cursor: 'pointer',
+                padding: '3px 8px',
+                fontSize: '0.72rem',
+                fontWeight: 500
+              }}
+            >
+              テスト入力
+            </button>
+            <button
+              type="button"
+              onClick={handleSkipDirectlyToResult}
+              style={{
+                backgroundColor: '#ffffff',
+                border: '1px solid #b8c2cc',
+                borderRadius: '3px',
+                color: '#333e4f',
+                cursor: 'pointer',
+                padding: '3px 8px',
+                fontSize: '0.72rem',
+                fontWeight: 500
+              }}
+            >
+              結果へスキップ
+            </button>
+          </div>
         </div>
 
         {/* Questions List */}
