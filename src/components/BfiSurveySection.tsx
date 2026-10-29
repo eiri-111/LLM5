@@ -89,7 +89,6 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
   }, [allQuestions, currentPage]);
 
   const answeredCount = Object.keys(answers).length;
-  const surveyProgressPercent = Math.round((answeredCount / totalQuestions) * 100);
 
   const isCurrentPageComplete = currentQuestions.every(q => typeof answers[q.id] === 'number');
   const isAllAnswered = answeredCount === totalQuestions;
@@ -213,20 +212,6 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
 
   return (
     <div className="qualtrics-sheet">
-      {/* Qualtrics Top Progress Bar */}
-      <div className="qualtrics-progress-bar-wrap">
-        <div className="qualtrics-progress-row">
-          <span className="qualtrics-progress-pct">0%</span>
-          <div className="qualtrics-progress-track">
-            <div className="qualtrics-progress-fill" style={{ width: `${surveyProgressPercent}%` }} />
-          </div>
-          <span className="qualtrics-progress-pct">100%</span>
-        </div>
-        <div style={{ textAlign: 'center', fontSize: '0.72rem', color: '#5c6878', marginTop: '4px' }}>
-          質問紙の回答進捗: {answeredCount} / {totalQuestions} 問完了 ({surveyProgressPercent}%) — ページ {currentPage + 1} / {totalPages}
-        </div>
-      </div>
-
       {/* Survey Body */}
       <div style={{ padding: '1.5rem 1.5rem 2rem' }}>
         {/* Simple Top Bar (対話画面同様のすっきりした案内と補助ボタン) */}
