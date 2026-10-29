@@ -460,11 +460,11 @@ export const App: React.FC = () => {
           console.error('Direct analyze endpoint returned error:', errJson);
         }
       } catch (directErr: any) {
-        if (directErr.name === 'AbortError') {
+        if (abortController.signal.aborted) {
           setIsWaitingForAnalysis(false);
           return;
         }
-        console.error('Direct analyze fetch error:', directErr);
+        console.warn('Direct analyze fetch error (will fallback to survey report):', directErr);
       }
     }
 
@@ -589,9 +589,13 @@ export const App: React.FC = () => {
     try {
       await fetch('/api/save', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-session-token': sessionToken
+        },
         body: JSON.stringify({
           session_id: sessionId,
+          session_token: sessionToken,
           user_profile: userProfile || undefined,
           messages: chatMessages,
           ai_result: aiAnalysisResult || undefined,

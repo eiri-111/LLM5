@@ -60,14 +60,16 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         url.searchParams.get('token') ||
         url.searchParams.get('session_token');
 
-      // トークン未登録（レガシーレコード等）またはトークン不一致の場合はアクセス拒否
-      if (!row.session_token || !incomingToken || incomingToken !== row.session_token) {
-        return new Response(JSON.stringify({
-          error: 'セッションへのアクセス権限がありません。有効なセッショントークンが必要です。'
-        }), {
-          status: 403,
-          headers: { 'Content-Type': 'application/json' }
-        });
+      // セッションにトークンが登録されている場合は厳格に一致を検証
+      if (row.session_token) {
+        if (!incomingToken || incomingToken !== row.session_token) {
+          return new Response(JSON.stringify({
+            error: 'セッションへのアクセス権限がありません。有効なセッショントークンが必要です。'
+          }), {
+            status: 403,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
       }
     }
 

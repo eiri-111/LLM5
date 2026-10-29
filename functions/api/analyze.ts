@@ -49,12 +49,13 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
         const isAdmin = verifyAdminPassword(request, env);
         if (existingRow && !isAdmin) {
-          if (!existingRow.session_token || !incomingToken || incomingToken !== existingRow.session_token) {
-            console.warn('Unauthorized attempt to update session in /api/analyze');
-            // 分析結果自体は返す（オンザフライ）がD1上書きは拒否
-            return new Response(JSON.stringify(result), {
-              headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
-            });
+          if (existingRow.session_token) {
+            if (!incomingToken || incomingToken !== existingRow.session_token) {
+              console.warn('Unauthorized attempt to update session in /api/analyze');
+              return new Response(JSON.stringify(result), {
+                headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
+              });
+            }
           }
         }
 

@@ -70,13 +70,16 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
         const isAdmin = verifyAdminPassword(request, env);
         if (existingRow && !isAdmin) {
-          if (!existingRow.session_token || !incomingToken || incomingToken !== existingRow.session_token) {
-            return new Response(JSON.stringify({
-              error: 'セッションの更新権限がありません。有効なセッショントークンが必要です。'
-            }), {
-              status: 403,
-              headers: { 'Content-Type': 'application/json' }
-            });
+          // 既存セッションにすでにトークンが記録されている場合、一致を確認
+          if (existingRow.session_token) {
+            if (!incomingToken || incomingToken !== existingRow.session_token) {
+              return new Response(JSON.stringify({
+                error: 'セッションの更新権限がありません。有効なセッショントークンが必要です。'
+              }), {
+                status: 403,
+                headers: { 'Content-Type': 'application/json' }
+              });
+            }
           }
         }
 

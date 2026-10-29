@@ -2066,7 +2066,8 @@ export async function runClefScoring(
       body: JSON.stringify({
         state: scoringState,
         questions: scoringQuestions
-      })
+      }),
+      signal: AbortSignal.timeout ? AbortSignal.timeout(6000) : undefined
     });
 
     if (res.ok) {
@@ -2234,7 +2235,8 @@ ${confirmedScoresBlock}
         temperature: 0.2,
         max_tokens: 3500,
         response_format: { type: 'json_object' }
-      })
+      }),
+      signal: AbortSignal.timeout ? AbortSignal.timeout(11000) : undefined
     });
 
     if (!res.ok) {
