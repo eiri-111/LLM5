@@ -242,7 +242,7 @@ export const App: React.FC = () => {
    */
   const handleStartSurvey = async (messages: ChatMessage[]) => {
     setChatMessages(messages);
-    showToast('心理測定アンケート（BFI-2-S・社会的望ましさ）へ進みます');
+    showToast('質問紙アンケートへ進みます');
 
     // 1. localStorage にセッション情報を退避
     try {

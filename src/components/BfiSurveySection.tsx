@@ -94,21 +94,17 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
   const isCurrentPageComplete = currentQuestions.every(q => typeof answers[q.id] === 'number');
   const isAllAnswered = answeredCount === totalQuestions;
 
-  // ページごとのヘッダー情報
+  // ページごとのヘッダー情報（尺度名や測定意図を見せない中立的な表記）
   const pageMeta = useMemo(() => {
     if (currentPage <= 2) {
       return {
-        blockNumber: `ブロック 2-A (${currentPage + 1}/3)`,
-        title: '性格特性に関する質問 (BFI-2-S 日本語短縮版)',
-        instruction: 'ここには、あなた自身に当てはまるかもしれない、あるいは当てはまらないかもしれない特徴が並んでいます。それぞれの項目について、「私は普段、〜だと思う」という文にどの程度同意するか、最も当てはまる選択肢を1つ選んでください。',
-        badge: 'ビッグファイブ 5因子・15ファセット測定'
+        title: 'ご自身に関する質問 (パート 1)',
+        instruction: 'ここには、あなた自身に当てはまるかもしれない、あるいは当てはまらないかもしれない特徴が並んでいます。それぞれの項目について、「私は普段、〜だと思う」という文にどの程度同意するか、最も当てはまる選択肢を1つ選んでください。'
       };
     } else {
       return {
-        blockNumber: 'ブロック 2-B',
-        title: '日常の行動・態度に関する質問 (Marlowe-Crowne 社会的望ましさ尺度 MCSDS)',
-        instruction: 'ここには、日常生活での様々な出来事に対する態度や行動に関する項目が並んでいます。誰にでも起こりうることや感じることが含まれていますので、良く見せようとせず、普段の率直なご自身を振り返ってお答えください。',
-        badge: '自己報告バイアス・模範解答傾向の客観測定'
+        title: '日常の行動や考え方に関する質問 (パート 2)',
+        instruction: 'ここには、日常生活での様々な出来事に対する態度や行動に関する項目が並んでいます。誰にでも起こりうることや感じることが含まれていますので、良く見せようとせず、普段の率直なご自身を振り返ってお答えください。'
       };
     }
   }, [currentPage]);
@@ -255,25 +251,13 @@ export const BfiSurveySection: React.FC<BfiSurveySectionProps> = ({
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '0.5rem' }}>
             <div>
-              <span style={{
-                display: 'inline-block',
-                fontSize: '0.72rem',
-                fontWeight: 700,
-                color: '#007ac0',
-                backgroundColor: '#e8f3fa',
-                padding: '2px 8px',
-                borderRadius: '12px',
-                marginBottom: '4px'
-              }}>
-                {pageMeta.badge}
-              </span>
               <h1 style={{
                 fontSize: '1.05rem',
                 fontWeight: 700,
                 color: '#1b2432',
                 margin: 0
               }}>
-                設問{pageMeta.blockNumber}: {pageMeta.title}
+                {pageMeta.title}
               </h1>
             </div>
 

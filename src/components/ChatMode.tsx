@@ -375,7 +375,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
             onClick={handleProceedToSurvey}
             className="btn-analyze-ready"
           >
-            <span>対話セッションが完了しました。次の質問紙（BFI-2-S）へ進んでください</span>
+            <span>対話セッションが完了しました。次の質問紙アンケートへ進んでください</span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 700, whiteSpace: 'nowrap' }}>
               次へ <ArrowRight size={17} />
             </span>
@@ -432,7 +432,7 @@ export const ChatMode: React.FC<ChatModeProps> = ({
                 e.currentTarget.style.borderColor = '#cbd5e1';
               }}
             >
-              <span>対話を終了して質問紙（BFI-2-S）へ進む</span>
+              <span>対話を終了して質問紙アンケートへ進む</span>
               <ArrowRight size={14} />
             </button>
           </div>
