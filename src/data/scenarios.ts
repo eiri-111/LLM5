@@ -225,22 +225,13 @@ export const STAR_PROBING_GUIDE = `
 `;
 
 /**
- * ユーザープロファイル（年齢）に応じた最初の対話メッセージ（SJTシナリオ）を生成
+ * リラックスした自由対話から始めるための初期メッセージを生成
  */
-export function buildInitialGreeting(userProfile?: UserProfile | null): string {
-  const age = typeof userProfile?.age === 'number'
-    ? userProfile.age
-    : (userProfile?.age ? parseInt(String(userProfile.age), 10) : undefined);
-
-  // 第1問として最も誰でもイメージしやすく、外向性・協調性の行動を引き出せるシナリオを初期提示
-  const scenario = getDetailedScenarioForFactor('外向性', age);
-
+export function buildInitialGreeting(_userProfile?: UserProfile | null): string {
   return [
-    '日常のさまざまな場面で「あなたならどうするか」を伺います。',
-    '「自分なら実際に何と言うか・どう動くか」を、普段通りの言葉でお気軽にお話しください。',
+    'こんにちは！まずはリラックスしてお話しできればと思います。',
     '',
-    `【状況】\n${scenario.situationText}`,
-    '',
-    scenario.questionText
+    '最近、時間を忘れて夢中になったことや休日の過ごし方、あるいは最近あったちょっと印象的な出来事など、何かお話しいただけることはありますか？',
+    '普段通りの言葉でお気軽に教えてください！'
   ].join('\n');
 }

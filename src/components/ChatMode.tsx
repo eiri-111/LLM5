@@ -50,7 +50,9 @@ export const ChatMode: React.FC<ChatModeProps> = ({
           // 旧固定文または初期挨拶1件のみの場合は最新の年齢適応シナリオに置換
           const isSingleAssistant = parsed.length === 1 && parsed[0].role === 'assistant';
           const isLegacyBEIGreeting = parsed[0]?.content?.includes('自分らしさ（素）が出やすい場面') ||
-                                     parsed[0]?.content?.includes('最近のちょっとした出来事');
+                                     parsed[0]?.content?.includes('最近のちょっとした出来事') ||
+                                     parsed[0]?.content?.includes('日常のさまざまな場面で') ||
+                                     parsed[0]?.content?.includes('【状況】');
           if (isSingleAssistant || isLegacyBEIGreeting) {
             return [{ role: 'assistant', content: greeting }];
           }
